@@ -447,6 +447,40 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 .gr-hud.low { background: linear-gradient(#ff9a8a, #ff6b6b); animation: grLow .5s ease-in-out infinite alternate; }
 @keyframes grLow { from { transform: translateX(-50%) scale(1); } to { transform: translateX(-50%) scale(1.07); } }
 @media (prefers-reduced-motion: reduce) { .gr-intro.show { animation-timing-function: steps(1); } .gr-hud.low { animation: none; } }
+
+/* ---------- playtest: bug report + logbook (79-log) ---------- */
+.pauserow .bigbtn { flex: 1 1 170px; width: auto; }
+.hubbar .smallbtn { font-size: 15px; padding: 5px 14px; box-shadow: 0 4px 0 var(--navy); }
+.reportcard, .logcard { width: min(840px, 100%); max-height: 100%; overflow: auto; box-sizing: border-box; }
+.rp-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 14px; align-items: start; }
+.rp-shot { display: flex; flex-direction: column; gap: 8px; }
+.rp-shot img { width: 100%; display: block; background: #e9f3ff; border: 3px solid var(--navy); border-radius: 14px; }
+.rp-shot a { align-self: flex-start; text-decoration: none; }
+.rp-form { display: flex; flex-direction: column; gap: 6px; }
+.rp-form label { font: 400 20px var(--display); color: var(--navy); }
+.rp-form textarea { width: 100%; box-sizing: border-box; min-height: 130px; resize: vertical; font: 700 15px/1.4 var(--body); color: var(--navy); background: #fff;
+  border: 3px solid var(--navy); border-radius: 14px; padding: 10px 12px; }
+.rp-form textarea:focus { outline: none; box-shadow: 0 0 0 3px var(--sun); }
+.rp-where { margin: 0; font-weight: 800; font-size: 12.5px; color: var(--navy-soft); overflow-wrap: anywhere; }
+.rp-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.rp-actions .bigbtn { font-size: 18px; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; }
+.rp-actions .bigbtn small { text-align: left; }
+.rp-msg { margin: 0; min-height: 1.2em; font: 400 15px var(--display); color: #1d7a4a; }
+.rp-note { margin: 0; font-weight: 700; font-size: 12.5px; line-height: 1.45; color: var(--navy-soft); }
+.logcard .maphead .row { gap: 6px; justify-content: flex-end; }
+.lb-list { display: flex; flex-direction: column; gap: 8px; max-height: min(58vh, 520px); overflow: auto; padding: 2px 4px 2px 0; }
+.lb-item { display: grid; gap: 3px; background: #fff; border: 3px solid var(--navy); border-radius: 14px; padding: 8px 12px; }
+.lb-top { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.lb-top b { font: 400 17px var(--display); color: var(--navy); }
+.lb-top time { margin-left: auto; font-weight: 800; font-size: 12px; color: var(--navy-soft); }
+.lb-tag { font: 400 12px var(--display); letter-spacing: .05em; color: var(--navy); background: var(--cream-2); border: 2px solid var(--navy); border-radius: 999px; padding: 0 8px; }
+.lb-tag.good { background: #c9f7b5; }
+.lb-tag.bad { background: #ffd0da; }
+.lb-tag.err { background: var(--heart); color: #fff; }
+.lb-line { font-weight: 700; font-size: 13px; line-height: 1.35; color: var(--navy-soft); overflow-wrap: anywhere; }
+.lb-log { margin: 0; font: 600 12px/1.5 ui-monospace, Consolas, monospace; color: var(--navy); background: #fff; border: 3px solid var(--navy); border-radius: 14px; padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 640px) { .rp-body, .rp-actions { grid-template-columns: 1fr; } .lb-top time { margin-left: 0; } }/* the pause and game-over menus grew taller than short windows: scroll from the top instead of clipping both ends */
+#pause, #over { align-items: safe center; }
 </style>
 
 <div id="app">
@@ -461,6 +495,8 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
       <span class="pill diff normal" id="hubDiff">Normal</span>
       <span class="pill" id="hubProgress">Levels open: 1/2</span>
       <span class="pill" id="hubCollect">Pets 0/6</span>
+      <button class="smallbtn" id="hubReport" type="button" title="Report a bug (F2)">Report bug · F2</button>
+      <button class="smallbtn" id="hubLog" type="button" title="Past runs and issues">Logbook</button>
     </div>
   </div>
 
@@ -525,6 +561,10 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
       <button class="bigbtn" id="shakeBtn" type="button">Screen shake <small id="shakeLbl">Full</small></button>
       <button class="bigbtn" id="flashBtn" type="button">Flashes <small id="flashLbl">On</small></button>
       <button class="bigbtn" id="unstickBtn" type="button">Stuck? <small>Free me + copy report</small></button>
+      <div class="row pauserow">
+        <button class="bigbtn" id="reportBtn" type="button">Report a bug <small>F2</small></button>
+        <button class="bigbtn" id="logbookBtn" type="button">Logbook <small>Past runs</small></button>
+      </div>
       <button class="bigbtn dark" id="quitBtn" type="button">Abandon run <small>Back home</small></button>
     </div>
   </div>
@@ -649,7 +689,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
         <dt><kbd>Wheel</kbd></dt><dd>Zoom the camera in or out</dd>
         <dt><kbd>Esc</kbd></dt><dd>Pause</dd>
       </dl>
-      <p class="tips">Defeating enemies levels up your weapon; each level lets you pick an upgrade. Picking up a different weapon feeds your current one into it: it keeps 70% of the levels and its upgrades, re-imagined for the new weapon. A weapon holds 6 upgrade types and Schiffy 8 passives: doubling up levels one up, and taking something new when full replaces one (the new one starts at Lv 1). Eggs hatch into pets as you clear isles; finish a level with one to add it to your collection.</p>
+      <p class="tips">Defeating enemies levels up your weapon; each level lets you pick an upgrade. Picking up a different weapon feeds your current one into it: it keeps 70% of the levels and its upgrades, re-imagined for the new weapon. A weapon holds 4 upgrade types and Schiffy 8 passives: doubling up levels one up, and taking something new when full replaces one (the new one starts at Lv 1). Eggs hatch into pets as you clear isles; finish a level with one to add it to your collection.</p>
     </div>
   </div>
 
@@ -660,6 +700,42 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
       <div class="card"><h3>Your build</h3><div class="itemlist" id="overItems"></div></div>
       <button class="bigbtn primary" id="againBtn" type="button">Try again <small>Same level, new sky</small></button>
       <button class="bigbtn" id="titleBtn" type="button">Go home <small>Back to the hub</small></button>
+      <button class="bigbtn" id="overReport" type="button">Report a bug <small>F2</small></button>
+    </div>
+  </div>
+
+  <!-- playtest: report a bug (79-log) -->
+  <div id="reportView" class="screen mapscreen" hidden>
+    <div class="mapcard reportcard" role="dialog" aria-modal="true" aria-labelledby="reportTitle">
+      <div class="maphead"><div><span class="verb">Playtest</span><h2 id="reportTitle">Report a bug</h2></div><button class="smallbtn" id="reportClose" type="button">Close · Esc</button></div>
+      <div class="rp-body">
+        <div class="rp-shot"><img id="reportShot" alt="Screenshot of the game when the report was opened"><a class="smallbtn" id="reportShotDl" href="#">Save screenshot (.jpg)</a></div>
+        <div class="rp-form">
+          <label for="reportText">What happened?</label>
+          <textarea id="reportText" rows="6" placeholder="What were you doing, and what went wrong? e.g. The bridges stayed locked after the last wave."></textarea>
+          <p class="rp-where" id="reportWhere"></p>
+        </div>
+      </div>
+      <div class="rp-actions">
+        <button class="bigbtn primary" id="reportGh" type="button">Send as GitHub issue <small>Opens a new tab</small></button>
+        <button class="bigbtn" id="reportDl" type="button">Download report <small>.json file</small></button>
+        <button class="bigbtn" id="reportCopy" type="button">Copy report <small>Text, no image</small></button>
+      </div>
+      <p class="rp-msg" id="reportMsg" aria-live="polite"></p>
+      <p class="rp-note">The GitHub form opens filled in with what happened, where you were and the recent game log (it needs a free GitHub account). The screenshot is saved at the same time: drag it into the issue box if you like. No account? Download or copy the report and send it to the developer.</p>
+    </div>
+  </div>
+
+  <!-- playtest: logbook of past runs and issues (79-log) -->
+  <div id="logView" class="screen mapscreen" hidden>
+    <div class="mapcard logcard" role="dialog" aria-modal="true" aria-labelledby="logTitle">
+      <div class="maphead">
+        <div><span class="verb">Playtest</span><h2 id="logTitle">Logbook</h2></div>
+        <div class="row"><button class="smallbtn" id="logCopy" type="button">Copy all</button><button class="smallbtn" id="logDl" type="button">Download</button><button class="smallbtn" id="logClose" type="button">Close · Esc</button></div>
+      </div>
+      <div class="tabs" id="logTabs"></div>
+      <div class="lb-list" id="logList"></div>
+      <p class="rp-msg" id="logMsg" aria-live="polite"></p>
     </div>
   </div>
 </div>
@@ -835,21 +911,21 @@ const AFFIXES = {
 };
 const AFFIX_KEYS = Object.keys(AFFIXES);
 const AFFIX_GENERIC = {
-  dmg: '+15% damage', rate: '+12% attack speed', multi: '+1 projectile', pierce: '+1 pierce', bounce: '+1 bounce', size: '+20% size',
+  dmg: '+15% damage', rate: '+12% attack speed', multi: '+1 projectile (damage split)', pierce: '+1 pierce', bounce: '+1 bounce', size: '+20% size',
   speed: '+18% speed and range', crit: '+8% crit chance', burn: 'Hits set enemies on fire', chill: 'Hits slow enemies',
   chain: 'Hits arc to a nearby enemy', homing: 'Shots curve toward enemies',
 };
 // weapon-specific wording (and effect) for tags that mean something different on that weapon
 const AFFIX_TEXT = {
-  scatter: { multi: '+2 pellets', size: '+20% pellet size, tighter spread' },
-  beam: { multi: '+1 side beam', pierce: '+15% beam length', bounce: 'Beam splits off its end', speed: '+20% beam length', size: 'Wider beam', homing: 'Beam bends toward enemies' },
-  boomer: { multi: '+1 bone', pierce: 'Bone flies 20% farther', bounce: 'Bone bounces off walls once' },
-  bouncy: { multi: '+1 ball', bounce: '+2 bounces' },
-  lobber: { multi: '+1 bomb', pierce: '+20% blast radius', bounce: 'Bombs bounce once first', size: '+25% blast radius', speed: 'Bombs fly faster and farther', homing: 'Bombs drift toward enemies' },
-  charge: { multi: '+1 slug', rate: 'Charges 15% faster', bounce: 'Slugs ricochet once' },
+  scatter: { multi: '+2 pellets (damage split)', size: '+20% pellet size, tighter spread' },
+  beam: { multi: '+2 side beams (damage split)', pierce: '+15% beam length', bounce: 'Beam splits off its end', speed: '+20% beam length', size: 'Wider beam', homing: 'Beam bends toward enemies' },
+  boomer: { multi: '+1 bone (damage split)', pierce: 'Bone flies 20% farther', bounce: 'Bone bounces off walls once' },
+  bouncy: { multi: '+1 ball (damage split)', bounce: '+2 bounces' },
+  lobber: { multi: '+1 bomb (damage split)', pierce: '+20% blast radius', bounce: 'Bombs bounce once first', size: '+25% blast radius', speed: 'Bombs fly faster and farther', homing: 'Bombs drift toward enemies' },
+  charge: { multi: '+1 slug (damage split)', rate: 'Charges 15% faster', bounce: 'Slugs ricochet once' },
   swipe: { multi: 'Wider swipe arc', pierce: '+15% reach', bounce: 'Knocks enemies flying', speed: 'Swipes send out a short shockwave', size: '+20% reach', homing: 'Lunge toward the nearest enemy' },
   flame: { multi: 'Wider flame cone', pierce: 'Flames pass through +1 enemy', bounce: 'Flames splash off walls', speed: '+20% flame reach' },
-  critter: { multi: '+1 critter', pierce: 'Critters hit +1 more time', bounce: 'Critters bounce off walls', speed: 'Faster critters', homing: 'Critters hunt from farther away' },
+  critter: { multi: '+1 critter (damage split)', pierce: 'Critters hit +1 more time', bounce: 'Critters bounce off walls', speed: 'Faster critters', homing: 'Critters hunt from farther away' },
 };
 const affixText = (tag, wid) => (AFFIX_TEXT[wid] && AFFIX_TEXT[wid][tag]) || AFFIX_GENERIC[tag];
 
@@ -868,7 +944,7 @@ const ITEMS = {
   velocity: { r: 'common', name: 'Swift Feather', desc: 'Shots fly 20% faster and 25% farther', color: '#6bffea', code: 'SF' },
   jet:      { r: 'common', name: 'Cloud Boots', desc: '+1 air jump', color: '#d4ff5e', code: 'CB' },
   runner:   { r: 'common', name: 'Zoomies Collar', desc: 'Run speed +12%', color: '#ffe066', code: 'ZC' },
-  ghost:    { r: 'common', name: 'Zoom Scarf', desc: 'Dash recharges 30% faster, longer i-frames', color: '#9ab8ff', code: 'ZS' },
+  ghost:    { r: 'common', name: 'Zoom Scarf', desc: 'Dash recharges 30% faster, slightly longer i-frames', color: '#9ab8ff', code: 'ZS' },
   die:      { r: 'common', name: 'Treasure Nose', desc: 'More gold, treats and keys from enemies', color: '#f5e6c8', code: 'TN' },
   kibble:   { r: 'common', name: 'Lucky Kibble', desc: 'Treats drop much more often', color: '#ffb36b', code: 'LK' },
   bombbag:  { r: 'common', name: 'Bomb Bag', desc: '+2 grenades now, grenades drop more often', color: '#ff7a4d', code: 'BG' },
@@ -882,7 +958,7 @@ const ITEMS = {
   fizzy:    { r: 'common', name: 'Fizzy Pop', desc: 'After you get hit, run 35% faster for a few seconds', color: '#8affd8', code: 'FZ' },
   sharp:    { r: 'common', name: 'Sharp Teeth', desc: '+40% damage to enemies above 75% health', color: '#f2f2ff', code: 'TE' },
   // rare
-  prism:    { r: 'rare', name: 'Splitter Cap', desc: '+1 projectile per attack', color: '#ff8fb1', code: 'SP' },
+  prism:    { r: 'rare', name: 'Splitter Cap', desc: '+1 projectile per attack (damage split)', color: '#ff8fb1', code: 'SP' },
   seeker:   { r: 'rare', name: 'Homing Whistle', desc: 'Shots curve toward enemies', color: '#c69bff', code: 'HW' },
   rail:     { r: 'rare', name: 'Needle Nib', desc: 'Shots pierce +1 enemy', color: '#8fe36a', code: 'NN' },
   rubber:   { r: 'rare', name: 'Bouncy Gum', desc: 'Shots bounce +1 time', color: '#7fd0ff', code: 'BU' },
@@ -926,10 +1002,10 @@ const ITEMS = {
   greedy:   { r: 'cursed', name: 'Greedy Gut', desc: 'Far more loot from everything', curse: 'Stall prices +50%', color: '#ffc93c', code: 'GG' },
   heavy:    { r: 'cursed', name: 'Lead Paws', desc: 'Damage +45%', curse: 'Run 15% slower, no air jumps', color: '#9a8fb5', code: 'LP' },
   evileye:  { r: 'cursed', name: 'Evil Eye', desc: 'Crit chance +30%', curse: 'Elites show up twice as often', color: '#b04fff', code: 'EE' },
-  haunted:  { r: 'cursed', name: 'Haunted Leash', desc: '+1 projectile per attack', curse: 'Enemies have +20% health', color: '#8f7bff', code: 'HL' },
+  haunted:  { r: 'cursed', name: 'Haunted Leash', desc: '+1 projectile per attack (damage split)', curse: 'Enemies have +20% health', color: '#8f7bff', code: 'HL' },
   brittle:  { r: 'cursed', name: 'Brittle Shield', desc: '+2 bubble shields every isle', curse: '-1 max bone', color: '#7fb0ff', code: 'BS' },
   dice:     { r: 'cursed', name: 'Loaded Dice', desc: 'Lucky machines pay double', curse: '-1 max bone', color: '#ff8fb1', code: 'LD' },
-  chaos:    { r: 'cursed', name: 'Chaos Collar', desc: '+2 projectiles per attack', curse: 'Your aim wobbles wildly', color: '#ff7ad9', code: 'CH' },
+  chaos:    { r: 'cursed', name: 'Chaos Collar', desc: '+2 projectiles per attack (damage split)', curse: 'Your aim wobbles wildly', color: '#ff7ad9', code: 'CH' },
   pact:     { r: 'cursed', name: 'Blood Pact', desc: 'Damage +80%', curse: 'Dropped treats and springs no longer heal', color: '#d0243f', code: 'PX' },
   paper:    { r: 'cursed', name: 'Paper Wings', desc: '+2 air jumps and run 20% faster', curse: 'Falling into a gap costs 2 bones', color: '#f5f0ff', code: 'PA' },
   hourglass: { r: 'cursed', name: 'Cracked Hourglass', desc: 'Attack speed +35%, dash recharges 40% faster', curse: 'Bosses have +30% health', color: '#e0b46b', code: 'HG' },
@@ -1292,6 +1368,18 @@ function sfxRaw(k, now) {
     case 'spin': for (let i = 0; i < 8; i++) tone('square', 900 + i * 40, 900 + i * 40, 0.04, 0.02, i * 0.1); break;
     case 'crack': noise(0.15, 0.07); break;
     case 'wind': noise(0.6, 0.03); break;
+    // gust telegraph: a rising whoosh (band-passed noise sweeping up, swelling in) over a thin rising whistle, about 1 s
+    case 'gustwarn': {
+      const dur = 0.95, len = Math.floor(actx.sampleRate * dur), buf = actx.createBuffer(1, len, actx.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      const s = actx.createBufferSource(), f = actx.createBiquadFilter(), g = actx.createGain();
+      s.buffer = buf; f.type = 'bandpass'; f.Q.value = 2.2;
+      f.frequency.setValueAtTime(350, now); f.frequency.exponentialRampToValueAtTime(2600, now + dur);
+      g.gain.setValueAtTime(0.0001, now); g.gain.exponentialRampToValueAtTime(0.09, now + dur * 0.85); g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      s.connect(f); f.connect(g); g.connect(bus()); s.start(now); s.stop(now + dur + 0.02);
+      tone('sine', 620, 1500, 0.85, 0.018, 0.08);
+      break;
+    }
     case 'roar': tone('sawtooth', 170, 70, 0.75, 0.09); tone('square', 120, 55, 0.65, 0.05, 0.05); noise(0.55, 0.07); break;
   }
 }
@@ -1525,7 +1613,7 @@ function computeStats() {
     homing: n('seeker'), pierce: n('rail'), bounce: n('rubber') + 2 * n('ricochet'), seekBounce: n('ricochet'),
     crit: 0.12 * n('crit') + 0.3 * n('evileye'),
     airJumps: n('heavy') ? 0 : n('jet') + 2 * n('paper'), speed: 7.4 * (1 + 0.12 * n('runner')) * (1 + 0.2 * n('paper')) * (1 - 0.15 * n('heavy')),
-    dashCd: 0.85 * Math.pow(0.7, n('ghost')) * Math.pow(0.6, n('hourglass')), dashInv: 0.24 + 0.15 * n('ghost'),
+    dashCd: 0.85 * Math.pow(0.7, n('ghost')) * Math.pow(0.6, n('hourglass')), dashInv: 0.15 + 0.08 * n('ghost'),
     drones: n('drone'), halo: n('halo'), shield: n('shield') + 2 * n('brittle') + n('guardian'), guardian: n('guardian'),
     explode: n('volatile'), luck: n('die') + 3 * n('greedy'), treat: n('kibble'), bombLuck: n('bombbag'), keyLuck: n('keyring'),
     burn: n('burn'), chill: n('chill'), orbit: n('orbit') * 2, chain: n('chain'), xp: 1 + 0.4 * n('glasses'), thorns: n('thorny'),
@@ -3650,10 +3738,14 @@ function updatePlayer(dt) {
   // the Yeti King's blizzard pushes too while it lasts
   if (G.room && G.room.gust && G.gustOn && !inHub) { const gs = G.room.gust, push = gs.snow ? 4.2 : 5.5; if (gs.axis === 'x') vx += gs.dir * push; else vz += gs.dir * push; }
   if (G.bossGust && !inHub) {
-    const bg = G.bossGust; bg.t -= dt;
+    const bg = G.bossGust;
+    // wind-up first (bg.warn, set by the blizzard attack): no push yet, just the telegraph (70-rooms gustTell + the HUD sign)
+    if (bg.warn > 0) { bg.warn -= dt; gustTell(bg, 1 - bg.warn / GUST_WARN); if (bg.warn <= 0) sfx('wind'); }
+    else { bg.t -= dt;
     if (bg.axis === 'x') vx += bg.dir * 3.2; else vz += bg.dir * 3.2;
     if (Math.random() < 0.9) { const E = HALF - 1, a = rand(-E, E); emit(bg.axis === 'x' ? -bg.dir * E : a, rand(0.3, 2.5), bg.axis === 'x' ? a : -bg.dir * E, 1, 0xffffff, { dir: [bg.axis === 'x' ? bg.dir : 0, 0, bg.axis === 'z' ? bg.dir : 0], speed: 10, size: 0.32, life: 2, grav: 0, drag: 0, spread: 0.8, shape: 'star' }); }
     if (bg.t <= 0) G.bossGust = null;
+    }
   }
   moveCircle(p, vx * dt, vz * dt);
 
@@ -3677,9 +3769,12 @@ function updatePlayer(dt) {
       emit(pad.x, 0.4, pad.z, 14, theme().accent, { speed: 4, flat: true, size: 0.45, grav: 0 });
     }
   }
-  // stepping off solid ground into a gap
+  // stepping off solid ground into a gap. The respawn point (p.safe) only moves to spots with no gap or trap within
+  // a metre (safeSpot), so a fall never puts you back on a ledge edge or on a floor that has since opened up.
   if (!inHub && p.onGround && p.y < 0.05 && p.dashT <= 0 && gapAt(p.x, p.z)) startFall(p);
-  else if (p.onGround && p.y < 0.05 && !inHub) p.safe = [p.x, p.z];
+  else if (p.onGround && p.y < 0.05 && !inHub && safeSpot(p.x, p.z, p.r)) p.safe = [p.x, p.z];
+  // safety net: still inside an obstacle after depenetrate (no clear spot within 5 units) -> move to the nearest good spot
+  if (!inHub && p.falling <= 0 && overlapCell(p.x, p.z, p.r, p.y)) { const s = findSafeSpot(p.x, p.z, p.r); p.x = s[0]; p.z = s[1]; }
 
   if (inHub && G.weapon) weaponTick(p, firing, dt);
   if (!inHub) {
@@ -3727,14 +3822,51 @@ function startFall(p) {
   p.falling = 0.75; p.vx = p.vz = 0; p.vy = -2; sfx('fall');
   emit(p.x, 0.1, p.z, 10, theme().dirt, { speed: 2, size: 0.4 });
 }
+// true when (x, z) is a good place to stand and respawn: on the isle or a bridge, not blocked, not on a trap,
+// and no gap or trap on a ring of points a metre round it
+function trapCellAt(x, z) {
+  const tr = G.room && G.room.traps; if (!tr || !tr.length) return false;
+  const i = cellOf(x), j = cellOf(z);
+  for (const t of tr) if (!t.gone && t.i === i && t.j === j) return true;
+  return false;
+}
+// (loose: only the 1 m ring, for gap-riddled isles where nothing passes the full check)
+function safeSpot(x, z, r, loose) {
+  if (!walkable(x, z, r) || blockedAt(x, z, r, 0) || gapAt(x, z) || trapCellAt(x, z)) return false;
+  for (const R of loose ? [1] : [1, 1.7]) for (let a = 0; a < 8; a++) {
+    const ax = x + Math.cos(a * Math.PI / 4) * R, az = z + Math.sin(a * Math.PI / 4) * R;
+    if (gapAt(ax, az) || (R === 1 && trapCellAt(ax, az))) return false;
+  }
+  return true;
+}
+// the nearest good spot to (x, z) on a reachable cell, with a mild pull toward the isle centre; (0, 0) as a last resort
+function findSafeSpot(x, z, r) {
+  if (safeSpot(x, z, r)) return [x, z];
+  const reach = G.room && G.room.obs ? reachableCells(G.room.obs) : null;
+  for (const loose of [false, true]) {
+    let best = null, bs = Infinity;
+    for (let j = 0; j < NC; j++) for (let i = 0; i < NC; i++) {
+      if (reach && !reach.has(i + ',' + j)) continue;
+      const cx = cellX(i), cz = cellX(j);
+      const sc = Math.hypot(cx - x, cz - z) + 0.15 * Math.hypot(cx, cz);
+      if (sc < bs && safeSpot(cx, cz, r, loose)) { bs = sc; best = [cx, cz]; }
+    }
+    if (best) return best;
+  }
+  return [0, 0];
+}
 function updateFalling(p, dt) {
   p.falling -= dt; p.vy -= 26 * dt; p.y += p.vy * dt;
   p.mesh.position.set(p.x, p.y, p.z); p.mesh.scale.setScalar(Math.max(0.2, p.falling / 0.75));
   if (p.falling <= 0) {
-    p.mesh.scale.setScalar(1); p.x = p.safe[0]; p.z = p.safe[1]; p.y = 0; p.vy = 0; p.onGround = true;
+    // the floor may have opened under the old safe spot since (crumble / thin ice / openHole): re-check it
+    p.safe = findSafeSpot(p.safe[0], p.safe[1], p.r);
+    p.mesh.scale.setScalar(1); p.x = p.safe[0]; p.z = p.safe[1]; p.y = 0; p.vy = 0; p.vx = p.vz = 0; p.onGround = true;
     depenetrate(p);
     emit(p.x, 0.6, p.z, 16, 0xfff4dc, { speed: 4, size: 0.45 });
-    p.inv = 0; hurtPlayer(p.x, p.z, { fall: true });
+    // one bone per mishap: a second fall within 2 s of the last respawn (walking straight back in) doesn't cost another
+    if (!(G.time - (p.fallT ?? -9) < 2)) { p.inv = 0; hurtPlayer(p.x, p.z, { fall: true }); }
+    p.fallT = G.time;
     p.inv = Math.max(p.inv, 1.2);
   }
 }
@@ -3810,6 +3942,15 @@ function wStats() {
     aff: a,
   };
 }
+// Extra projectiles split the damage instead of copying it: each +1 projectile (Extra card, Splitter Cap, Haunted Leash,
+// Chaos Collar) adds only +20% total damage, shared by every projectile of the shot. n = projectiles fired, base = what the
+// weapon fires with no upgrades, per = projectiles each upgrade adds (Scattershot +2 pellets; Prism Beam, see updateBeam).
+// Blaster: n=2 -> 0.6 each, n=3 -> 0.467, n=4 -> 0.4. Scattershot 6 -> 8 pellets: 6*1.2/8 = 0.9 each.
+const SPLIT_BONUS = 0.2;
+function splitMul(n, base = 1, per = 1) {
+  if (n <= base) return 1;
+  return base * (1 + SPLIT_BONUS * (n - base) / per) / n;
+}
 // Schiffy holds the current weapon's own 3D model (the simple box gun stays as a fallback when models aren't embedded)
 function setGunLook() {
   const p = G.player; if (!p || !p.gun || !G.weapon) return;
@@ -3861,21 +4002,21 @@ function attack(p, s, flip) {
   const m = muzzleAim(p), a0 = m.a + (flip ? Math.PI : 0);
   p.attackN++;
   switch (s.kind) {
-    case 'bolt': { const n = 1 + s.multi, sp = Math.min(0.14, 0.7 / n); for (let i = 0; i < n; i++) spawnProj('bolt', m.x, m.y, m.z, a0 + (i - (n - 1) / 2) * sp + rand(-0.02, 0.02), s); sfx('shoot'); break; }
+    case 'bolt': { const n = 1 + s.multi, sp = Math.min(0.14, 0.7 / n), dm = splitMul(n); for (let i = 0; i < n; i++) spawnProj('bolt', m.x, m.y, m.z, a0 + (i - (n - 1) / 2) * sp + rand(-0.02, 0.02), s, { dmgMul: dm }); sfx('shoot'); break; }
     case 'pellet': {
-      const n = s.d.shots + 2 * s.multi, cone = s.d.spread * (1 - 0.08 * s.aff('size'));
-      for (let i = 0; i < n; i++) spawnProj('pellet', m.x, m.y, m.z, a0 + (i / Math.max(1, n - 1) - 0.5) * cone + rand(-0.05, 0.05), s, { speedMul: rand(0.85, 1.12), lifeMul: rand(0.85, 1.15) });
+      const n = s.d.shots + 2 * s.multi, cone = s.d.spread * (1 - 0.08 * s.aff('size')), dm = splitMul(n, s.d.shots, 2);
+      for (let i = 0; i < n; i++) spawnProj('pellet', m.x, m.y, m.z, a0 + (i / Math.max(1, n - 1) - 0.5) * cone + rand(-0.05, 0.05), s, { speedMul: rand(0.85, 1.12), lifeMul: rand(0.85, 1.15), dmgMul: dm });
       sfx('scatter'); break;
     }
-    case 'boomer': { const n = 1 + s.multi; for (let i = 0; i < n; i++) spawnProj('boomer', m.x, m.y, m.z, a0 + (i - (n - 1) / 2) * 0.3, s); sfx('swish'); break; }
-    case 'ball': { const n = 1 + s.multi; for (let i = 0; i < n; i++) spawnProj('ball', m.x, m.y, m.z, a0 + (i - (n - 1) / 2) * 0.2, s); sfx('boing'); break; }
+    case 'boomer': { const n = 1 + s.multi, dm = splitMul(n); for (let i = 0; i < n; i++) spawnProj('boomer', m.x, m.y, m.z, a0 + (i - (n - 1) / 2) * 0.3, s, { dmgMul: dm }); sfx('swish'); break; }
+    case 'ball': { const n = 1 + s.multi, dm = splitMul(n); for (let i = 0; i < n; i++) spawnProj('ball', m.x, m.y, m.z, a0 + (i - (n - 1) / 2) * 0.2, s, { dmgMul: dm }); sfx('boing'); break; }
     case 'lob': {
-      const n = 1 + s.multi, h = mouse.active ? mouseGround(0) : null;
+      const n = 1 + s.multi, h = mouse.active ? mouseGround(0) : null, dm = splitMul(n);
       let tx = h ? h.x : p.x + p.aimX * 6, tz = h ? h.z : p.z + p.aimZ * 6;
       const dx = tx - p.x, dz = tz - p.z, l = Math.hypot(dx, dz) || 1, R = Math.min(l, s.range);
       tx = p.x + dx / l * R; tz = p.z + dz / l * R;
       if (flip) { tx = p.x - dx / l * R; tz = p.z - dz / l * R; }
-      for (let i = 0; i < n; i++) { const off = i === 0 ? [0, 0] : [Math.cos(i * 2.4) * 1.3, Math.sin(i * 2.4) * 1.3]; spawnLob(m.x, m.y, m.z, tx + off[0], tz + off[1], s, 'lob'); }
+      for (let i = 0; i < n; i++) { const off = i === 0 ? [0, 0] : [Math.cos(i * 2.4) * 1.3, Math.sin(i * 2.4) * 1.3]; spawnLob(m.x, m.y, m.z, tx + off[0], tz + off[1], s, 'lob', dm); }
       sfx('lob'); break;
     }
     case 'melee': swipeAttack(p, s, a0); break;
@@ -3884,7 +4025,7 @@ function attack(p, s, flip) {
       for (let i = 0; i < 2; i++) spawnProj('flame', m.x, m.y, m.z, a0 + rand(-cone / 2, cone / 2), s, { speedMul: rand(0.8, 1.2), lifeMul: rand(0.8, 1.15) });
       if (Math.random() < 0.3) sfx('flame'); break;
     }
-    case 'critter': { const n = 1 + s.multi; for (let i = 0; i < n; i++) spawnProj('critter', m.x, m.y - 0.3, m.z, a0 + (i - (n - 1) / 2) * 0.5, s); sfx('squeak'); break; }
+    case 'critter': { const n = 1 + s.multi, dm = splitMul(n); for (let i = 0; i < n; i++) spawnProj('critter', m.x, m.y - 0.3, m.z, a0 + (i - (n - 1) / 2) * 0.5, s, { dmgMul: dm }); sfx('squeak'); break; }
   }
   // small muzzle flash in the weapon's colour (melee and flame have their own visuals)
   if (s.kind !== 'melee' && s.kind !== 'flame') emit(m.x + Math.cos(a0) * 0.15, m.y, m.z + Math.sin(a0) * 0.15, 3, s.d.color, { speed: 2.5, size: 0.3, life: 0.12, grav: 0, drag: 6, glow: true, color2: 0xffffff });
@@ -3896,8 +4037,8 @@ function attack(p, s, flip) {
 // (dmg/s): spam-clicking 1.5, quarter charges 2.4, half 2.7, full 4.1; at Lv 12 with +3 Tempo: 3.7 / 5.1 / 5.4 / 8.3.
 const CHARGE_RECOVER = 0.3;
 function fireCharge(p, s, c) {
-  const m = muzzleAim(p), n = 1 + s.multi, k = Math.pow(c, 1.25);
-  for (let i = 0; i < n; i++) spawnProj('slug', m.x, m.y, m.z, m.a + (i - (n - 1) / 2) * 0.16, s, { dmgMul: 0.3 + 3.7 * k, sizeMul: 0.6 + 0.9 * c, extraPierce: Math.round(c * 3) });
+  const m = muzzleAim(p), n = 1 + s.multi, k = Math.pow(c, 1.25), dm = splitMul(n);
+  for (let i = 0; i < n; i++) spawnProj('slug', m.x, m.y, m.z, m.a + (i - (n - 1) / 2) * 0.16, s, { dmgMul: (0.3 + 3.7 * k) * dm, sizeMul: 0.6 + 0.9 * c, extraPierce: Math.round(c * 3) });
   sfx(c > 0.9 ? 'boom' : 'shoot'); if (c > 0.45 && c <= 0.9) sfx('thump');
   onFire(p, 'charge', c);
   if (p.dashT <= 0) { p.vx -= p.aimX * 6 * c; p.vz -= p.aimZ * 6 * c; }
@@ -3944,7 +4085,9 @@ function updateBeam(p, s, firing, dt) {
   const m = muzzleAim(p);
   p.beamTick = (p.beamTick || 0) - dt;
   const tick = p.beamTick <= 0; if (tick) { p.beamTick = 1 / s.rate; onFire(p, 'beam'); }
-  const width = 0.35 * s.size;
+  // side beams fan out along lines, so a target is usually crossed by the centre beam plus one side beam: each beam is priced as one
+  // projectile per upgrade (+1 Extra = 3 beams at 0.6), since 0.4 each made the upgrade a single-target loss
+  const width = 0.35 * s.size, dm = splitMul(1 + s.multi);
   for (let k = 0; k < n; k++) {
     let a = m.a + (k === 0 ? 0 : (Math.ceil(k / 2) * (k % 2 ? 1 : -1)) * s.d.spread);
     if (s.homing) { const t = nearestEnemy(m.x + Math.cos(a) * 4, m.z + Math.sin(a) * 4, 5); if (t) a += clamp(angDiff(a, Math.atan2(t.z - m.z, t.x - m.x)), -0.25 * s.homing, 0.25 * s.homing); }
@@ -3960,9 +4103,9 @@ function updateBeam(p, s, firing, dt) {
         const rx = e.x - m.x, rz = e.z - m.z, along = rx * Math.cos(a) + rz * Math.sin(a);
         if (along < 0 || along > len + e.r) continue;
         const perp = Math.abs(-rx * Math.sin(a) + rz * Math.cos(a));
-        if (perp < e.r + width) { const crit = rollCrit(s); hitEnemy(e, s.dmg * (crit ? 3 : 1), s, { crit, kx: Math.cos(a), kz: Math.sin(a), knock: 0.25 }); }
+        if (perp < e.r + width) { const crit = rollCrit(s); hitEnemy(e, s.dmg * dm * (crit ? 3 : 1), s, { crit, kx: Math.cos(a), kz: Math.sin(a), knock: 0.25 }); }
       }
-      if (s.aff('bounce') && len < s.range) for (const da of [-0.7, 0.7]) spawnProj('bolt', ex, m.y, ez, a + Math.PI + da, s, { dmgMul: 0.5, lifeMul: 0.4 });
+      if (s.aff('bounce') && len < s.range) for (const da of [-0.7, 0.7]) spawnProj('bolt', ex, m.y, ez, a + Math.PI + da, s, { dmgMul: 0.5 * dm, lifeMul: 0.4 });
       if (Math.random() < 0.25) sfx('beam');
     }
   }
@@ -3986,7 +4129,7 @@ function gainXP(amount) {
 // ---------- upgrade slots ----------
 // A weapon holds at most WEAPON_SLOTS distinct upgrade types; stacking one it already has levels it up (w.aff[t] = its Lv).
 // A new type on a full weapon must replace one (the swap prompt in 80-hud), and starts again at Lv 1.
-const WEAPON_SLOTS = 6;
+const WEAPON_SLOTS = 4;
 const affCount = w => Object.keys(w.aff).length;
 const weaponFull = (tag, w = G.weapon) => !!w && !w.aff[tag] && affCount(w) >= WEAPON_SLOTS;
 // lowest level first, newest-picked last: the one an automatic trim gives up
@@ -4172,10 +4315,11 @@ function aimTarget(x, z, a, range) {
   return best;
 }
 // arcing shot to a ground point: lobber bombs and thrown grenades
-function spawnLob(x, y, z, tx, tz, s, kind) {
+// dmgMul: the Lobber's multi-bomb damage split (splitMul in 35-weapons)
+function spawnLob(x, y, z, tx, tz, s, kind, dmgMul = 1) {
   const dur = kind === 'grenade' ? 0.7 : 0.55 / ((s && s.aff('speed')) ? 1 + 0.2 * s.aff('speed') : 1);
   const b = { kind, x, y, z, sx: x, sy: y, sz: z, tx, tz, t: 0, dur, life: 99, hit: new Set(), s, r: 0.3, mesh: projMesh(kind, 0xff7a4d, 1),
-    bounces: s ? (s.aff('bounce') ? 1 : 0) : 0, dmg: s ? s.dmg : 5 * levelScale() * G.st.dmg, radius: s ? s.radius : 2.6, homing: s ? s.homing : 0 };
+    bounces: s ? (s.aff('bounce') ? 1 : 0) : 0, dmg: s ? s.dmg * dmgMul : 5 * levelScale() * G.st.dmg, radius: s ? s.radius : 2.6, homing: s ? s.homing : 0 };
   if (kind === 'lob') { b.marker = makeLobMarker(b.radius); b.marker.position.set(tx, 0.06, tz); }
   else { b.marker = mesh(new THREE.RingGeometry(0.8, 1, 24), new THREE.MeshBasicMaterial({ color: 0xff7a4d, transparent: true, opacity: 0.6, depthWrite: false }), tx, 0.06, tz); b.marker.rotation.x = -Math.PI / 2; b.marker.scale.setScalar(b.radius); }
   scene.add(b.marker);
@@ -4284,6 +4428,9 @@ function updateBullets(dt) {
 
 // ---------- enemy shots ----------
 // o: { color, slow (wobbly big bubble), y }
+// SHOT_OWNER: the enemy whose update is running (set with SHOOTER in updateEnemies, null outside that loop, so traps, hazards and
+// delayed death bursts own nothing). A regular enemy's flying shots pop when it dies (popShotsOf in killEnemy).
+let SHOT_OWNER = null;
 const eMats = {};
 function eMat(color) { if (!eMats[color]) { eMats[color] = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55, depthWrite: false }); SHARED.add(eMats[color]); } return eMats[color]; }
 function enemyShoot(x, z, a, speed, s = 1, o = {}) {
@@ -4304,11 +4451,22 @@ function enemyShoot(x, z, a, speed, s = 1, o = {}) {
   // o.roll: a snowball rolling along the ground (its look spins it on its travel axis);
   // o.stall = { at, hold, sp }: the shot stops at age `at`, hangs for `hold`, then re-aims at the nearest player at speed sp
   const b = { x, y, z, vx: Math.cos(a) * sp, vz: Math.sin(a) * sp, vy, r: 0.24 * s, life: 7, mesh: grp, wob: o.wobble || 0, ph: Math.random() * 6,
-    flatR, ox: o.ox ?? x, oz: o.oz ?? z, ty: o.ty, dist: o.dist, sp, look, col: pick2 && pick2[1], sc: s, roll: !!o.roll, stall: o.stall ? Object.assign({}, o.stall) : null };
+    flatR, ox: o.ox ?? x, oz: o.oz ?? z, ty: o.ty, dist: o.dist, sp, look, col: pick2 && pick2[1], sc: s, roll: !!o.roll, stall: o.stall ? Object.assign({}, o.stall) : null,
+    owner: SHOT_OWNER };
   G.ebullets.push(b);
   return b;
 }
 function removeEBullet(i) { const b = G.ebullets[i]; if (!b) return; removeObj(b.mesh); G.ebullets.splice(i, 1); }
+// a defeated shooter's shots still in the air fizzle out harmlessly (a small poof each)
+function popShotsOf(owner) {
+  if (!owner) return;
+  for (let i = G.ebullets.length - 1; i >= 0; i--) {
+    const b = G.ebullets[i]; if (b.owner !== owner) continue;
+    if (b.look && b.look.die) b.look.die(b);
+    poofFx(b.x, b.y, b.z, 0xffffff, 0.7 * (b.sc || 1), 0.3);
+    removeEBullet(i);
+  }
+}
 function updateEBullets(dt) {
   for (let i = G.ebullets.length - 1; i >= 0; i--) {
     const b = G.ebullets[i]; b.life -= dt;
@@ -5373,6 +5531,8 @@ function killEnemy(e) {
   const i = G.enemies.indexOf(e); if (i < 0) return;
   e.dead = true; G.enemies.splice(i, 1);
   const boss = !!e.boss;
+  // a regular enemy's (or boss minion's) shots still in flight pop with it; a boss's are cleared in onBossDead (70-rooms)
+  if (!boss) popShotsOf(e);
   emit(e.x, e.y + e.h * 0.5, e.z, boss ? 90 : 12, e.base[0] || 0xffffff, { speed: boss ? 12 : 6, size: boss ? 0.8 : 0.45, life: boss ? 1.2 : 0.55 });
   poofFx(e.x, e.y + e.h * 0.5, e.z, e.base[0] || 0xffffff, boss ? 8 : clamp(2.3 * (e.r || 0.55) / 0.55, 1.9, 3.8), boss ? 0.9 : 0.5);   // bursts, holds, hollows out (43-flipbook)
   emit(e.x, e.y + e.h * 0.5, e.z, boss ? 40 : 10, 0xffffff, { speed: boss ? 9 : 5, size: boss ? 0.8 : 0.4, life: 0.45, grav: 0, glow: true, color2: e.base[0] || 0xffd34d });
@@ -5435,9 +5595,12 @@ function updateEnemies(dt) {
   // perched-monster outlines pulse pink <-> white: no single colour stands out on every body (red caps) and biome (sand, snow)
   const pk = 0.5 + 0.5 * Math.sin(G.time * 6);
   for (const k in perchMats) perchMats[k].color.setHex(0xff2d6a).lerp(PERCH_WHITE, pk);
+  // SHOT_OWNER (40-bullets) is only set while an enemy's own update runs; the finally below clears it even if one throws
+  try {
   for (const e of [...G.enemies]) {
     if (e.dead) continue;
     SHOOTER = e;   // enemyShoot dresses shots fired during this update in this enemy's look (44-eshots)
+    SHOT_OWNER = e;
     if (e.spawnT > 0) {
       e.spawnT -= dt;
       if (e.warp) { e.warp.scale.setScalar(0.3 + e.spawnT * 1.4); e.warp.rotation.z += dt * 4; }   // boss intros remove the ring early
@@ -5681,6 +5844,7 @@ function updateEnemies(dt) {
     }
     if (e.thornT) { e.thornT -= dt; if (e.thornT <= 0) e.thornT = 0; }
   }
+  } finally { SHOT_OWNER = null; }
 }
 // pick an enemy type and maybe an elite modifier for the current biome
 function rollEnemy() {
@@ -6711,11 +6875,13 @@ const BOSS_ATTACKS = {
   },
   // the Aurora Owl's ribbon of light: a sweeping beam anchored on the ground under her (jumpable)
   aurora(b, ph) { addSweep(b, 3 + ph * 0.5, (Math.random() < 0.5 ? 1 : -1) * (1 + 0.25 * ph), { aurora: true }); return 4.2; },
-  // a blizzard gust pushes you along one axis for 3.5 s while a two-arm spiral of snowflakes spins out
+  // a blizzard gust pushes you along one axis for 3.5 s while a two-arm spiral of snowflakes spins out.
+  // It winds up for GUST_WARN s first (bossGust.warn: hazard sign, rising whoosh, flakes along the lane, no push yet);
+  // the spiral starts with the push, and the cooldown covers the wind-up so the next attack keeps its old gap.
   blizzard(b, ph) {
-    G.bossGust = { axis: pick(['x', 'z']), dir: pick([-1, 1]), t: 3.5 }; sfx('wind');
-    for (let k = 0; k < 24; k++) b.queue.push({ t: k * 0.1, fn: () => { b.spin += 0.33; for (let j = 0; j < 2; j++) enemyShoot(b.x, b.z, b.spin + j * Math.PI, 5, 1, { look: 'flake' }); } });
-    return 4.0;
+    G.bossGust = { axis: pick(['x', 'z']), dir: pick([-1, 1]), t: 3.5, warn: GUST_WARN }; sfx('gustwarn');
+    for (let k = 0; k < 24; k++) b.queue.push({ t: GUST_WARN + k * 0.1, fn: () => { b.spin += 0.33; for (let j = 0; j < 2; j++) enemyShoot(b.x, b.z, b.spin + j * Math.PI, 5, 1, { look: 'flake' }); } });
+    return 4.0 + GUST_WARN;
   },
   // the Yeti King jumps onto you: a red ring marks the landing (0.9 s), then shockwave, a ring of flakes and a crunch
   leap(b, ph) {
@@ -7758,13 +7924,69 @@ function clearRoomEntities() {
   }
   clearInteractables(); clearNpcs();
   if (G.chest) { removeObj(G.chest.g); G.chest = null; }
-  G.waves = null; G.gustOn = false; G.bossGust = null; setSnowVeil(false);
+  G.waves = null; G.gustOn = false; G.bossGust = null; setSnowVeil(false); WS.mode = null;
 }
 // the white blizzard vignette over the screen while a snowy gust blows (blizzard lanes, the Yeti King's blizzard)
 function setSnowVeil(on) { const v = $('#snowVeil'); if (v && v.classList.contains('blizzard') !== on) v.classList.toggle('blizzard', on); }
+
+// ---- gust telegraph: every gust (isle lanes, blizzard lanes, the Yeti King's blizzard) winds up for GUST_WARN s first ----
+// A small yellow/black hazard sign at the top centre points the way the wind will blow ('warn': pulsing; 'blow': steady,
+// arrow nudging), the 'gustwarn' whoosh rises, and leaves / flakes and low streaks start skimming along the lane (gustTell).
+// The game calls windTell() every play frame while a gust is near; the sign hides itself whenever that stops (room change,
+// pause, cards, death, hub, boss intro), see windSignSync.
+const GUST_WARN = 1.0;
+const WS = { mode: null, axis: 'x', dir: 1, snow: false, seen: -9, el: null, shown: '' };
+function windTell(mode, axis, dir, snow) { WS.mode = mode; if (mode) { WS.axis = axis; WS.dir = dir; WS.snow = !!snow; WS.seen = G.time; } }
+function windSignEl() {
+  if (WS.el) return WS.el;
+  const st = document.createElement('style');
+  st.textContent = `#windSign{position:absolute;left:50%;top:calc(env(safe-area-inset-top,0px) + 108px);transform:translateX(-50%);display:flex;align-items:center;gap:6px;pointer-events:none;opacity:0;transition:opacity .12s;z-index:5}
+#windSign.on{opacity:1}
+#windSign .ws-b{width:44px;height:44px;position:relative;display:grid;place-items:center}
+#windSign .ws-b::before{content:'';position:absolute;inset:6px;transform:rotate(45deg);background:#ffd23a;border:3px solid #17161c;border-radius:5px;box-shadow:0 3px 0 rgba(23,22,28,.55)}
+#windSign .ws-r{position:relative;width:24px;height:24px;display:block}
+#windSign svg{width:24px;height:24px;display:block}
+#windSign .ws-t{font:400 15px var(--display, sans-serif);letter-spacing:.06em;color:#17161c;background:#ffd23a;border:3px solid #17161c;border-radius:999px;padding:0 10px;box-shadow:0 3px 0 rgba(23,22,28,.55)}
+#windSign.warn .ws-b,#windSign.warn .ws-t{animation:wsPulse .3s ease-in-out infinite alternate}
+#windSign.warn.flash .ws-t{animation:wsPulse .3s ease-in-out infinite alternate,wsBlink .3s steps(1) infinite}
+#windSign.blow .ws-t{background:#fff4dc}
+#windSign.blow svg{animation:wsPush .45s ease-in-out infinite}
+@keyframes wsPulse{from{transform:scale(1)}to{transform:scale(1.12)}}
+@keyframes wsBlink{50%{background:#fff4dc}}
+@keyframes wsPush{0%,100%{transform:translateX(-2px)}50%{transform:translateX(3px)}}
+@media (prefers-reduced-motion:reduce){#windSign .ws-b,#windSign .ws-t,#windSign svg{animation:none!important}}`;
+  document.head.appendChild(st);
+  const el = document.createElement('div'); el.id = 'windSign'; el.setAttribute('aria-hidden', 'true');
+  el.innerHTML = '<div class="ws-b"><span class="ws-r"><svg viewBox="0 0 24 24" fill="none" stroke="#17161c" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h15M12 5.5 18.5 12 12 18.5"/></svg></span></div><b class="ws-t"></b>';
+  const veil = $('#snowVeil'); if (veil) veil.after(el); else ($('#app') || document.body).appendChild(el);
+  WS.el = el; return el;
+}
+function windSignSync() {
+  const p = G.player;
+  const live = !!WS.mode && G.state === 'play' && G.mode === 'story' && !!G.room && !G.room.hub && !!p && p.hp > 0 && G.time - WS.seen < 0.25;
+  const key = live ? WS.mode + WS.axis + WS.dir + (WS.snow ? 's' : '') + (FEEL.flash ? 'f' : '') : '';
+  if (key === WS.shown) return; WS.shown = key;
+  const el = windSignEl();
+  if (!live) { el.classList.remove('on'); return; }
+  el.className = 'on ' + WS.mode + (FEEL.flash ? ' flash' : '');
+  // the camera looks north from the south: world +x is screen right, +z is screen down
+  const rot = WS.axis === 'x' ? (WS.dir > 0 ? 0 : 180) : (WS.dir > 0 ? 90 : -90);
+  el.querySelector('.ws-r').style.transform = `rotate(${rot}deg)`;
+  el.querySelector('.ws-t').textContent = WS.snow ? 'BLIZZARD!' : 'GUST!';
+}
+(function windSignLoop() { requestAnimationFrame(windSignLoop); try { windSignSync(); } catch (e) {} })();
+// the in-world wind-up: leaves (or flakes) tumble and low streaks skim along the lane, building as k goes 0 -> 1
+function gustTell(gs, k) {
+  const E = HALF - 1, dx = gs.axis === 'x' ? gs.dir : 0, dz = gs.axis === 'z' ? gs.dir : 0, snow = !!gs.snow || theme().biome === 'peaks';
+  const at = () => { const along = -gs.dir * rand(-0.2 * E, E), a = rand(-E, E); return gs.axis === 'x' ? [along, a] : [a, along]; };
+  if (Math.random() < (0.35 + 0.9 * k) * ISLE_K) { const [x, z] = at(); emit(x, rand(0.08, 0.3), z, 1, snow ? 0xdff4ff : 0xffffff, { dir: [dx, 0, dz], speed: 7 + 9 * k, size: 0.22, life: 0.8, grav: 0, drag: 0, spread: 0.03 }); }
+  if (Math.random() < (0.12 + 0.3 * k) * ISLE_K) { const [x, z] = at(), v = 4 + 6 * k; spr(x, rand(0.2, 0.6), z, { tex: snow ? 'star' : 'leaf', col: snow ? 0xffffff : 0x9fd36b, size: snow ? 0.3 : 0.36, life: 1.1, speed: 0.5, dir: [dx * v, 0.4, dz * v], spin: 7, drag: 0, grav: 0.4 }); }
+}
 function enterRoom(room, via) {
   clearRoomEntities(); G.waves = null; hideWaveHud();
   G.room = room; room.visited = true; room.known = true; room.hidden = false; room.sealed = false;
+  // gust lanes start calm on arrival, so the first gust always gets its full wind-up warning
+  if (room.gust) { room.gustT = 2.6; room.gustWarned = false; }
   setIsleSize(room.nc || isleSizeFor(room));   // vault / hidden isles are smaller (00-core)
   for (const k in room.doors) { const n = G.map.rooms.get(key(room.gx + DIRS[k][0], room.gy + DIRS[k][1])); if (n && !n.hidden) n.known = true; }
   buildIsland(room);
@@ -7986,6 +8208,14 @@ function onBossDead(b) {
   for (let i = G.ebullets.length - 1; i >= 0; i--) { const s = G.ebullets[i]; emit(s.x, s.y, s.z, 4, 0xfff4dc, { speed: 2, size: 0.3, life: 0.25, grav: 0, glow: true }); removeEBullet(i); }
   clearHazards();
   for (const p of G.players) p.inv = Math.max(p.inv, 1.5);
+  // a launch or knockback from the boss's last hit ends here: no more upward push, the slide is damped, you land where you are
+  // (and never inside anything); see the boss-stuck note in CLAUDE.md
+  for (const p of G.players) {
+    if (p.falling > 0) continue;
+    if (p.vy > 0) p.vy = 0;
+    p.vx *= 0.3; p.vz *= 0.3; p.padBoost = false;
+    depenetrate(p);
+  }
   unseal();
   for (let i = 0; i < (b.mini ? 6 : 10) + G.st.luck * 2; i++) spawnPickup('gold', b.x, b.z);
   spawnPickup('heart', b.x, b.z);
@@ -8229,12 +8459,22 @@ function updateTraps(dt) {
   }
   // gust lanes blow in pulses; lightning isles strike near you while enemies are around
   if (room.gust) {
-    room.gustT = ((room.gustT || 0) + dt) % 5; const was = G.gustOn; G.gustOn = room.gustT < 2.6;
+    room.gustT = ((room.gustT ?? 2.6) + dt) % 5; const was = G.gustOn; G.gustOn = room.gustT < 2.6;
     if (G.gustOn && !was) sfx('wind');
+    // the last GUST_WARN s of each calm spell is the wind-up: sign, rising whoosh, leaves along the lane
+    const winding = !G.gustOn && room.gustT >= 5 - GUST_WARN;
+    if (winding && !room.gustWarned) { room.gustWarned = true; sfx('gustwarn'); }
+    if (!winding) room.gustWarned = false;
+    if (winding) gustTell(room.gust, 1 - (5 - room.gustT) / GUST_WARN);
+    windTell(G.gustOn ? 'blow' : winding ? 'warn' : null, room.gust.axis, room.gust.dir, room.gust.snow);
     // (a blizzard lane on the peaks blows thicker, slower white flakes instead of wind streaks)
     if (G.gustOn && Math.random() < (room.gust.snow ? 1.3 : 0.6) * ISLE_K) { const gs = room.gust, E = HALF - 1, a = rand(-E, E); emit(gs.axis === 'x' ? -gs.dir * E : a, rand(0.3, 2), gs.axis === 'x' ? a : -gs.dir * E, 1, 0xffffff, { dir: [gs.axis === 'x' ? gs.dir : 0, 0, gs.axis === 'z' ? gs.dir : 0], speed: gs.snow ? 11 : 16, size: 0.3, life: gs.snow ? 1.9 : 1.2, grav: 0, drag: 0, spread: gs.snow ? 0.7 : 0, shape: gs.snow ? 'star' : undefined }); }
   }
-  setSnowVeil(!!(room.gust && room.gust.snow && G.gustOn) || !!G.bossGust);
+  // the Yeti King's blizzard: winding up (bossGust.warn > 0) or blowing (the push itself is in updatePlayer)
+  const bg = G.bossGust;
+  if (bg) windTell(bg.warn > 0 ? 'warn' : 'blow', bg.axis, bg.dir, true);
+  else if (!room.gust) WS.mode = null;
+  setSnowVeil(!!(room.gust && room.gust.snow && G.gustOn) || !!(bg && !(bg.warn > 0)));
   // icicle isles (peaks): an icicle drops near you every few seconds while enemies are around (telegraphed, like lightning)
   if (room.icicles && G.enemies.length) {
     G.icicleT = (G.icicleT ?? 3) - dt;
@@ -9329,7 +9569,8 @@ function startStory(level, run = 'story') {
   if (level > 1) {
     // head-start kit so a later level is winnable without the earlier ones
     G.weapon.level = 1 + 3 * (level - 1);
-    for (let k = 0; k < 2 * (level - 1); k++) { const t = pick(AFFIX_KEYS); G.weapon.aff[t] = (G.weapon.aff[t] || 0) + 1; }
+    // random upgrades, but never more than WEAPON_SLOTS types: once full, a roll levels an owned one
+    for (let k = 0; k < 2 * (level - 1); k++) { let t = pick(AFFIX_KEYS); if (weaponFull(t)) t = pick(Object.keys(G.weapon.aff)); G.weapon.aff[t] = (G.weapon.aff[t] || 0) + 1; }
     for (let k = 0; k < 3 * (level - 1); k++) { const it = rollItem({ noCursed: true, min: k === 0 ? 'rare' : undefined }); G.items[it] = (G.items[it] || 0) + 1; if (!G.itemOrder.includes(it)) G.itemOrder.push(it); }
     G.crystals = 20; G.keys = 1; G.bombs = 2; computeStats();
   }
@@ -9604,7 +9845,10 @@ function endlessDoneScreen() {
 // a head-start kit, since there are no combat isles to build up on before the first boss
 function rushKit() {
   G.weapon.level = 4;
-  const t = pick(AFFIX_KEYS); G.weapon.aff[t] = 1;
+  let t = pick(AFFIX_KEYS);
+  // stays within WEAPON_SLOTS types even on top of a later-level head start
+  if (weaponFull(t)) t = pick(Object.keys(G.weapon.aff));
+  G.weapon.aff[t] = (G.weapon.aff[t] || 0) + 1;
   for (let k = 0; k < 2; k++) { const it = rollItem({ noCursed: true, min: k === 0 ? 'rare' : undefined }); G.items[it] = (G.items[it] || 0) + 1; if (!G.itemOrder.includes(it)) G.itemOrder.push(it); }
   G.crystals = 15; G.keys = 0; G.bombs = 2; computeStats();
 }
@@ -9750,6 +9994,399 @@ function updateRange(dt) {
     }
   }
 }
+// ---------- playtest log, run history and bug reports ----------
+// LOG.ev is an always-on ring buffer of notable events (run flow, isles, waves, bosses, hits with a guessed cause, pickups,
+// errors, frame-rate dips). HIST (localStorage HIST_KEY) keeps one summary per run plus recent issues (errors, bug reports,
+// "Stuck?" reports). Hooks wrap existing functions at load: they are function declarations in this one shared scope and
+// every caller looks them up by name, so reassigning the binding routes all calls through the wrapper (the -Debug
+// recorder wraps on top of these later). Report dialog: #reportView, G.state 'report'. Logbook: #logView, G.state 'logbook'.
+const LOG_MAX = 300, HIST_KEY = 'vd3-history-v1', HIST_RUNS = 30, HIST_ISSUES = 20;
+const GH_REPO = 'Aerynnnnn/schiffy-sky-patrol', GH_URL_MAX = 6000, GH_LOG_LINES = 40;
+const LOG = { ev: [], cur: null, lastHit: null, errs: 0, seen: new Set(), fps: 0 };
+const r2 = v => Math.round(v * 100) / 100;
+const escHtml = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const clock = at => new Date(at).toTimeString().slice(0, 8);
+const stamp = d => { const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`; };
+function logWhere() {
+  if (G.mode === 'hub') return 'hub';
+  const r = G.room, run = G.run === 'rush' ? `Rush ${G.rush + 1} ` : G.run === 'endless' ? `Endless${G.loop ? ' loop ' + (G.loop + 1) : ''} ` : '';
+  return `${run}L${G.level}-${G.sector}${r ? ' ' + r.type + (r.event ? ':' + r.event : '') : ''}`;
+}
+function logEvent(k, m) {
+  try {
+    LOG.ev.push({ at: Date.now(), t: r2(G.time), w: logWhere(), k, m: String(m) });
+    if (LOG.ev.length > LOG_MAX) LOG.ev.shift();
+  } catch (e) {}
+}
+const logLine = e => `${clock(e.at)} g${Math.round(e.t)} [${e.w}] ${e.k}: ${e.m}`;
+
+// ---- persistent history ----
+const HIST = (() => {
+  try { const h = JSON.parse(localStorage.getItem(HIST_KEY) || 'null'); if (h && h.v === 1 && Array.isArray(h.runs) && Array.isArray(h.issues)) return h; } catch (e) {}
+  return { v: 1, runs: [], issues: [] };
+})();
+// a run still marked live from an earlier visit never got its ending written
+for (const r of HIST.runs) if (r.outcome === 'in progress') r.outcome = 'tab closed mid-run';
+function saveHist() { try { localStorage.setItem(HIST_KEY, JSON.stringify(HIST)); } catch (e) {} }
+function addIssue(kind, msg, extra) {
+  try {
+    HIST.issues.unshift(Object.assign({ at: new Date().toISOString(), v: GAME_MANIFEST.version, kind, msg: String(msg).slice(0, 600), where: logWhere(), run: LOG.cur ? LOG.cur.id : null }, extra));
+    HIST.issues.length = Math.min(HIST.issues.length, HIST_ISSUES); saveHist();
+  } catch (e) {}
+}
+// errors: guard() in 90-flow reports each new loop error here; window errors and rejected promises come in below
+function logError(msg, err) {
+  try {
+    const st = err && err.stack ? String(err.stack).split('\n').slice(1, 3).map(s => s.trim()).join(' | ') : '';
+    msg = String(msg).slice(0, 300);
+    if (LOG.seen.has(msg)) return; LOG.seen.add(msg);
+    LOG.errs++; logEvent('error', msg + (st ? ' <' + st + '>' : '')); addIssue('error', msg + (st ? ' <' + st + '>' : ''));
+  } catch (e) {}
+}
+window.addEventListener('error', e => logError(`${e.message || 'script error'} @${e.lineno || '?'}:${e.colno || '?'}`, e.error));
+window.addEventListener('unhandledrejection', e => logError('unhandled promise: ' + (e.reason && (e.reason.message || e.reason)), e.reason));
+
+// ---- build + where-you-are summaries ----
+function buildInfo() {
+  const w = G.weapon, nm = (T, k) => (T[k] && T[k].name) || k;
+  return { weapon: w ? `${nm(WEAPONS, w.id)} Lv ${w.level}` : null,
+    upgrades: w ? Object.entries(w.aff).map(([t, n]) => `${nm(AFFIXES, t)} ${n}`) : [],
+    gadgets: (G.itemOrder || []).map(k => `${nm(ITEMS, k)} ${G.items[k]}`) };
+}
+const buildText = b => b ? [b.weapon || 'no weapon', b.upgrades.length ? 'upgrades: ' + b.upgrades.join(', ') : '', b.gadgets.length ? 'gadgets: ' + b.gadgets.join(', ') : ''].filter(Boolean).join(' · ') : '';
+function reachedLabel() {
+  return G.run === 'rush' ? `Boss ${G.rush + 1}/${RUSH.length}` : G.run === 'endless' ? `Depth ${depth()}` : `L${G.level}-${Math.min(G.sector, 5)}${G.sector > 5 ? ' final' : ''}`;
+}
+const foeName = e => e.boss ? e.name || e.id : `${e.elite ? e.elite + ' ' : ''}${e.name || e.type}`;
+const runModeName = m => m === 'rush' ? 'Boss Rush' : m === 'endless' ? 'Endless' : 'Story';
+const fmtSecs = s => s >= 60 ? `${Math.floor(s / 60)}m${String(s % 60).padStart(2, '0')}s` : `${s}s`;
+
+// ---- the current run ----
+function runSync(save = true) {
+  const c = LOG.cur; if (!c) return;
+  try {
+    c.reached = reachedLabel(); c.kills = G.kills; c.hits = G.runStats ? G.runStats.hits : 0; c.secs = Math.round((performance.now() - c.t0) / 1000);
+    c.build = buildInfo(); c.errors = LOG.errs - c.e0;
+    const rec = Object.assign({}, c); delete rec.t0; delete rec.e0;
+    const i = HIST.runs.findIndex(r => r.id === c.id);
+    if (i >= 0) HIST.runs[i] = rec; else { HIST.runs.unshift(rec); HIST.runs.length = Math.min(HIST.runs.length, HIST_RUNS); }
+    if (save) saveHist();
+  } catch (e) {}
+}
+function runEnd(outcome, cause) {
+  const c = LOG.cur; if (!c) return;
+  c.outcome = outcome; if (cause) c.cause = cause;
+  runSync(); LOG.cur = null;
+  logEvent('run', `run over: ${outcome}${cause ? ' (' + cause + ')' : ''}`);
+}
+window.addEventListener('pagehide', () => { if (LOG.cur) { LOG.cur.outcome = 'closed mid-run'; runSync(); LOG.cur.outcome = 'in progress'; } });
+
+// ---- what hurt Schiffy: callers pass the source position, which is exactly the shot / enemy / hazard position ----
+function hitCause(sx, sz, o) {
+  if (o.fall) return 'falling off the isle';
+  const same = (x, z) => x === sx && z === sz, p = G.player;
+  for (const b of G.ebullets) if (same(b.x, b.z)) {
+    const k = b.look && Object.keys(ESHOT).find(n => ESHOT[n] === b.look);
+    return `${b._from || 'enemy'} shot${k ? ' (' + k + ')' : ''}`;
+  }
+  for (const h of G.hazards) {
+    if (h.boss && same(h.boss.x, h.boss.z) && (h.type === 'sweep' || h.type === 'leapmark')) return `${h.boss.name} ${h.type === 'sweep' ? 'sweep beam' : 'leap landing'}`;
+    if (same(h.x, h.z) || same(h.tx, h.tz)) return `hazard: ${h.kind || h.type}`;
+  }
+  for (const e of G.enemies) if (same(e.x, e.z)) return `touching ${foeName(e)}`;
+  const tr = (G.trapMeshes || []).find(t => t.tr && !t.tr.gone && Math.abs(p.x - cellX(t.tr.i)) < 0.95 && Math.abs(p.z - cellX(t.tr.j)) < 0.95);
+  if (tr) return `${tr.tr.type} trap`;
+  return sx === undefined ? 'unknown' : `blast or hazard ${r2(Math.hypot(p.x - sx, p.z - sz))} away (volatile elite?)`;
+}
+
+// ---- hooks ----
+function wrapFn(orig, w) { try { Object.defineProperty(w, 'name', { value: orig.name }); } catch (e) {} return w; }
+const before = (o, f) => wrapFn(o, function (...a) { try { f(...a); } catch (e) {} return o.apply(this, a); });
+const after = (o, f) => wrapFn(o, function (...a) { const r = o.apply(this, a); try { f(...a); } catch (e) {} return r; });
+
+{
+  const o = hurtPlayer;
+  hurtPlayer = wrapFn(o, function (sx, sz, opts) {
+    const p = G.player; let cause = null, hp0 = 0, sh0 = 0;
+    try { if (p && G.state === 'play' && G.mode !== 'hub') { hp0 = p.hp; sh0 = p.shield; cause = hitCause(sx, sz, opts || {}); } } catch (e) {}
+    if (cause) LOG.lastHit = { cause, t: G.time };
+    const r = o.apply(this, arguments);
+    // a knockout is logged by gameOver with this cause
+    try { if (cause && G.state !== 'over' && (p.hp < hp0 || p.shield < sh0)) logEvent('hit', `${p.shield < sh0 ? 'shield popped' : `-${hp0 - p.hp} bone (${p.hp}/${p.maxHp})`} by ${cause}`); } catch (e) {}
+    return r;
+  });
+}
+{
+  const o = enemyShoot;
+  enemyShoot = wrapFn(o, function () {
+    const b = o.apply(this, arguments);
+    try { if (b && SHOOTER) b._from = SHOOTER.boss ? SHOOTER.name : (SHOOTER.name || SHOOTER.type); } catch (e) {}
+    return b;
+  });
+}
+{
+  const o = startStory;
+  startStory = wrapFn(o, function (level, run) {
+    if (LOG.cur) runEnd('restarted');
+    LOG.cur = { id: Date.now().toString(36), start: new Date().toISOString(), v: GAME_MANIFEST.version, mode: run || 'story', diff: G.diff, from: level || 1,
+      reached: '', isles: 0, bosses: [], clears: [], kills: 0, hits: 0, secs: 0, outcome: 'in progress', cause: '', build: null, errors: 0, t0: performance.now(), e0: LOG.errs };
+    logEvent('run', `start ${runModeName(run)} from Level ${level || 1} on ${G.diff}`);
+    const r = o.apply(this, arguments);
+    runSync();
+    return r;
+  });
+}
+enterRoom = after(enterRoom, (room, via) => {
+  if (G.mode !== 'story') return;
+  if (LOG.cur) LOG.cur.isles++;
+  logEvent('room', `entered ${room.type}${room.event ? ':' + room.event : ''} (${room.gx},${room.gy})${room.cleared ? ' already cleared' : ''}${via ? ' via ' + via : ''}`);
+  runSync();
+});
+startWave = after(startWave, () => { const W = G.waves; if (W) logEvent('wave', `wave ${W.n}/${W.total} starts`); });
+{
+  const o = checkRoomClear;
+  checkRoomClear = wrapFn(o, function () {
+    const rm = G.room, was = rm && rm.cleared, r = o.apply(this, arguments);
+    if (rm && !was && rm.cleared) logEvent('clear', `isle cleared`);
+    return r;
+  });
+}
+startBossIntro = before(startBossIntro, (e, kind) => logEvent('boss', `intro: ${e.name || e.id} (${kind || 'boss'})`));
+killEnemy = before(killEnemy, e => {
+  if (!e || !e.boss || e.dead || !G.enemies.includes(e)) return;
+  logEvent('boss', `defeated ${e.name || e.id}`);
+  if (LOG.cur) { LOG.cur.bosses.push(e.name || e.id); runSync(); }
+});
+gameOver = before(gameOver, () => {
+  const lh = LOG.lastHit, cause = lh && G.time - lh.t < 3 ? lh.cause : 'unknown';
+  logEvent('death', `knocked out by ${cause} · ${G.kills} KOs`);
+  runEnd('knocked out', cause);
+});
+levelComplete = before(levelComplete, () => {
+  const what = G.run === 'rush' ? 'Boss Rush' : `Level ${G.level}`;
+  logEvent('level', `${what} cleared`);
+  if (LOG.cur) { LOG.cur.clears.push(what); runSync(); }
+});
+continueStory = before(continueStory, () => logEvent('run', 'continue to the next level'));
+nextSector = after(nextSector, () => logEvent('run', `sector ${G.sector} begins`));
+startFinal = after(startFinal, () => logEvent('run', 'final isle'));
+rushFight = after(rushFight, i => logEvent('run', `rush fight ${i + 1}/${RUSH.length}`));
+goHome = before(goHome, () => {
+  if (LOG.cur) runEnd(G.state === 'levelDone' ? 'cleared' : 'quit');
+  logEvent('run', 'back to the hub');
+});
+giveItem = before(giveItem, k => logEvent('item', `got ${(ITEMS[k] && ITEMS[k].name) || k}`));
+takeWeapon = before(takeWeapon, id => logEvent('weapon', `${G.weapon ? WEAPONS[G.weapon.id].name : '-'} -> ${(WEAPONS[id] && WEAPONS[id].name) || id}`));
+chooseCard = before(chooseCard, t => logEvent('upgrade', `${(AFFIXES[t] && AFFIXES[t].name) || t}${G.weapon ? ' (weapon Lv ' + G.weapon.level + ')' : ''}`));
+
+// ---- frame rate: frame() in 90-flow passes the raw frame time ----
+const PERF = { n: 0, ms: 0, lowAt: -1e9, hitchAt: -1e9 };
+function logFrame(raw) {
+  if (document.hidden || raw > 2000) { PERF.n = PERF.ms = 0; return; }
+  const now = performance.now();
+  if (raw > 250 && G.state === 'play' && now - PERF.hitchAt > 10000) { PERF.hitchAt = now; logEvent('perf', `hitch: one frame took ${Math.round(raw)} ms`); }
+  PERF.n++; PERF.ms += raw;
+  if (PERF.ms >= 3000) {
+    const fps = Math.round(PERF.n * 1000 / PERF.ms); LOG.fps = fps;
+    if (fps < 30 && G.state === 'play' && now - PERF.lowAt > 30000) { PERF.lowAt = now; logEvent('perf', `low frame rate ~${fps} fps (${G.enemies.length} enemies, ${G.ebullets.length} enemy shots, ${G.bullets.length} shots)`); }
+    PERF.n = PERF.ms = 0;
+  }
+}
+
+// ---- state snapshot (bug reports and the pause menu's "Stuck?") ----
+function stateSnapshot() {
+  const r = G.room, p = G.player, n = r2;
+  let errors = []; try { errors = [...loopErrs]; } catch (e) {}
+  const plain = o => o && Object.fromEntries(Object.entries(o).filter(([, v]) => v === null || typeof v !== 'object'));
+  return {
+    v: GAME_MANIFEST.version, at: new Date().toISOString(), where: logWhere(), state: G.state, mode: G.mode, run: G.run, level: G.level, sector: G.sector, loop: G.loop, rush: G.rush, diff: G.diff,
+    room: r && { type: r.type, event: r.event, gx: r.gx, gy: r.gy, cleared: !!r.cleared, sealed: !!r.sealed, started: !!r.started, doors: Object.keys(r.doors || {}), nc: NC, half: HALF, exit: EXIT },
+    barriers: G.barriers.length, waves: plain(G.waves), transit: n(G.transit), idleFightT: G.idleFightT, lastHit: n(G.time - (G.lastHitT || 0)),
+    player: p && { x: n(p.x), y: n(p.y), z: n(p.z), hp: p.hp, maxHp: p.maxHp, shield: p.shield, falling: p.falling, inv: n(p.inv || 0), dashT: n(p.dashT || 0) },
+    res: { gold: G.crystals, keys: G.keys, bombs: G.bombs, kills: G.kills },
+    enemyCount: G.enemies.length,
+    enemies: G.enemies.slice(0, 40).map(e => ({ type: e.type, name: e.boss ? e.name : undefined, elite: e.elite || undefined, boss: e.boss || undefined, x: n(e.x), y: n(e.y), z: n(e.z), hp: n(e.hp), spawnT: n(e.spawnT || 0), lostT: e.lostT, perch: e.perch || undefined, mesh: !!e.mesh, dummy: e.dummy || undefined })),
+    eShots: G.ebullets.length, hazards: G.hazards.slice(0, 20).map(h => h.type),
+    build: buildInfo(), errors,
+  };
+}
+function envInfo() {
+  let gpu = '';
+  try { const gl = renderer.getContext(), x = gl.getExtension('WEBGL_debug_renderer_info'); gpu = String(x ? gl.getParameter(x.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)); } catch (e) {}
+  return { ua: navigator.userAgent, lang: navigator.language, view: `${innerWidth}x${innerHeight}`, dpr: devicePixelRatio, canvas: `${canvas.width}x${canvas.height}`, gpu, page: location.origin + location.pathname, fps: LOG.fps };
+}
+function settingsInfo() {
+  return { sound: !muted, shake: SAVE.shake || 'default', flashes: SAVE.flashes === undefined ? 'default' : SAVE.flashes, unlocked: SAVE.unlocked, runs: SAVE.runs };
+}
+function copyText(txt) {
+  const fallback = () => { const t = document.createElement('textarea'); t.value = txt; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); } catch (e) {} t.remove(); };
+  try { navigator.clipboard.writeText(txt).catch(fallback); } catch (e) { fallback(); }
+}
+function saveFile(name, data, type) {
+  try {
+    const url = typeof data === 'string' && data.startsWith('data:') ? data : URL.createObjectURL(new Blob([data], { type: type || 'application/json' }));
+    const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    if (!url.startsWith('data:')) setTimeout(() => URL.revokeObjectURL(url), 4000);
+  } catch (e) { toast('Could not save', String(e && e.message || e)); }
+}
+// the 3D view right now: render one frame and read it back in the same task (the canvas keeps no copy of its buffer)
+function grabShot() {
+  try {
+    renderer.render(scene, camera);
+    const src = renderer.domElement, w = Math.min(960, src.width);
+    if (!w || !src.height) return null;
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = Math.round(w * src.height / src.width);
+    cv.getContext('2d').drawImage(src, 0, 0, cv.width, cv.height);
+    return cv.toDataURL('image/jpeg', 0.7);
+  } catch (e) { return null; }
+}
+
+// ---------- "Report a bug" (pause menu, hub bar, game-over screen, F2) ----------
+const RP = { prev: 'play', snap: null, shot: null, at: null, issue: null };
+function openReport() {
+  if (G.state === 'report' || !G.player) return;
+  if (G.state === 'logbook') closeLogbook();
+  const shot = grabShot();
+  RP.prev = G.state; RP.snap = stateSnapshot(); RP.shot = shot; RP.at = new Date(); RP.issue = null;
+  G.state = 'report'; mouse.down = false; try { hideBeams(); } catch (e) {}
+  const img = $('#reportShot'), dl = $('#reportShotDl');
+  img.hidden = dl.hidden = !shot; if (shot) { img.src = shot; dl.href = shot; dl.download = `schiffy-bug-${stamp(RP.at)}.jpg`; }
+  const s = RP.snap;
+  $('#reportWhere').textContent = `Snapshot taken: ${s.where}${s.mode === 'hub' ? '' : ' · ' + runModeName(s.run)} · ${s.diff}${s.player && G.mode === 'story' ? ` · ${s.player.hp}/${s.player.maxHp} bones` : ''} · v${s.v}`;
+  $('#reportText').value = ''; $('#reportMsg').textContent = '';
+  $('#reportView').hidden = false; $('#reportText').focus();
+  logEvent('report', 'bug report opened');
+}
+function closeReport() {
+  $('#reportView').hidden = true;
+  G.state = RP.prev && RP.prev !== 'report' && RP.prev !== 'logbook' ? RP.prev : 'play';
+  if (G.state === 'pause') $('#resumeBtn').focus();
+}
+function fullReport() {
+  const desc = $('#reportText').value.trim();
+  return { app: GAME_MANIFEST.name, v: GAME_MANIFEST.version, at: RP.at.toISOString(), desc, where: RP.snap.where,
+    state: Object.assign({}, RP.snap, { state: RP.prev }), run: LOG.cur ? Object.assign({}, LOG.cur, { t0: undefined, e0: undefined, secs: Math.round((performance.now() - LOG.cur.t0) / 1000) }) : null,
+    settings: settingsInfo(), env: envInfo(), log: LOG.ev.slice(), recentRuns: HIST.runs.slice(0, 5), screenshot: RP.shot };
+}
+// the history keeps one entry per report dialog, updated by whichever buttons are pressed
+function fileReport(rep, how) {
+  try {
+    if (!RP.issue) {
+      logEvent('report', `bug report filed (${how}): ${rep.desc.slice(0, 80)}`);
+      addIssue('report', rep.desc || '(no description)', { how: [how], state: RP.prev });
+      RP.issue = HIST.issues[0];
+    } else { RP.issue.msg = (rep.desc || '(no description)').slice(0, 600); if (!RP.issue.how.includes(how)) RP.issue.how.push(how); saveHist(); }
+  } catch (e) {}
+}
+function reportSummary(rep, md) {
+  const s = rep.state, p = s.player, b = (k, v) => md ? `**${k}:** ${v}` : `${k}: ${v}`;
+  const foes = {}; for (const e of s.enemies) { const k = e.boss ? `${e.name} (boss, hp ${e.hp})` : (e.elite ? e.elite + ' ' : '') + e.type; foes[k] = (foes[k] || 0) + 1; }
+  const room = s.room ? `${s.room.type}${s.room.event ? ':' + s.room.event : ''} at (${s.room.gx},${s.room.gy})${s.room.sealed ? ', sealed' : ''}${s.room.cleared ? ', cleared' : ''}${s.waves ? `, wave ${s.waves.n}/${s.waves.total}` : ''}` : 'none';
+  return [
+    b('Where', `${s.where}${s.mode === 'hub' ? '' : ' · ' + runModeName(s.run)} · ${s.diff} · screen ${s.state}`),
+    b('Isle', room),
+    p ? b('Schiffy', `${p.hp}/${p.maxHp} bones, shield ${p.shield}, at (${p.x}, ${p.y}, ${p.z})${p.falling > 0 ? ', falling' : ''}`) : '',
+    b('Build', buildText(s.build) || '-'),
+    b('Enemies', s.enemyCount ? `${s.enemyCount}: ` + Object.entries(foes).map(([k, n]) => n > 1 ? `${k} x${n}` : k).join(', ') : 'none'),
+    rep.run ? b('Run', `${runModeName(rep.run.mode)} from L${rep.run.from}, ${fmtSecs(rep.run.secs)}, ${G.kills} KOs, ${rep.run.isles} isles${rep.run.bosses.length ? ', bosses: ' + rep.run.bosses.join(', ') : ''}`) : '',
+    b('Errors', s.errors.length ? s.errors.join(' | ').slice(0, 600) : 'none'),
+    b('Settings', `sound ${rep.settings.sound ? 'on' : 'off'}, shake ${rep.settings.shake}, flashes ${rep.settings.flashes}`),
+    b('Browser', `${rep.env.ua} · ${rep.env.view} @${rep.env.dpr}x · ${rep.env.gpu || 'gpu ?'} · ~${rep.env.fps || '?'} fps`),
+    b('Version', `${rep.v} · ${rep.at}`),
+  ].filter(Boolean).join('\n');
+}
+function reportText(rep) {
+  return `${rep.app} bug report\n\nWhat happened: ${rep.desc || '(no description)'}\n\n${reportSummary(rep, false)}\n\n--- log (${rep.log.length} events, oldest first) ---\n${rep.log.map(logLine).join('\n')}\n\n--- state ---\n${JSON.stringify(rep.state)}`;
+}
+function ghIssueUrl(rep) {
+  const base = `https://github.com/${GH_REPO}/issues/new?labels=bug`, enc = encodeURIComponent;
+  const cut = ' …(cut, full text in the downloaded report)';
+  const full = rep.desc || '_(no description)_', clip = n => full.length > n ? full.slice(0, n) + cut : full;
+  let keep = 1500, desc = clip(keep);
+  const title = '[bug] ' + ((rep.desc.split('\n')[0] || '').slice(0, 70) || `Report from ${rep.where}`);
+  const tail = '\n\n_Screenshot: drag the downloaded `.jpg` into this box if you like._';
+  const make = lines => base + '&title=' + enc(title) + '&body=' + enc(`**What happened**\n${desc}\n\n${reportSummary(rep, true)}\n\n<details><summary>Last ${lines.length} log lines</summary>\n\n\`\`\`\n${lines.join('\n')}\n\`\`\`\n</details>${tail}`);
+  let lines = rep.log.slice(-GH_LOG_LINES).map(e => logLine(e).replace(/`{3,}/g, "'''"));
+  let url = make(lines);
+  while (url.length > GH_URL_MAX && lines.length) { lines = lines.slice(Math.max(1, Math.ceil(lines.length / 10))); url = make(lines); }
+  while (url.length > GH_URL_MAX && keep > 40) { keep = Math.floor(keep * 0.8); desc = clip(keep); url = make(lines); }
+  return url;
+}
+const reportMsg = t => { $('#reportMsg').textContent = t; };
+$('#reportGh').addEventListener('click', () => {
+  const rep = fullReport(), url = ghIssueUrl(rep);
+  window.open(url, '_blank', 'noopener');
+  if (rep.screenshot) saveFile(`schiffy-bug-${stamp(RP.at)}.jpg`, rep.screenshot);
+  fileReport(rep, 'github');
+  reportMsg(rep.screenshot ? 'GitHub opened in a new tab. The screenshot was saved too: drag it into the issue box.' : 'GitHub opened in a new tab.');
+});
+$('#reportDl').addEventListener('click', () => {
+  const rep = fullReport();
+  saveFile(`schiffy-bug-${stamp(RP.at)}.json`, JSON.stringify(rep, null, 1));
+  fileReport(rep, 'download');
+  reportMsg('Report saved. Send the .json file (and the screenshot, if you like) to the developer.');
+});
+$('#reportCopy').addEventListener('click', () => {
+  const rep = fullReport(); copyText(reportText(rep)); fileReport(rep, 'copy');
+  reportMsg('Report copied. Paste it into a message to the developer.');
+});
+$('#reportClose').addEventListener('click', closeReport);
+// typing in the box must not reach the game's own keys (M, P, Tab, Space...); Esc still closes
+$('#reportView').addEventListener('keydown', e => {
+  if (e.target.id === 'reportText') { e.stopPropagation(); if (e.code === 'Escape') { e.preventDefault(); closeReport(); } }
+  else if (e.code === 'Tab') e.stopPropagation();
+});
+CLOSERS.report = closeReport;
+
+// ---------- Logbook: past runs, issues and this session's log ----------
+const LB = { prev: 'play', tab: 'runs' };
+function openLogbook(tab) {
+  if (G.state === 'report') closeReport();
+  if (G.state !== 'logbook') { LB.prev = G.state; G.state = 'logbook'; mouse.down = false; try { hideBeams(); } catch (e) {} }
+  LB.tab = tab || LB.tab;
+  if (LOG.cur) runSync(false);
+  const tabs = { runs: `Runs (${HIST.runs.length})`, issues: `Issues (${HIST.issues.length})`, session: 'This session' };
+  $('#logTabs').innerHTML = Object.entries(tabs).map(([k, v]) => `<button type="button" class="tab ${k === LB.tab ? 'on' : ''}" data-ltab="${k}">${v}</button>`).join('');
+  $('#logList').innerHTML = logbookHTML(LB.tab);
+  $('#logMsg').textContent = '';
+  $('#logView').hidden = false; $('#logClose').focus();
+}
+function closeLogbook() {
+  $('#logView').hidden = true;
+  G.state = LB.prev && LB.prev !== 'logbook' && LB.prev !== 'report' ? LB.prev : 'play';
+  if (G.state === 'pause') $('#resumeBtn').focus();
+}
+const when = iso => { const d = new Date(iso); return isNaN(d) ? '' : `${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${d.toTimeString().slice(0, 5)}`; };
+function logbookHTML(tab) {
+  const empty = t => `<div class="invempty">${t}</div>`;
+  if (tab === 'runs') return HIST.runs.length ? HIST.runs.map(r => {
+    const tone = r.outcome === 'cleared' ? 'good' : r.outcome === 'knocked out' ? 'bad' : '';
+    return `<div class="lb-item"><div class="lb-top"><b>${runModeName(r.mode)} · ${escHtml(r.reached || 'L' + r.from)}</b><span class="lb-tag ${tone}">${escHtml(r.outcome)}</span>${r.errors ? `<span class="lb-tag err">${r.errors} error${r.errors > 1 ? 's' : ''}</span>` : ''}<time>${when(r.start)}</time></div>
+      <div class="lb-line">${escHtml(r.diff)} · ${fmtSecs(r.secs || 0)} · ${r.kills || 0} KOs · ${r.hits || 0} hits · ${r.isles || 0} isles${r.clears && r.clears.length ? ' · cleared ' + escHtml(r.clears.join(', ')) : ''}${r.cause ? ' · by ' + escHtml(r.cause) : ''}</div>
+      ${r.bosses && r.bosses.length ? `<div class="lb-line">Bosses: ${escHtml(r.bosses.join(', '))}</div>` : ''}<div class="lb-line">${escHtml(buildText(r.build))}</div></div>`;
+  }).join('') : empty('No runs yet. Jump through a portal to start one.');
+  if (tab === 'issues') return HIST.issues.length ? HIST.issues.map(i => `<div class="lb-item"><div class="lb-top"><span class="lb-tag ${i.kind === 'error' ? 'err' : ''}">${escHtml(i.kind)}</span><b>${escHtml(i.where)}</b><time>${when(i.at)}</time></div><div class="lb-line">${escHtml(i.msg)}${i.how ? ` <em>(${escHtml(i.how.join(', '))})</em>` : ''}</div></div>`).join('')
+    : empty('No issues recorded. Errors and bug reports show up here.');
+  return LOG.ev.length ? `<pre class="lb-log">${escHtml(LOG.ev.slice().reverse().map(logLine).join('\n'))}</pre>` : empty('Nothing logged yet this session.');
+}
+function historyText() {
+  const runs = HIST.runs.map(r => `${r.start} ${runModeName(r.mode)} ${r.diff} from L${r.from} -> ${r.reached} · ${r.outcome}${r.cause ? ' by ' + r.cause : ''} · ${fmtSecs(r.secs || 0)} · ${r.kills} KOs · ${r.hits} hits · ${r.isles} isles · errors ${r.errors}${r.bosses && r.bosses.length ? ' · bosses ' + r.bosses.join(', ') : ''} · ${buildText(r.build)} · v${r.v}`);
+  const iss = HIST.issues.map(i => `${i.at} [${i.kind}] ${i.where}: ${i.msg}${i.how ? ' (' + i.how.join(', ') + ')' : ''} · v${i.v}`);
+  const env = envInfo();
+  return `${GAME_MANIFEST.name} logbook · v${GAME_MANIFEST.version} · ${new Date().toISOString()}\n${env.ua} · ${env.view} @${env.dpr}x · ${env.gpu}\n\n=== Runs (newest first) ===\n${runs.join('\n') || '(none)'}\n\n=== Issues ===\n${iss.join('\n') || '(none)'}\n\n=== This session's log ===\n${LOG.ev.map(logLine).join('\n') || '(empty)'}`;
+}
+$('#logCopy').addEventListener('click', () => { copyText(historyText()); $('#logMsg').textContent = 'Copied. Paste it into a message to the developer.'; });
+$('#logDl').addEventListener('click', () => {
+  saveFile(`schiffy-logbook-${stamp(new Date())}.json`, JSON.stringify({ app: GAME_MANIFEST.name, v: GAME_MANIFEST.version, at: new Date().toISOString(), env: envInfo(), settings: settingsInfo(), history: HIST, log: LOG.ev }, null, 1));
+  $('#logMsg').textContent = 'Saved. Send the file to the developer.';
+});
+$('#logClose').addEventListener('click', closeLogbook);
+$('#logView').addEventListener('keydown', e => { if (e.code === 'Tab') e.stopPropagation(); });
+document.addEventListener('click', e => { const t = e.target.closest('[data-ltab]'); if (t && G.state === 'logbook') openLogbook(t.dataset.ltab); });
+CLOSERS.logbook = closeLogbook;
+for (const id of ['#reportBtn', '#hubReport', '#overReport']) $(id).addEventListener('click', openReport);
+for (const id of ['#logbookBtn', '#hubLog']) $(id).addEventListener('click', () => openLogbook('runs'));
+window.addEventListener('keydown', e => { if (e.code === 'F2' && !e.repeat) { e.preventDefault(); openReport(); } });
 // ---------- HUD ----------
 // Bone health icon: outline layer drawn first so overlapping shapes read as one silhouette
 const BONE_SHAPES = '<circle cx="5" cy="4.5" r="3.4"/><circle cx="5" cy="11.5" r="3.4"/><circle cx="23" cy="4.5" r="3.4"/><circle cx="23" cy="11.5" r="3.4"/><rect x="5" y="5" width="18" height="6" rx="2"/>';
@@ -10128,18 +10765,13 @@ $('#swapCancel').addEventListener('click', cancelSwap);
 $('#quitBtn').addEventListener('click', goHome);
 // Pause menu "Stuck?": copies a state report for debugging, then frees the player (clears a stalled fight, drops leftover gates, pulls Schiffy back onto the isle)
 function unstick() {
-  const r = G.room, p = G.player, n = v => Math.round(v * 100) / 100;
-  const report = {
-    v: GAME_MANIFEST.version, at: new Date().toISOString(), state: G.state, level: G.level, sector: G.sector, diff: G.diff,
-    room: r && { type: r.type, event: r.event, cleared: !!r.cleared, sealed: !!r.sealed, started: !!r.started, doors: Object.keys(r.doors || {}), nc: NC, half: HALF, exit: EXIT },
-    barriers: G.barriers.length, waves: G.waves, transit: n(G.transit), idleFightT: G.idleFightT, lastHit: n(G.time - (G.lastHitT || 0)),
-    player: p && { x: n(p.x), y: n(p.y), z: n(p.z), falling: p.falling, hp: p.hp },
-    enemies: G.enemies.map(e => ({ type: e.type, boss: e.boss, x: n(e.x), y: n(e.y), z: n(e.z), hp: n(e.hp), spawnT: n(e.spawnT), lostT: e.lostT, perch: e.perch, mesh: !!e.mesh })),
-    errors: [...loopErrs]
-  };
+  const r = G.room, p = G.player;
+  // state snapshot + recent log (79-log), also kept in the Logbook's issues
+  const report = Object.assign(stateSnapshot(), { log: LOG.ev.slice(-30).map(logLine) });
   const txt = JSON.stringify(report);
-  const copy = () => { const t = document.createElement('textarea'); t.value = txt; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); } catch (e) {} t.remove(); };
-  try { navigator.clipboard.writeText(txt).catch(copy); } catch (e) { copy(); }
+  copyText(txt);
+  logEvent('stuck', `Stuck? pressed: ${G.enemies.length} enemies, sealed ${!!(r && r.sealed)}, waves ${G.waves ? G.waves.n + '/' + G.waves.total : '-'}`);
+  addIssue('stuck', `Stuck? pressed with ${G.enemies.length} enemies left${r && r.sealed ? ', isle sealed' : ''}`, { state: G.state });
   console.log('[stuck report]', txt);
   if (r && !r.hub && G.mode === 'story') {
     for (let k = 0; k < 6 && G.enemies.some(e => !e.boss); k++) for (const e of [...G.enemies]) if (!e.boss) killEnemy(e);   // repeat: splitters spawn babies on death
@@ -10176,7 +10808,7 @@ const loopErrs = new Set();
 function guard(fn, dt, name) {
   try { fn(dt); } catch (err) {
     const k = (name || fn.name || '?') + ': ' + (err && err.message);
-    if (!loopErrs.has(k)) { loopErrs.add(k); console.error('[update] ' + k, err); try { if (window.__rec && window.__rec.events) window.__rec.events.push({ t: G.time, type: 'error', msg: k }); } catch (e) {} }
+    if (!loopErrs.has(k)) { loopErrs.add(k); console.error('[update] ' + k, err); logError('[update] ' + k, err); try { if (window.__rec && window.__rec.events) window.__rec.events.push({ t: G.time, type: 'error', msg: k }); } catch (e) {} }
   }
 }
 // (looked up by name every frame, so debug wrappers such as the playtest recorder's still apply)
@@ -10215,13 +10847,14 @@ function update(dt) {
 }
 function frame(now) {
   requestAnimationFrame(frame);
-  const rdt = Math.min(0.033, (now - last) / 1000); let dt = rdt; last = now;
+  const rawMs = now - last, rdt = Math.min(0.033, rawMs / 1000); let dt = rdt; last = now;
   G.time += dt;
+  logFrame(rawMs);
   if (G.state === 'play') { dt *= timeWarp(rdt); update(dt); }   // hitstop / boss-kill slow-mo (68-juice)
   else if (G.state === 'intro') updateBossIntro(dt);
   else if (G.state === 'scope') updateScope(dt);       // looking through the lookout telescope   // the world is frozen while a boss makes its entrance
   else if (G.state === 'over') { updateEnemies(dt * 0.3); updateEBullets(dt * 0.3); }
-  if (!['pause', 'map', 'inv', 'card', 'swap', 'feed', 'collect', 'levelDone'].includes(G.state)) { updateParticles(dt); updateSprites(dt); updatePopTexts(dt); updateWorld(dt); }
+  if (!['pause', 'map', 'inv', 'card', 'swap', 'feed', 'collect', 'levelDone', 'report', 'logbook'].includes(G.state)) { updateParticles(dt); updateSprites(dt); updatePopTexts(dt); updateWorld(dt); }
   if (G.player) updateCamera(dt, rdt);
   renderer.render(scene, camera);
   pressedSet.clear();
