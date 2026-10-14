@@ -1715,14 +1715,17 @@ function placeStall(o, room) {
   const xs = [], zs = [];
   for (const lx of [-STALL_BOX.x, STALL_BOX.x]) for (const lz of [STALL_BOX.zb, STALL_BOX.zf]) { xs.push(wx(lx, lz)); zs.push(wz(lx, lz)); }
   const x0 = Math.min(...xs), x1 = Math.max(...xs), z0 = Math.min(...zs), z1 = Math.max(...zs);
-  let front = 0;
+  let front = 0, half = 0;   // front: how far the blocked cells reach toward the aisle; half: how far they reach to each end (stall space)
   for (let j = 0; j < NC; j++) for (let i = 0; i < NC; i++) {
     const cx = cellX(i), cz = cellX(j), h = CELL / 2;
     if (Math.min(x1, cx + h) - Math.max(x0, cx - h) < 0.1 || Math.min(z1, cz + h) - Math.max(z0, cz - h) < 0.1) continue;
     o[j][i] = 'stall';
-    for (const [ox, oz] of [[-h, -h], [h, -h], [-h, h], [h, h]]) front = Math.max(front, (cx + ox - px) * fx + (cz + oz - pz) * fz);
+    for (const [ox, oz] of [[-h, -h], [h, -h], [-h, h], [h, h]]) {
+      front = Math.max(front, (cx + ox - px) * fx + (cz + oz - pz) * fz);
+      half = Math.max(half, Math.abs((cx + ox - px) * c - (cz + oz - pz) * s));
+    }
   }
-  room.stall = { side, x: px, z: pz, rot, fx, fz, front };
+  room.stall = { side, x: px, z: pz, rot, fx, fz, front, half };
 }
 // ---- reachability ----
 // Cells you can walk to from the middle of the isle (anything placed in a cell blocks it, except a chest you can open).
@@ -2974,6 +2977,11 @@ function stallSpot(pd, st, i) {
   pd.slot = { y: ly, i };
   const sz = st.front + 0.75;                  // you stand in the aisle just in front of the blocked cells, at the item's x
   pd.sx = st.x + lx * c + sz * s; pd.sz = st.z - lx * s + sz * c; pd.sr = 1.35;
+  // the crate and barrel goods sit on the stall's ends: they can also be bought standing beside that end, level with the item
+  if (i === 4 || i === 5) {
+    const ex = Math.sign(lx) * ((st.half || 4.8) + 0.75);
+    pd.alt = [[st.x + ex * c + lz * s, st.z - ex * s + lz * c]];
+  }
 }
 function makeStall(th, room) {
   const st = room.stall, g = new THREE.Group(), L = new THREE.Group();   // L: stall space (origin on the wall axis, +z = the counter side)
@@ -3600,7 +3608,7 @@ function updatePlayer(dt) {
     if (h) { const dx = h.x - p.x, dz = h.z - p.z, l = Math.hypot(dx, dz); if (l > 0.2) { p.aimX = dx / l; p.aimZ = dz / l; } }
     firing = mouse.down;
   } else if (ml > 0.1) { p.aimX = mx / Math.hypot(mx, mz); p.aimZ = mz / Math.hypot(mx, mz); }
-  if (inHub) firing = false;
+  if (inHub && !G.weapon) firing = false;   // the hub weapon range (78-range) hands you a test weapon
 
   p.coyote = p.onGround ? 0.1 : p.coyote - dt;
   p.jumpBuf = jumpP ? 0.12 : p.jumpBuf - dt;
@@ -3673,6 +3681,7 @@ function updatePlayer(dt) {
   if (!inHub && p.onGround && p.y < 0.05 && p.dashT <= 0 && gapAt(p.x, p.z)) startFall(p);
   else if (p.onGround && p.y < 0.05 && !inHub) p.safe = [p.x, p.z];
 
+  if (inHub && G.weapon) weaponTick(p, firing, dt);
   if (!inHub) {
     weaponTick(p, firing, dt);
     if (pressed('KeyQ')) useAbility(p);
@@ -3702,7 +3711,7 @@ function updatePlayer(dt) {
   gunKick(p, dt);   // recoil spring + muzzle flash (68-juice)
   p.body.rotation.x = p.dashT > 0 ? 0.35 : lerp(p.body.rotation.x, clamp(speedNow * 0.02, 0, 0.12), 0.2);
   p.mesh.visible = p.inv > 0 && p.dashT <= 0 ? Math.floor(G.time * 18) % 2 === 0 : true;
-  p.gun.visible = !inHub; if (inHub && muzzleSpr) muzzleSpr.visible = false;
+  p.gun.visible = !inHub || !!G.weapon; if (inHub && !G.weapon && muzzleSpr) muzzleSpr.visible = false;
   const gy = groundAt(p.x, p.z, p.r, p.y);
   p.blob.position.set(p.x, gy + 0.03, p.z); p.blob.scale.setScalar(clamp(1 - (p.y - gy) * 0.25, 0.45, 1));
   // halo + bubble
@@ -3833,8 +3842,10 @@ function weaponTick(p, firing, dt) {
   const s = wStats();
   p.fireCd -= dt;
   if (s.kind === 'charge') {
-    if (firing) { p.charge = Math.min(1, p.charge + dt * s.rate * 0.95); showChargeOrb(p, p.charge); }
-    else if (p.charge > 0.06) { fireCharge(p, s, p.charge); p.charge = 0; showChargeOrb(p, 0); }
+    // after a release the cannon recovers briefly before it can charge again: without it, spam-clicking tiny charges out-damaged
+    // holding for a full charge (see fireCharge's damage curve, which has no flat part for the same reason)
+    if (firing && p.fireCd <= 0) { p.charge = Math.min(1, p.charge + dt * s.rate * 0.95); showChargeOrb(p, p.charge); }
+    else if (!firing && p.charge > 0.06) { fireCharge(p, s, p.charge); p.charge = 0; p.fireCd = CHARGE_RECOVER / s.rate; showChargeOrb(p, 0); }
     return;
   }
   if (s.kind === 'beam') { updateBeam(p, s, firing, dt); return; }
@@ -3880,9 +3891,13 @@ function attack(p, s, flip) {
   onFire(p, s.id);   // shake, gun kick, muzzle flash, heavy-weapon shove (68-juice)
   if (G.st.twin && !flip && p.attackN % 3 === 0) attack(p, s, true);
 }
+// Damage per second only ever rises the longer you hold: a tap is ~0.4x, a full charge 4x, and every release is followed by
+// CHARGE_RECOVER s (divided by the fire-rate multiplier) before the next charge starts. Measured on a hub dummy at Lv 5
+// (dmg/s): spam-clicking 1.5, quarter charges 2.4, half 2.7, full 4.1; at Lv 12 with +3 Tempo: 3.7 / 5.1 / 5.4 / 8.3.
+const CHARGE_RECOVER = 0.3;
 function fireCharge(p, s, c) {
-  const m = muzzleAim(p), n = 1 + s.multi, k = Math.pow(c, 1.2);
-  for (let i = 0; i < n; i++) spawnProj('slug', m.x, m.y, m.z, m.a + (i - (n - 1) / 2) * 0.16, s, { dmgMul: 0.7 + 3.3 * k, sizeMul: 0.6 + 0.9 * c, extraPierce: Math.round(c * 3) });
+  const m = muzzleAim(p), n = 1 + s.multi, k = Math.pow(c, 1.25);
+  for (let i = 0; i < n; i++) spawnProj('slug', m.x, m.y, m.z, m.a + (i - (n - 1) / 2) * 0.16, s, { dmgMul: 0.3 + 3.7 * k, sizeMul: 0.6 + 0.9 * c, extraPierce: Math.round(c * 3) });
   sfx(c > 0.9 ? 'boom' : 'shoot'); if (c > 0.45 && c <= 0.9) sfx('thump');
   onFire(p, 'charge', c);
   if (p.dashT <= 0) { p.vx -= p.aimX * 6 * c; p.vz -= p.aimZ * 6 * c; }
@@ -4180,7 +4195,9 @@ function popBurst(x, y, z, dmg) {
   emit(x, y, z, 12, 0xff7a4d, { speed: 6, size: 0.45, life: 0.35 }); emit(x, y, z, 10, 0xffd36b, { speed: 5, size: 0.4, life: 0.3, grav: 0, glow: true, color2: 0xff7a4d });
   for (const e of [...G.enemies]) if (e.spawnT <= 0 && Math.hypot(e.x - x, e.z - z) < r + e.r) hitEnemy(e, dmg * 0.5 * G.st.explode, null, { noCrit: true });
 }
-function edgeHit(x, z) { return !(Math.abs(x) <= HALF + 0.2 && Math.abs(z) <= HALF + 0.2) && !onBridge(x, z, 0); }
+function edgeHit(x, z) {
+  if (G.room && G.room.hub) return !(Math.abs(x) <= HUB_X + 0.6 && Math.abs(z) <= HUB_Z + 0.6);   // the hub lawn is wider than an isle
+  return !(Math.abs(x) <= HALF + 0.2 && Math.abs(z) <= HALF + 0.2) && !onBridge(x, z, 0); }
 const wallAt = (x, z, y) => blockedAt(x, z, 0.05, y) || ((Math.abs(x) > HALF + 0.2 || Math.abs(z) > HALF + 0.2) && edgeHit(x, z));
 function steer(b, t, rate, dt) {
   const sp = Math.hypot(b.vx, b.vz), cur = Math.atan2(b.vz, b.vx), want = Math.atan2(t.z - b.z, t.x - b.x);
@@ -5329,6 +5346,7 @@ function hitEnemy(e, dmg, s, o = {}) {
 }
 function damageEnemy(e, dmg, o = {}) {
   if (e.dead) return;
+  if (e.dummy) { dummyHit(e, dmg, o); return; }   // hub practice dummy (78-range): numbers and a wobble, never hurt
   if (e.shieldHits > 0 && !o.dot) {
     e.shieldHits--; e.flash = 0.06; emit(e.x, e.y + e.h * 0.6, e.z, 10, ELITE_INFO[e.elite].color, { speed: 4.5, size: 0.3, life: 0.3, grav: 0, glow: true, color2: 0xffffff }); sfx('shield');
     if (e.shieldHits <= 0) { if (e.bubbleMesh) e.bubbleMesh.visible = false; e.regenT = e.elite === 'bubbled' ? 5 : 0; popText('Popped!', e.x, e.y + e.h + 0.6, e.z, '#8fd3ff'); }
@@ -7173,8 +7191,10 @@ function updateInteract(dt) {
   for (const pd of G.room.pedestals) {
     if (pd.hold) { if (pd.mesh && pd.spin) pd.icon.rotation.y += dt * 6; continue; }   // still flying out of a vault chest (73-vault)
     if (pd.mesh) { pd.icon.position.y = (pd.baseY || 1.7) + Math.sin(G.time * 2.5 + pd.x) * (pd.slot ? 0.06 : 0.12); if (pd.spin) pd.icon.rotation.y += dt * 1.6; pd.ring.position.y = pd.icon.position.y; pd.ring.rotation.y += dt * 2; pd.ring.rotation.x = Math.sin(G.time) * 0.4; }
-    // stall goods are bought from the aisle in front of the counter (the stand point); the nearest one wins
-    const d = Math.hypot(p.x - (pd.sx ?? pd.x), p.z - (pd.sz ?? pd.z));
+    // stall goods are bought from the aisle in front of the counter (the stand point), the end goods also from beside the stall
+    // (pd.alt); the nearest one wins
+    let d = Math.hypot(p.x - (pd.sx ?? pd.x), p.z - (pd.sz ?? pd.z));
+    if (pd.alt) for (const [ax, az] of pd.alt) d = Math.min(d, Math.hypot(p.x - ax, p.z - az));
     if (d < (pd.sr || 1.6) && d < nearD) { near = pd; nearD = d; }
   }
   tickStall(dt);
@@ -9220,6 +9240,7 @@ function buildHub() {
         : { icon: PROMPT_ICONS.gate, verb: `${name} · locked`, title: name, desc: 'Clear Level 1 to open this portal.', action: 'Locked' },
       use: () => { if (!modesOpen) { sfx('deny'); return; } startStory(1, run); } });
   });
+  buildWeaponRange();   // every weapon on a ring round the plaza + practice dummies (78-range)
   // difficulty shrine: step on a pad to choose
   for (const [id, x] of [['normal', -15.5], ['hard', -12]]) {
     const d = DIFFICULTY[id], g = new THREE.Group(), hue = new THREE.Color(id === 'hard' ? 0xff5a6e : 0x5fe8d8);
@@ -9629,6 +9650,105 @@ function rushComplete() {
   $('#continueBtn').hidden = true; $('#continueBtn').innerHTML = '';
   $('#doneNote').textContent = best && best.time ? `Best time on ${DIFF().name}: ${fmtTime(best.time)}.` : '';
   $('#levelDone').hidden = false; $('#hud').hidden = true;
+}
+// ---------- hub weapon range: try every weapon on practice dummies ----------
+// All weapons float in a ring round the plaza (E to try one, E again to put it away). Practice dummies stand on the south
+// lawns: they wobble, pop damage numbers and show a running damage-per-second plaque, and never die or fight back.
+// A weapon picked here is for testing only: the hub drops it on every rebuild and runs start with the Zap Blaster as always.
+// Hooks: buildHub calls buildWeaponRange; update() runs bullets/fx/decals + updateRange in the hub while a weapon is held;
+// damageEnemy hands dummies to dummyHit; updatePlayer lets you fire in the hub while G.weapon is set.
+const RANGE_LEVEL = 5;                       // test weapons come at a mid-run level so they feel representative
+const RANGE_RING = { x: 0, z: 2, r: 5.6 };   // centred on the plaza
+const DUMMY_SPOTS = [[-14, 7.5], [-11.2, 9.4], [11.4, 6.6], [14.8, 7.2]];   // south lawns, clear of the hall door and the lookout pad
+function buildWeaponRange() {
+  G.rangeDummies = [];
+  const th = theme();
+  // weapon carousel: one slot per weapon, the circle turned so no slot lands on Schiffy's arrival spot or the portal path
+  WEAPON_KEYS.forEach((id, i) => {
+    const a = (i + 0.5) / WEAPON_KEYS.length * Math.PI * 2 + Math.PI / 2, x = RANGE_RING.x + Math.cos(a) * RANGE_RING.r, z = RANGE_RING.z + Math.sin(a) * RANGE_RING.r;
+    const d = WEAPONS[id], col = new THREE.Color(d.color).getHex(), g = new THREE.Group();
+    const pad = mesh(new THREE.CylinderGeometry(0.62, 0.7, 0.12, 20), toon(mixColor(th.stone, 0xffffff, 0.25)), 0, 0.06, 0); g.add(outline(pad, 1.05));
+    const ring = mesh(new THREE.TorusGeometry(0.58, 0.05, 6, 28), basic(col)); ring.rotation.x = Math.PI / 2; ring.position.y = 0.14; g.add(ring);
+    const halo = haloSprite(col, 1.6, 0); halo.position.y = 0.4; g.add(halo);
+    const holder = new THREE.Group(); holder.position.y = 1.15; g.add(holder);
+    const model = makeProp('W_' + id);
+    if (model) { model.scale.setScalar(1.25); model.position.x = 0.15; holder.add(model); }
+    else holder.add(outline(mesh(new THREE.BoxGeometry(0.7, 0.26, 0.26), toon(col)), 1.08));   // lite build stand-in
+    g.position.set(x, 0, z); shadows(g); scene.add(g);
+    let glow = 0;
+    addInteractable({ x, z, r: 1.25, mesh: g,
+      prompt: () => {
+        const on = G.weapon && G.weapon.id === id;
+        return { icon: `<img alt="" src="${itemIconUrl('w:' + id)}">`, verb: on ? 'Weapon range · equipped' : 'Weapon range', title: d.name, desc: d.desc + ' Try it on the practice dummies by the lawns.', action: on ? 'Put away' : 'Try it' };
+      },
+      use: () => {
+        if (G.weapon && G.weapon.id === id) { G.weapon = null; sfx('door'); toast('Weapon put away', 'Pick any weapon on the plaza ring to try it.'); }
+        else { G.weapon = newWeapon(id); G.weapon.level = RANGE_LEVEL; G.player.fireCd = 0; G.player.charge = 0; setGunLook(); sfx('item'); FX.twinkle(x, 1.2, z, col, 10); toast(`Testing: ${d.name}`, `Lv ${RANGE_LEVEL} trial. Shoot the dummies! Runs still start with the Zap Blaster.`, d.color); }
+        hideBeams(); computeStats();
+      },
+      tick: (dt) => {
+        const on = G.weapon && G.weapon.id === id;
+        holder.rotation.y += dt * (on ? 2.6 : 0.9); holder.position.y = 1.15 + Math.sin(G.time * 2 + i) * 0.1;
+        glow += ((on ? 1 : 0.15) - glow) * Math.min(1, dt * 6); halo.material.opacity = glow * 0.6; ring.scale.setScalar(1 + glow * 0.15);
+      } });
+  });
+  const tag = textSprite('Weapon range: walk up and press E', '#ffd34d', 0.42); tag.position.set(RANGE_RING.x, 3.4, RANGE_RING.z - RANGE_RING.r - 0.6); G.roomGroup.add(tag);
+  for (const [x, z] of DUMMY_SPOTS) makeDummy(x, z);
+  // signs sit between and above each pair, clear of the DPS plaques
+  const lt = textSprite('Practice dummies', '#fff4dc', 0.42); lt.position.set(-12.6, 5.1, 7.6); G.roomGroup.add(lt);
+  const rt = textSprite('Practice dummies', '#fff4dc', 0.42); rt.position.set(13.1, 5.1, 6.0); G.roomGroup.add(rt);
+}
+// a straw practice dummy on a post with a painted target: an entry in G.enemies (so every weapon, homing shot and blast finds it)
+// that damageEnemy routes to dummyHit instead of hurting
+function makeDummy(x, z) {
+  const g = new THREE.Group(), tilt = new THREE.Group(); g.add(tilt);
+  const mats = [toonU(0xd9b36a), toonU(0x8a5a3a), toonU(0xff5d6e), toonU(0xfff4dc)];
+  tilt.add(outline(mesh(new THREE.CylinderGeometry(0.09, 0.11, 1.0, 8), mats[1], 0, 0.5, 0), 1.12));
+  const body = outline(mesh(new THREE.CylinderGeometry(0.42, 0.48, 0.95, 14), mats[0], 0, 1.3, 0), 1.06); tilt.add(body);
+  tilt.add(outline(mesh(new THREE.SphereGeometry(0.34, 14, 10), mats[0], 0, 2.05, 0), 1.06));
+  tilt.add(outline(mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.3, 8), mats[1], 0, 1.55, 0).rotateZ(Math.PI / 2), 1.1));   // arms
+  for (const [r, m, dz] of [[0.32, mats[2], 0.46], [0.21, mats[3], 0.475], [0.1, mats[2], 0.49]]) { const t = mesh(new THREE.CylinderGeometry(r, r, 0.02, 20), m, 0, 1.35, dz); t.rotation.x = Math.PI / 2; tilt.add(t); }
+  // damage-per-second plaque: a small canvas redrawn a few times a second
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 96; const tex = new THREE.CanvasTexture(cv); tex.minFilter = THREE.LinearFilter;
+  // the plaque floats above where the damage numbers fade out (they top out around 3.3)
+  const plaque = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false })); plaque.scale.set(2.2, 0.82, 1); plaque.position.y = 4.05; plaque.renderOrder = 9; g.add(plaque);
+  g.position.set(x, 0, z); shadows(g); scene.add(g);
+  // a thin, low collider: it keeps Schiffy out, but shots (flying at ~0.85 up) and critters reach the dummy's own hit radius first
+  G.room.colliders.push({ x, z, r: 0.3, h: 0.6 });
+  const e = { isEnemy: true, dummy: true, type: 'dummy', x, z, y: 0, r: 0.55, h: 2.2, hp: 1e9, maxHp: 1e9, spawnT: 0, dead: false, mesh: g, mats, flash: 0, vx: 0, vz: 0,
+    tilt, cv, tex, log: [], wob: 0, wobV: 0, wobA: 0, plaqueT: 0, shown: -1, base: [0xd9b36a] };
+  drawDummyPlaque(e, 0); G.enemies.push(e); G.rangeDummies.push(e);
+  return e;
+}
+function dummyHit(e, dmg, o = {}) {
+  e.flash = 0.09; e.log.push([G.time, dmg]);
+  if (o.kx !== undefined) { const l = Math.hypot(o.kx, o.kz) || 1; e.wobA = Math.atan2(o.kx / l, o.kz / l); }
+  e.wobV += clamp(0.6 + dmg * 0.15, 0.6, 3);
+  const big = dmg >= 10 ? Math.round(dmg) : Math.round(dmg * 10) / 10;
+  // numbers pop round the body (popText rises ~1.3 over its life) so they fade out below the DPS plaque instead of covering it
+  popText((o.crit ? 'CRIT ' : '') + big, e.x + rand(-0.55, 0.55), e.y + 1.5 + rand(0, 0.25), e.z, o.crit ? '#4fd17a' : '#fff4dc');
+  if (!o.dot) { FX.sparks(e.x, e.y + 1.3, e.z, o.crit ? 0x4fd17a : 0xfff4dc, o.crit ? 8 : 4, 4); sfx('hit'); }
+}
+function drawDummyPlaque(e, dps) {
+  const x = e.cv.getContext('2d'), w = e.cv.width, h = e.cv.height;
+  x.clearRect(0, 0, w, h); x.fillStyle = 'rgba(38,49,92,.88)'; x.beginPath(); x.roundRect ? x.roundRect(6, 6, w - 12, h - 12, 22) : x.rect(6, 6, w - 12, h - 12); x.fill();
+  x.fillStyle = '#ffd34d'; x.font = `400 26px ${LABEL_FONT}`; x.textAlign = 'center'; x.fillText('DPS', w / 2, 38);
+  x.fillStyle = '#fff4dc'; x.font = `400 40px ${LABEL_FONT}`; x.fillText(dps ? dps.toFixed(dps < 10 ? 1 : 0) : '-', w / 2, 80);
+  e.tex.needsUpdate = true;
+}
+// hub tick: dummies wobble back upright, flash on hits and keep their DPS plaques (damage over the last 3 s) current
+function updateRange(dt) {
+  for (const e of G.rangeDummies || []) {
+    e.wobV += (-e.wob * 40 - e.wobV * 5) * dt; e.wob += e.wobV * dt;
+    const k = clamp(e.wob, -0.6, 0.6) * 0.5; e.tilt.rotation.set(Math.cos(e.wobA) * k, 0, -Math.sin(e.wobA) * k);
+    e.flash -= dt; for (const m of e.mats) m.emissive && m.emissive.setScalar(e.flash > 0 ? 0.6 : 0);
+    e.plaqueT -= dt;
+    if (e.plaqueT <= 0) {
+      e.plaqueT = 0.25; const now = G.time; while (e.log.length && e.log[0][0] < now - 3) e.log.shift();
+      const sum = e.log.reduce((a, l) => a + l[1], 0), span = e.log.length ? Math.max(1, now - e.log[0][0]) : 1, dps = e.log.length ? sum / span : 0;
+      const shown = Math.round(dps * 10); if (shown !== e.shown) { e.shown = shown; drawDummyPlaque(e, dps); }
+    }
+  }
 }
 // ---------- HUD ----------
 // Bone health icon: outline layer drawn first so overlapping shapes read as one silhouette
@@ -10078,7 +10198,12 @@ function update(dt) {
       }
     }
     for (const b of G.barriers) b.wall.material.opacity = 0.35 + 0.15 * Math.sin(G.time * 6 + b.gate.position.x);
-  } else updateHub(dt);
+  } else {
+    updateHub(dt);
+    // hub weapon range (78-range): shots, blasts and scorch marks only run while you hold a test weapon
+    guard(updateRange, dt);
+    if (G.weapon || G.bullets.length) { guard(updateBullets, dt); guard(updateFx, dt); guard(updateDecals, dt); }
+  }
   guard(updateInteract, dt); guard(updateEvents, dt);
   if (G.state === 'play' && G.mode === 'story') {
     guard(checkRoomClear, dt); guard(checkTransition, dt); guard(updateWaveHud, dt);
