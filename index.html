@@ -401,6 +401,9 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 .cslot span { font-weight: 800; font-size: 12px; color: var(--navy-soft); }
 .cslot em { font-style: normal; font-weight: 700; font-size: 12px; color: var(--navy-soft); }
 .cslot.locked { background: var(--cream-2); border-style: dashed; opacity: .75; }
+.cslot .pbonus { font-style: normal; font-weight: 800; font-size: 12px; color: #c2417a; background: #ffe3ee; border-radius: 10px; padding: 3px 8px; }
+.cslot .pbonus small { display: block; font-weight: 700; font-size: 11px; color: var(--navy-soft); }
+.cslot.locked .pbonus { color: var(--navy-soft); background: transparent; }
 .tips { margin: 0; font-weight: 700; font-size: 14px; line-height: 1.45; color: var(--navy-soft); }
 #howView .controls { font-size: 14px; }
 @media (max-width: 640px) { .winfo { width: 130px; } #hubLogo { top: 18vh; } }
@@ -483,6 +486,27 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 .lb-log { margin: 0; font: 600 12px/1.5 ui-monospace, Consolas, monospace; color: var(--navy); background: #fff; border: 3px solid var(--navy); border-radius: 14px; padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 640px) { .rp-body, .rp-actions { grid-template-columns: 1fr; } .lb-top time { margin-left: 0; } }/* the pause and game-over menus grew taller than short windows: scroll from the top instead of clipping both ends */
 #pause, #over { align-items: safe center; }
+/* run play-time clock (top right, under the sector name) */
+.pill.runtimer { font-size: 15px; padding: 2px 12px 2px 7px; gap: 6px; box-shadow: 0 3px 0 var(--navy); }
+.pill.runtimer svg { width: 18px; height: 18px; fill: none; stroke: var(--navy); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+/* MAX tags on maxed weapon upgrades / gadgets */
+.invitem em.lv.max, .itemlist em.lv.max { background: #ffc93c; color: var(--navy); }
+/* personal records board (77-modes: Endless / Boss Rush, run-end screens and the Trophy Hall) */
+.records:empty { display: none; }
+.recpb { margin: 0 0 6px; font: 400 22px var(--display); color: #c2417a; text-align: center; animation: upPop .7s ease-out 2; }
+.recrank { margin: 0 0 6px; font-weight: 800; color: var(--navy-soft); text-align: center; }
+.recboard { background: #fff; border: 3px solid var(--navy); border-radius: 14px; padding: 8px 10px; overflow-x: auto; }
+.recboard h4 { margin: 0 0 4px; font: 400 16px var(--display); color: var(--navy); }
+.recboard table { width: 100%; border-collapse: collapse; font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums; }
+.recboard th { text-align: left; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--navy-soft); padding: 2px 6px; border-bottom: 2px solid var(--navy); }
+.recboard td { padding: 3px 6px; border-bottom: 1px solid var(--cream-2); white-space: nowrap; }
+.recboard tr.me td { background: #fff1b8; }
+.recboard tr.me td:first-child { box-shadow: inset 4px 0 0 #ffc93c; }
+.recempty { margin: 0; font-weight: 700; font-size: 13px; color: var(--navy-soft); }
+.recgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; max-height: 60vh; overflow: auto; padding: 2px; }
+.recnote { margin: 0; font-weight: 700; font-size: 12px; color: var(--navy-soft); }
+#overRecords .recboard, #doneRecords .recboard { max-height: 30vh; overflow: auto; }
+@media (prefers-reduced-motion: reduce) { .recpb { animation: none; } }
 </style>
 
 <div id="app">
@@ -515,6 +539,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
     </div>
     <div class="corner tr">
       <div id="sector">Sector 1</div>
+      <div id="runTimer" class="pill runtimer" title="Play time (stops while paused)"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8.5"/><path d="M12 8.5V13l3 2M9.5 2.5h5"/></svg><b>0:00</b></div>
       <canvas id="minimap" width="300" height="208" title="Open map (M)"></canvas>
       <div class="row"><button id="invBtn" class="smallbtn" type="button">Upgrades · Tab</button><button id="mapBtn" class="smallbtn" type="button">Map · M</button><button id="pauseBtn" class="smallbtn" type="button">Pause</button></div>
     </div>
@@ -661,6 +686,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
       <div class="statgrid" id="doneStats"></div>
       <p class="donepet" id="donePet"></p>
       <p class="donenote" id="doneNote"></p>
+      <div class="records" id="doneRecords"></div>
       <div class="row">
         <button class="bigbtn primary" id="continueBtn" type="button">Continue</button>
         <button class="bigbtn" id="homeBtn" type="button">Return home <small>Ends the run</small></button>
@@ -692,7 +718,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
         <dt><kbd>Wheel</kbd></dt><dd>Zoom the camera in or out</dd>
         <dt><kbd>Esc</kbd></dt><dd>Pause</dd>
       </dl>
-      <p class="tips">Defeating enemies levels up your weapon; each level lets you pick an upgrade. Picking up a different weapon feeds your current one into it: it keeps 70% of the levels and its upgrades, re-imagined for the new weapon. A weapon holds 4 upgrade types and Schiffy 8 passives: doubling up levels one up, and taking something new when full replaces one (the new one starts at Lv 1). Eggs hatch into pets as you clear isles; finish a level with one to add it to your collection.</p>
+      <p class="tips">Defeating enemies levels up your weapon; each level lets you pick an upgrade. Picking up a different weapon feeds your current one into it: it keeps 70% of the levels and its upgrades, re-imagined for the new weapon. A weapon holds 4 upgrade types (each up to Lv 6) and Schiffy 8 passives (each up to Lv 5), and weapons top out at Lv 30: doubling up levels one up, and taking something new when full replaces one (the new one starts at Lv 1). Eggs hatch into pets as you clear isles; finish a level with one to add it to your collection.</p>
     </div>
   </div>
 
@@ -700,6 +726,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
     <div class="menu">
       <h2 class="logo" style="font-size:clamp(44px,8vw,72px)"><span class="a">Knocked</span><span class="b">Out!</span></h2>
       <div class="card"><div class="statgrid" id="overStats"></div><p id="overPet" class="tips"></p></div>
+      <div class="card records" id="overRecords" hidden></div>
       <div class="card"><h3>Your build</h3><div class="itemlist" id="overItems"></div></div>
       <button class="bigbtn primary" id="againBtn" type="button">Try again <small>Same level, new sky</small></button>
       <button class="bigbtn" id="titleBtn" type="button">Go home <small>Back to the hub</small></button>
@@ -1028,7 +1055,8 @@ const goodsInfo = k => {
 };
 
 // ---------- pets ----------
-// Collectibles only: they follow you, hatch and grow as you clear isles, and never fight or buff.
+// They follow you, hatch and grow as you clear isles, and never fight. Once collected (a level finished with the pet),
+// each species gives one small permanent bonus to every run: PET_BONUS below, applied by petStats (65-pets).
 const PETS = {
   puffpup:   { name: 'Puffpup', biome: 'meadow', body: 0xf2f4ff, accent: 0x9ab8ff, egg: 0xdfe6ff, spots: 0x9ab8ff, blurb: 'A cloud that decided to be a puppy.' },
   sproutle:  { name: 'Sproutle', biome: 'meadow', body: 0x9be07a, accent: 0xff8fb1, egg: 0xc9f0a8, spots: 0x6fbf5a, blurb: 'Hops when it is happy. Always happy.' },
@@ -1039,6 +1067,20 @@ const PETS = {
   pengling:  { name: 'Pengling', biome: 'peaks', body: 0x3a4580, accent: 0xffb23d, egg: 0xdfe8ff, spots: 0x9fb4e8, blurb: 'A penguin chick who thinks you are its parent.' },
   frostbun:  { name: 'Frostbun', biome: 'peaks', body: 0xf4f8ff, accent: 0xff9fb8, egg: 0xf2f4ff, spots: 0xc9d6ff, blurb: 'Leaves tiny pawprints in the snow. And on your pillow.' },
   glimmer:   { name: 'Glimmer', biome: 'peaks', body: 0xbfefff, accent: 0xd0a8ff, egg: 0xd6f4ff, spots: 0x8fd3f0, blurb: 'A crumb of aurora that followed you home.' },
+};
+// one minor run bonus per collected species. v = value once collected, grown = value once raised to Grown (best stage 3).
+// kinds: dash (dash distance x), speed (run speed x), shield (bubbles each isle), xp (weapon XP x), key / bomb (at run start),
+// gold (gold pickups x), dashcd (dash recharge time x(1-v)), bones (max bones)
+const PET_BONUS = {
+  puffpup:   { kind: 'dash',   v: 0.15, grown: 0.20, hint: 'a dash perk' },
+  sproutle:  { kind: 'speed',  v: 0.05, grown: 0.07, hint: 'a speed perk' },
+  pebbit:    { kind: 'shield', v: 1, hint: 'a defence perk' },
+  bubblefin: { kind: 'xp',     v: 0.10, grown: 0.15, hint: 'a weapon perk' },
+  corally:   { kind: 'key',    v: 1, hint: 'a head start' },
+  sunchick:  { kind: 'gold',   v: 0.10, grown: 0.15, hint: 'a gold perk' },
+  pengling:  { kind: 'bomb',   v: 1, hint: 'a head start' },
+  frostbun:  { kind: 'dashcd', v: 0.10, grown: 0.15, hint: 'a dash perk' },
+  glimmer:   { kind: 'bones',  v: 1, hint: 'a health perk' },
 };
 const PET_STAGES = ['Egg', 'Hatchling', 'Pup', 'Grown'];
 const PET_GROW = [3, 3, 4]; // isles cleared to reach the next stage
@@ -1602,8 +1644,30 @@ const effLevel = () => G.level + STORY_LEVELS * (G.loop || 0);
 // sector 1 is unchanged; the end of Level 1 is 1.8x (was 1.4x), Level 3 sector 5 is 5.4x (was 3.9x). Bosses add BOSS_HP_MUL (55-bosses).
 const HP_SECTOR = 0.2, HP_LEVEL = 1.0, BOSS_HP_MUL = 1.5;
 const toughness = () => (1 + HP_SECTOR * (G.sector - 1)) * (1 + HP_LEVEL * (effLevel() - 1)) * DIFF().hp * (G.st ? G.st.enemyHp : 1);
-const shotMul = () => (1 + 0.04 * (G.sector - 1) + 0.1 * (effLevel() - 1)) * DIFF().shot * (G.st ? G.st.eShot : 1);
-const eliteChance = () => Math.min(0.55, (0.06 + 0.03 * (G.sector - 1) + 0.07 * (effLevel() - 1)) * DIFF().elite * (G.st ? G.st.eliteMul : 1));
+// ---------- Endless pressure ----------
+// Enemy HP alone kept rising (toughness), but everything else capped out, so a strong build could loop forever. These knobs
+// only apply in Endless once the sky has looped (G.run === 'endless' && G.loop > 0; L = G.loop, so Depth 4-6 is L 1, Depth 7-9
+// is L 2 ...). Story Levels 1-3, Endless loop 0 and Boss Rush are untouched. All per-loop knobs stack linearly unless noted.
+const ENDLESS = {
+  waveAdd: 1,          // +1 enemy per wave per loop (added after CROWD_K)
+  waveCapAdd: 2,       // the wave cap (WAVE_CAP 12 in 70-rooms) rises +2 per loop ...
+  waveCapMax: 18,      // ... up to 18
+  shotSpeed: 0.08,     // enemy shot speed +8% per loop (on top of shotMul's level scaling)
+  eliteCapAdd: 0.1,    // the elite chance cap (0.55) rises +0.1 per loop ...
+  eliteCapMax: 0.8,    // ... up to 0.8
+  cdMul: 0.93,         // enemy and boss attack cooldowns x0.93 per loop (compounding) ...
+  cdMin: 0.6,          // ... never below 0.6x
+  dblFrom: 2,          // from loop 2 (Depth 7+) a hit can cost 2 bones:
+  dblChance: 0.2,      // 20% at loop 2 ...
+  dblAdd: 0.15,        // ... +15% per further loop ...
+  dblMax: 0.75,        // ... up to 75%. Shield pops and falls are never doubled.
+};
+const endlessL = () => G.run === 'endless' && G.mode === 'story' ? Math.max(0, G.loop || 0) : 0;
+const endlessWaveCap = base => Math.min(Math.max(base, ENDLESS.waveCapMax), base + ENDLESS.waveCapAdd * endlessL());
+const endlessCdMul = () => { const L = endlessL(); return L ? Math.max(ENDLESS.cdMin, Math.pow(ENDLESS.cdMul, L)) : 1; };
+const endlessDoubleHit = () => { const L = endlessL(); return L >= ENDLESS.dblFrom ? Math.min(ENDLESS.dblMax, ENDLESS.dblChance + ENDLESS.dblAdd * (L - ENDLESS.dblFrom)) : 0; };
+const shotMul = () => (1 + 0.04 * (G.sector - 1) + 0.1 * (effLevel() - 1)) * DIFF().shot * (G.st ? G.st.eShot : 1) * (1 + ENDLESS.shotSpeed * endlessL());
+const eliteChance = () => Math.min(Math.min(ENDLESS.eliteCapMax, 0.55 + ENDLESS.eliteCapAdd * endlessL()), (0.06 + 0.03 * (G.sector - 1) + 0.07 * (effLevel() - 1)) * DIFF().elite * (G.st ? G.st.eliteMul : 1));
 const hazardsOn = () => effLevel() > 1 || G.sector >= DIFF().hazardSector;
 const levelScale = () => 1 + 0.5 * (effLevel() - 1); // grenades / bark wave scale with the level so they stay useful
 
@@ -1630,6 +1694,8 @@ function computeStats() {
     storm: n('storm'), overcharge: n('overcharge'), crown: n('crown'), pact: n('pact'), paper: n('paper'),
     maxHp: Math.max(1, DIFF().bones + n('snack') + n('battery') + 2 * n('goldbone') - n('glass') - n('brittle') - n('dice') + (n('crown') ? Math.min(3, G.crownBones || 0) : 0)),
   };
+  // 65-pets: collected pets' minor run bonuses (dashLen, goldMul, speed, shield, xp, dashCd, maxHp)
+  petStats(G.st);
   luckStats(G.st);   // 71-events: Lucky Machine curses (timed debuffs)
 }
 
@@ -2387,8 +2453,10 @@ function edgePoints(gapW, step, inset = 0) {
 }
 function buildFence(grp, room, th, dm) {
   const doors = room.doors, sec = room.secret && !room.secret.open ? room.secret.dir : null;
-  const d = side => doors[side] ? 2.2 : side === sec ? 0.5 : 0;
-  if (sec) grp.add(makeBrokenFence(sec, th));
+  const d = side => doors[side] ? 2.2 : side === sec ? CRACK_GAP : 0;
+  // the cracked stretch hiding a secret isle, and its live tell (draught, glint, hint); buildIsland runs again when it breaks
+  G.interactables = (G.interactables || []).filter(o => !o.crackFence);
+  if (sec) { const bf = makeBrokenFence(sec, th); grp.add(bf); if (!room.hub && G.room === room) addCrackTell(room, bf, th); }
   const add = (geo, mat, list, place, outlineScale) => {
     if (!list.length) return;
     const im = new THREE.InstancedMesh(geo, mat, list.length);
@@ -3051,16 +3119,87 @@ function makeGustLane(gust, th) {
   }
   return g;
 }
-// the tell for a secret isle: a slightly broken stretch of fence, nothing more
+// ---------- the tell for a secret isle: a cracked, patched-up stretch of fence ----------
+// Playtests: the old tell (one missing slot) went unnoticed. Now a ~2-unit section of every fence style (picket, rail, hedge,
+// stone, rope, driftwood, shell, logs, snowbank, ice) is a hasty patch of pale fresh-cut boards that doesn't match the rest:
+// two posts, a snapped rail hanging down, one board broken short with splinters, one gap, one board leaning in, one split,
+// loose boards and chips on the ground in front. buildFence keeps the regular fence out of |t| < CRACK_GAP on that edge.
+// Live bits (addCrackTell): a faint draught of leaves / sand / snowflakes through the gap, a small glint every few seconds,
+// a one-time "Looks fragile..." pop when you walk within CRACK_NEAR, and a prompt card while you stand there (E knocks on it).
+const CRACK_GAP = 1.0, CRACK_NEAR = 2.5;
 function makeBrokenFence(dir, th) {
-  // just one missing slot: a short stub that leans a little and a plank fallen in the grass, a touch darker than the rest
-  const g = new THREE.Group(), wood = toon(mixColor(th.wood, th.bark, 0.25));
-  const stub = outline(mesh(new THREE.CylinderGeometry(0.11, 0.14, 0.45, 8), wood, 0.05, 0.2, 0), 1.12); stub.rotation.z = -0.22; g.add(stub);
-  const plank = outline(mesh(new THREE.BoxGeometry(0.62, 0.07, 0.1), wood, -0.12, 0.05, 0.28), 1.15); plank.rotation.y = 0.35; g.add(plank);
-  for (let k = 0; k < 3; k++) { const chip = mesh(new THREE.BoxGeometry(0.08, 0.04, 0.05), wood, -0.3 + k * 0.22, 0.03, -0.25 + (k % 2) * 0.1); chip.rotation.y = k; g.add(chip); }
+  // local frame: x along the edge, -z toward the middle of the isle, y up; origin on the fence line
+  const g = new THREE.Group();
+  const fresh = toon(mixColor(th.wood, 0xffe9c4, 0.6)), raw = toon(0xfff3dc), ink = basic(0x3a2420);
+  const box = (w, h, d, m, x, y, z, rx = 0, ry = 0, rz = 0, ol = 1.12, parent = g) => {
+    const o = mesh(new THREE.BoxGeometry(w, h, d), m, x, y, z); o.rotation.set(rx, ry, rz); if (ol) outline(o, ol); parent.add(o); return o;
+  };
+  // two fresh posts (the right one leaning) and a top rail snapped in the middle, its right half hanging down
+  box(0.2, 1.05, 0.2, fresh, -1.0, 0.52, 0, 0, 0, 0.05);
+  box(0.2, 1.0, 0.2, fresh, 1.02, 0.48, 0.02, 0.06, 0, -0.14);
+  box(0.95, 0.1, 0.08, fresh, -0.52, 0.86, -0.07, 0, 0, -0.06);
+  box(0.78, 0.1, 0.08, fresh, 0.55, 0.56, -0.07, 0, 0.12, 0.62);
+  // boards: whole (leaning out a little), broken short with splinters, a missing one, leaning in on a pivot, split in two
+  box(0.26, 0.92, 0.06, fresh, -0.7, 0.46, -0.03, 0.09, 0, 0.03);
+  box(0.26, 0.46, 0.06, fresh, -0.38, 0.23, -0.03, 0, 0, -0.04);
+  for (const [x, h, r] of [[-0.46, 0.2, 0.25], [-0.38, 0.28, -0.1], [-0.3, 0.16, -0.35]]) { const sp = mesh(new THREE.ConeGeometry(0.035, h, 4), raw, x, 0.46 + h / 2 - 0.02, -0.03); sp.rotation.z = r; g.add(sp); }
+  const lean = new THREE.Group(); lean.position.set(0.3, 0, -0.04); g.add(lean);
+  box(0.26, 0.9, 0.06, fresh, 0, 0.45, 0, 0, 0, 0, 1.12, lean);
+  lean.rotation.set(-0.42, 0, -0.32);
+  box(0.11, 0.78, 0.06, fresh, 0.6, 0.39, -0.03, 0, 0, 0.06);
+  box(0.11, 0.66, 0.06, fresh, 0.75, 0.33, -0.03, 0, 0, -0.1);
+  // dark crack lines on the whole board
+  for (const [y, r] of [[0.62, 0.5], [0.48, -0.4], [0.35, 0.45]]) { const c = mesh(new THREE.BoxGeometry(0.025, 0.17, 0.01), ink, -0.71, y, -0.065); c.rotation.z = r; g.add(c); }
+  // rubble in front: two loose boards, chips, a few stones (the stone / shell / ice styles read as knocked-out blocks)
+  box(0.72, 0.05, 0.2, fresh, -0.3, 0.03, -0.72, 0, 0.5, 0);
+  box(0.52, 0.05, 0.18, fresh, 0.5, 0.07, -0.55, 0.18, -0.35, 0.1);
+  for (let k = 0; k < 8; k++) { const ch = mesh(new THREE.BoxGeometry(0.1, 0.035, 0.05), raw, -0.85 + k * 0.24 + ((k * 37) % 7) * 0.02, 0.02, -0.35 - ((k * 53) % 9) * 0.1); ch.rotation.y = k * 1.3; g.add(ch); }
+  const stone = toon(mixColor(th.rock, 0xffffff, 0.25));
+  for (const [x, z, r] of [[-0.9, -0.45, 0.13], [0.85, -0.85, 0.1], [0.1, -1.1, 0.09]]) { const st = outline(mesh(new THREE.SphereGeometry(r, 8, 6), stone, x, r * 0.6, z), 1.15); st.scale.y = 0.7; g.add(st); }
   const [ax, az] = DIRS[dir];
-  g.position.set(ax * HALF, 0, az * HALF); g.rotation.y = Math.atan2(ax, az) + Math.PI / 2;
+  g.position.set(ax * HALF, 0, az * HALF); g.rotation.y = Math.atan2(ax, az);
+  g.userData.lean = lean;
   return g;
+}
+// (a function: svgIco is defined later, in 60-items)
+const crackIcon = () => svgIco('<path d="M12 12h10v42H12zM27 22h10v32H27zM42 12h10v42H42z" fill="#f6dcae" stroke="#3a2420" stroke-width="3.5" stroke-linejoin="round"/><path d="M27 22l3-6 3 5 4-5" fill="none" stroke="#3a2420" stroke-width="3" stroke-linejoin="round"/><path d="M47 18l-3 9 4 5-3 8" fill="none" stroke="#3a2420" stroke-width="2.5" stroke-linecap="round"/><path d="M8 58h48" stroke="#3a2420" stroke-width="3.5" stroke-linecap="round"/>');
+// the live half of the tell: an interactable on the current isle (cleared with the isle; removed again by buildFence / revealSecret)
+function addCrackTell(room, g, th) {
+  G.interactables = G.interactables.filter(o => !o.crackFence);
+  const sec = room.secret; if (!sec || sec.open) return;
+  const [ax, az] = DIRS[sec.dir], a = Math.atan2(ax, az), c = Math.cos(a), s = Math.sin(a);
+  const W = (x, z) => [ax * HALF + x * c + z * s, az * HALF - x * s + z * c];   // local fence frame -> world x, z
+  const [cx, cz] = W(0, -1.0), biome = th.biome, lean = g.userData.lean;
+  let glintT = rand(1, 2.5), moteT = 0, knock = 0;
+  addInteractable({ x: cx, z: cz, r: CRACK_NEAR, crackFence: true, when: () => !sec.open,
+    prompt: () => ({ icon: crackIcon(), verb: 'Something\'s off', title: 'Cracked fence',
+      desc: `Fresh splinters, and a draught blowing through the gap. A grenade might break it: <b>right-click</b> to throw one (you have ${G.bombs}).`, action: 'Knock' }),
+    use: () => {
+      knock = 1; sfx('thump');
+      const [x, z] = W(0.2, -0.3); FX.dust(x, 0.3, z, biome === 'peaks' ? 0xffffff : 0xe8d8b8, 6);
+      emit(x, 0.6, z, 5, 0xfff3dc, { speed: 2.5, size: 0.18, life: 0.5, grav: 9 });
+      if (!room.crackKnocked) { room.crackKnocked = true; const p = G.player; popText('Sounds hollow...', p.x, p.y + 2.6, p.z, '#fff4dc'); }
+    },
+    tick: dt => {
+      if (sec.open) return;
+      // knock wobble on the leaning board
+      if (knock > 0) { knock = Math.max(0, knock - dt * 2.2); lean.rotation.z = -0.32 + Math.sin(knock * 26) * 0.12 * knock; }
+      // a small glint on the broken boards every few seconds (one star, never a flash)
+      glintT -= dt;
+      if (glintT <= 0) { glintT = rand(2.8, 4.5); const [x, z] = W(rand(-0.5, 0.4), -0.1); emit(x, rand(0.45, 0.85), z, 1, 0xfff6c8, { speed: 0, size: 0.55, life: 0.45, grav: 0, glow: true, shape: 'star', twinkle: 10 }); }
+      // the draught: a faint mote drifting in through the gap now and then
+      moteT -= dt;
+      if (moteT <= 0) {
+        moteT = rand(0.45, 0.9);
+        const [x, z] = W(rand(-0.6, 0.6), 0.35), [ix, iz] = [-s, -c], v = rand(0.7, 1.1), along = rand(-0.25, 0.25), dir = [ix * v + c * along, 0.08, iz * v - s * along];
+        if (biome === 'peaks') spr(x, rand(0.3, 0.9), z, { tex: 'star', col: 0xffffff, size: 0.2, life: 2.4, speed: 0.1, dir, drag: 0, grav: 0.05, sway: 0.4, alpha: 0.75 });
+        else if (biome === 'reef') spr(x, rand(0.15, 0.6), z, { tex: 'soft', col: 0xf3e2c8, size: 0.24, life: 2.0, speed: 0.1, dir, drag: 0, grav: 0.08, alpha: 0.6 });
+        else spr(x, rand(0.3, 0.85), z, { tex: 'leaf', col: pick([0x9fd36b, 0xc8e07a, 0xe8c46b]), size: 0.22, life: 2.4, speed: 0.1, dir, spin: 3, drag: 0, grav: 0.1, sway: 0.5, alpha: 0.85 });
+      }
+      // the first time you come close on this isle, a little thought pops up
+      const p = G.player;
+      if (!room.crackHint && Math.hypot(p.x - cx, p.z - cz) < CRACK_NEAR) { room.crackHint = true; popText('Looks fragile...', p.x, p.y + 2.6, p.z, '#fff4dc'); }
+    } });
 }
 // Stall_B's goods spots in model space [x, float height, z]: 0-3 the counter cushions, 4/5 crate and barrel tops, 7 a floor stump beside the counter
 const STALL_SPOTS = [[-2.4, 2.07, 1.0], [-0.8, 2.07, 1.0], [0.8, 2.07, 1.0], [2.4, 2.07, 1.0], [-4.0, 1.89, 0.2], [4.0, 1.58, -0.15], null, [-6.4, 0, 1.4]];
@@ -3721,7 +3860,9 @@ function updatePlayer(dt) {
   const onIceNow = !inHub && p.onGround && icy(p), inSnow = !inHub && p.onGround && deepSnow(p);
   p.chillT = (p.chillT || 0) - dt;
   if (p.dashT > 0) {
-    p.dashT -= dt; vx = p.dashDir[0] * 21; vz = p.dashDir[1] * 21;
+    // st.dashLen (pet bonus) lengthens the dash through speed, so the dashT invulnerability window stays the same
+    const dsp = 21 * (st.dashLen || 1);
+    p.dashT -= dt; vx = p.dashDir[0] * dsp; vz = p.dashDir[1] * dsp;
     emit(p.x, p.y + 0.7, p.z, 2, 0xfff4dc, { speed: 0.6, size: 0.55, life: 0.3, grav: 0 });
     if (st.trail && !inHub && Math.random() < 0.6) spawnProj('flame', p.x, 0.4, p.z, rand(0, 6.28), null, { speedMul: 0.05, lifeMul: 0.9, dmgMul: 0.6 * st.trail, color: '#ff8a4d' });
     if (p.dashT <= 0 && onIceNow) { p.vx = p.dashDir[0] * 12; p.vz = p.dashDir[1] * 12; }   // a dash on ice keeps sliding
@@ -3880,7 +4021,10 @@ function hurtPlayer(sx, sz, opts = {}) {
   const p = G.player;
   if ((p.inv > 0 || p.dashT > 0) && !opts.fall || G.state !== 'play' || G.mode === 'hub') return;
   if (p.shield > 0 && !opts.fall) { p.shield--; p.inv = 0.8; sfx('shield'); if (G.st.guardian) explodeAt(p.x, p.z, 3.4, 2 * G.st.dmg * levelScale(), null, false); emit(p.x, p.y + 1, p.z, 26, 0x8fd3ff, { speed: 6, grav: 0, glow: true, color2: 0xffffff }); FX.twinkle(p.x, p.y + 1.2, p.z, 0xc8f0ff, 6); updateHUD(true); return; }
-  p.hp -= opts.fall && G.st.paper ? 2 : 1; p.inv = 1.2; G.shake = 0.5; G.hitstop = 0.08; sfx('hurt');
+  // Endless from loop 2: a hit may cost 2 bones (endlessDoubleHit, 15-state)
+  const dbl = !opts.fall && Math.random() < endlessDoubleHit();
+  p.hp -= opts.fall && G.st.paper ? 2 : dbl ? 2 : 1; p.inv = 1.2; G.shake = 0.5; G.hitstop = 0.08; sfx('hurt');
+  if (dbl) popText('-2 bones!', p.x, p.y + 2.6, p.z, '#ff5d7a');
   if (G.st.fizzy) p.fizzT = 3;
   if (G.st.globe) { for (const e of G.enemies) if (Math.hypot(e.x - p.x, e.z - p.z) < 6) { e.slowT = Math.max(e.slowT, 2.5 + G.st.globe); e.flash = 0.2; } ringFx(p.x, p.z, 0.5, 6, 0xbfe8ff, 0.4); }
   if (G.runStats) G.runStats.hits++;
@@ -4120,15 +4264,31 @@ function hideBeams() { (G.beams || []).forEach(b => { b.visible = false; }); }
 function clearBeams() { (G.beams || []).forEach(b => removeObj(b)); G.beams = []; }
 
 // ---------- weapon XP, level-up cards, feeding ----------
+// Player caps (2026-10-14): weapon Lv WEAPON_MAX_LV, each weapon upgrade Lv AFF_MAX, each gadget Lv GADGET_MAX (60-items).
+// Past the weapon cap, every full xpNeed(WEAPON_MAX_LV) of XP heals one bone instead (or gives MAXED_GOLD gold at full bones).
+const WEAPON_MAX_LV = 30, AFF_MAX = 6, MAXED_GOLD = 10;
+const weaponMaxed = (w = G.weapon) => !!w && w.level >= WEAPON_MAX_LV;
+const affMaxed = (t, w = G.weapon) => !!w && (w.aff[t] || 0) >= AFF_MAX;
 function gainXP(amount) {
   const w = G.weapon; if (!w || G.mode !== 'story') return;
   w.xp += amount * G.st.xp;
-  while (w.xp >= xpNeed(w.level)) {
+  if (w.level > WEAPON_MAX_LV) w.level = WEAPON_MAX_LV;
+  while (w.level < WEAPON_MAX_LV && w.xp >= xpNeed(w.level)) {
     w.xp -= xpNeed(w.level); w.level++;
     G.pendingCards = (G.pendingCards || 0) + 1;
-    popText(`Lv ${w.level}!`, G.player.x, G.player.y + 2.8, G.player.z, '#6fe3ff'); sfx('levelup');
+    popText(w.level >= WEAPON_MAX_LV ? `Lv ${w.level} MAX!` : `Lv ${w.level}!`, G.player.x, G.player.y + 2.8, G.player.z, '#6fe3ff'); sfx('levelup');
     emit(G.player.x, G.player.y + 1, G.player.z, 24, 0x6fe3ff, { speed: 6, size: 0.4, grav: -1, color2: 0xffffff }); FX.twinkle(G.player.x, G.player.y + 1.6, G.player.z, 0xffe08a, 10);
     discoverWeapon(w.id, w.level);
+  }
+  // past the cap: XP becomes a bone (or gold at full bones) every full "level"
+  // (at most 3 per gain, so one huge XP burst can't spam pops; anything beyond that is dropped)
+  for (let n = 0; w.level >= WEAPON_MAX_LV && w.xp >= xpNeed(WEAPON_MAX_LV); n++) {
+    if (n >= 3) { w.xp = Math.min(w.xp, xpNeed(WEAPON_MAX_LV) * 0.99); break; }
+    w.xp -= xpNeed(WEAPON_MAX_LV);
+    const p = G.player;
+    if (p.hp < p.maxHp) { p.hp++; sfx('heart'); popText('MAX: +1 bone', p.x, p.y + 2.8, p.z, '#fff4dc'); }
+    else { G.crystals += MAXED_GOLD; sfx('pickup'); popText(`MAX: +${MAXED_GOLD} gold`, p.x, p.y + 2.8, p.z, '#ffd34d'); }
+    updateHUD(true);
   }
   updateWeaponHUD();
 }
@@ -4143,7 +4303,8 @@ const weakestAff = w => Object.keys(w.aff).sort((a, b) => w.aff[a] - w.aff[b])[0
 // three upgrade cards, worded for the weapon you're holding
 // a full weapon mostly offers upgrades it owns, with new ones now and then so swapping stays a real choice
 function rollCards() {
-  const w = G.weapon, pool = AFFIX_KEYS.slice(), full = affCount(w) >= WEAPON_SLOTS;
+  // upgrades already at AFF_MAX are never offered
+  const w = G.weapon, pool = AFFIX_KEYS.filter(t => !affMaxed(t, w)), full = affCount(w) >= WEAPON_SLOTS;
   const weight = t => (['burn', 'chill', 'chain', 'homing'].includes(t) && w.aff[t] ? 0.4 : 1) * (t === 'dmg' || t === 'rate' ? 1.4 : 1) * (full && !w.aff[t] ? 0.25 : 1);
   const out = [];
   while (out.length < 3 && pool.length) {
@@ -4156,9 +4317,10 @@ function rollCards() {
 function chooseCard(tag) {
   const w = G.weapon;
   if (weaponFull(tag, w)) delete w.aff[weakestAff(w)];
-  w.aff[tag] = (w.aff[tag] || 0) + 1; G.upGain = (G.upGain || 0) + 1;
+  // cards never offer a maxed upgrade (rollCards); this guard only catches outside callers
+  if (!affMaxed(tag, w)) { w.aff[tag] = (w.aff[tag] || 0) + 1; G.upGain = (G.upGain || 0) + 1; }
   G.pendingCards--; sfx('item');
-  toast(`${AFFIXES[tag].name} Lv ${w.aff[tag]}`, affixText(tag, w.id));
+  toast(`${AFFIXES[tag].name} Lv ${w.aff[tag]}${affMaxed(tag, w) ? ' · MAX' : ''}`, affixText(tag, w.id));
   updateWeaponHUD();
 }
 const romanish = n => ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'][n] || `x${n}`;
@@ -4167,12 +4329,13 @@ const romanish = n => ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX
 function takeWeapon(id) {
   const old = G.weapon;
   if (old && old.id === id) {
-    gainXP(xpNeed(old.level)); toast(WEAPONS[id].name, 'Same weapon: absorbed for a level-up'); return;
+    gainXP(xpNeed(old.level)); toast(WEAPONS[id].name, weaponMaxed(old) ? 'Same weapon: already MAX, absorbed for a bone or gold' : 'Same weapon: absorbed for a level-up'); return;
   }
   const nw = newWeapon(id); let dropped = [];
   if (old) {
-    nw.level = Math.max(1, Math.floor(old.level * 0.7));
-    const ents = Object.entries(old.aff).sort((a, b) => b[1] - a[1]);   // stable: ties keep pick order
+    nw.level = clamp(Math.floor(old.level * 0.7), 1, WEAPON_MAX_LV);
+    // stable: ties keep pick order; levels stay within AFF_MAX
+    const ents = Object.entries(old.aff).map(([t, n]) => [t, Math.min(AFF_MAX, n)]).sort((a, b) => b[1] - a[1]);
     nw.aff = Object.fromEntries(ents.slice(0, WEAPON_SLOTS)); dropped = ents.slice(WEAPON_SLOTS);
   }
   G.weapon = nw; G.player.charge = 0; showChargeOrb(G.player, 0); hideBeams();
@@ -5615,7 +5778,7 @@ function updateEnemies(dt) {
       animSpawn(e);
       continue;
     }
-    const slow = e.slowT > 0 ? 0.55 : 1, edt = dt * slow, cdm = e.cdMul || 1;
+    const slow = e.slowT > 0 ? 0.55 : 1, edt = dt * slow, cdm = (e.cdMul || 1) * endlessCdMul();
     e.t += dt; e.flash -= dt; e.slowT -= dt;
     if (e.burnT > 0) {
       e.burnT -= dt; damageEnemy(e, e.burnDps * dt, { dot: true });
@@ -6700,7 +6863,8 @@ function updateBoss(b, dt) {
   b.cd -= dt * (b.slowT > 0 ? 0.7 : 1);
   if (b.cd > 0 || b.dash || b.leap) return;
   const list = b.def.phases[ph - 1], atk = list[b.si++ % list.length];
-  const cdMul = DIFF().bossCd * (b.mini ? 1.35 : 1) / Math.pow(ISLE_K, 0.3);   // ~5% quicker attacks: the bigger arena gives more dodging room
+  // ~5% quicker attacks: the bigger arena gives more dodging room; Endless loops shave more off (endlessCdMul, 15-state)
+  const cdMul = DIFF().bossCd * (b.mini ? 1.35 : 1) / Math.pow(ISLE_K, 0.3) * endlessCdMul();
   b.cd = (BOSS_ATTACKS[atk](b, ph) || 2) * cdMul;
 }
 // cancel a charge at any stage, always taking its red warning lane with it
@@ -7130,7 +7294,7 @@ function updatePickups(dt) {
       if (gapAtRoom(G.room, it.x, it.z)) { it.x = clamp(it.x * 0.92, -INNER, INNER); it.z = clamp(it.z * 0.92, -INNER, INNER); }
     }
     if (want && it.age > 0.3 && d < 1.3) {
-      if (it.kind === 'gold') { G.crystals += it.val || 1; sfx('pickup'); FX.twinkle(it.x, it.y + 0.2, it.z, it.gem || 0xffd34d, it.val > 1 ? 8 : 3); if (it.val > 1) popText('+' + it.val, p.x, p.y + 2.4, p.z, '#ffd34d'); }
+      if (it.kind === 'gold') { const gv = (it.val || 1) * (G.st.goldMul || 1) + (G.goldFrac || 0), gn = Math.floor(gv); G.goldFrac = gv - gn; G.crystals += gn; sfx('pickup'); FX.twinkle(it.x, it.y + 0.2, it.z, it.gem || 0xffd34d, it.val > 1 ? 8 : 3); if (it.val > 1) popText('+' + it.val, p.x, p.y + 2.4, p.z, '#ffd34d'); }
       else if (it.kind === 'key') { G.keys++; sfx('clear'); FX.sparks(it.x, it.y, it.z, 0xffc93c, 12, 5); FX.twinkle(it.x, it.y + 0.3, it.z, 0xffe08a, 6); popText('Key!', p.x, p.y + 2.4, p.z, '#ffd34d'); }
       else if (it.kind === 'bomb') { G.bombs++; sfx('clear'); emit(it.x, it.y, it.z, 14, 0xff7a4d, { speed: 4, size: 0.4 }); popText('Grenade!', p.x, p.y + 2.4, p.z, '#ff7a4d'); }
       else if (it.kind === 'egg') { adoptEgg(it); }
@@ -7146,14 +7310,17 @@ function updatePickups(dt) {
 // opts: { min: 'rare'|'epic', only: 'cursed', noCursed }
 function rollItem(opts = {}) {
   const order = ['common', 'rare', 'epic', 'cursed'];
-  const keys = ITEM_KEYS.filter(k => {
+  // gadgets already at GADGET_MAX are never rolled (unless nothing else is left, then giveItem's guard catches it)
+  const fits = k => {
     const r = ITEMS[k].r;
     if (opts.only) return r === opts.only;
     if (opts.noCursed && r === 'cursed') return false;
     if (opts.min && order.indexOf(r) < order.indexOf(opts.min) && r !== 'cursed') return false;
     if (opts.min && r === 'cursed' && opts.min === 'epic') return false;
     return true;
-  });
+  };
+  let keys = ITEM_KEYS.filter(k => fits(k) && (G.items[k] || 0) < GADGET_MAX);
+  if (!keys.length) keys = ITEM_KEYS.filter(fits);
   const w = keys.map(k => RARITY[ITEMS[k].r].weight * Math.max(0.25, 1 - 0.3 * (G.items[k] || 0)) * (opts.epicBoost && ITEMS[k].r === 'epic' ? 4 : 1));
   let r = Math.random() * w.reduce((a, b) => a + b, 0);
   for (let i = 0; i < w.length; i++) { r -= w[i]; if (r <= 0) return keys[i]; }
@@ -7215,7 +7382,10 @@ function glowDisc(col) {
 // Schiffy holds at most GADGET_SLOTS distinct gadgets; another copy of an owned one levels it (the stack count is its Lv).
 // Taking a new one when full asks which to replace (offerGadget -> openSwap in 80-hud); the new one starts at Lv 1.
 const GADGET_SLOTS = 8;
+// each gadget stacks to Lv GADGET_MAX; a maxed one on a pedestal can only be salvaged (rollItem stops offering it)
+const GADGET_MAX = 5;
 const gadgetFull = k => !!ITEMS[k] && !G.items[k] && G.itemOrder.length >= GADGET_SLOTS;
+const gadgetMaxed = k => !!ITEMS[k] && (G.items[k] || 0) >= GADGET_MAX;
 // take gadget k, asking first which one to replace when Schiffy is full. take() runs only once it's settled (not on cancel).
 // ---------- salvage: break an unwanted free weapon or gadget down into XP for the held weapon ----------
 // Worth a share of the weapon's next level by rarity (weapons 90%). Shop goods (priced) can't be salvaged, so gold never
@@ -7262,6 +7432,13 @@ function giveItem(k) {
   if (k === 'key') { G.keys++; sfx('clear'); toast('Brass Key', 'Opens one chest or vault gate'); updateHUD(true); return; }
   if (k === 'bombs') { G.bombs += 2; sfx('clear'); toast('Grenade Pack', '+2 grenades. Right-click to throw'); updateHUD(true); return; }
   if (isWeaponItem(k)) { takeWeapon(k.slice(2)); updateHUD(true); return; }
+  // already at GADGET_MAX: nothing to stack, so it turns into weapon XP like a salvage (pedestals block this before it gets here)
+  if (gadgetMaxed(k)) {
+    const xp = G.weapon && G.mode === 'story' ? Math.max(1, Math.round(xpNeed(G.weapon.level) * (SALVAGE_K[ITEMS[k].r] || 0.4))) : 0;
+    toast(`${ITEMS[k].name} is MAX`, xp ? `Lv ${GADGET_MAX} already: it became ${Math.round(xp * G.st.xp)} weapon XP` : `Lv ${GADGET_MAX} already`, '#6fe3ff');
+    if (xp) gainXP(xp);
+    return;
+  }
   // safety net: interactive paths ask first (offerGadget); anything else that overflows drops the lowest-level, oldest gadget
   if (gadgetFull(k)) removeGadget(G.itemOrder.slice().sort((a, b) => G.items[a] - G.items[b])[0], true);
   const before = G.st.maxHp;
@@ -7412,20 +7589,23 @@ function updateInteract(dt) {
     const info = goodsInfo(near.item), owned = G.items[near.item] || 0, wpn = isWeaponItem(near.item), rar = ITEMS[near.item] ? RARITY[ITEMS[near.item].r] : null;
     let desc = info.desc;
     if (wpn && G.weapon && G.weapon.id !== near.item.slice(2)) desc += `<br><b>Feeds your ${WEAPONS[G.weapon.id].name} (Lv ${G.weapon.level}) into it: Lv ${Math.max(1, Math.floor(G.weapon.level * 0.7))}, keeping its upgrades (up to ${WEAPON_SLOTS}).</b>`;
-    if (gadgetFull(near.item)) desc += `<br><b>Passives full (${G.itemOrder.length}/${GADGET_SLOTS}): you'll choose one to replace, or salvage it instead.</b>`;
+    const maxed = gadgetMaxed(near.item);
+    if (maxed) desc += `<br><b>${info.name} is already MAX (Lv ${GADGET_MAX}). ${near.price ? 'It can\'t stack any higher.' : 'Salvage it for weapon XP instead.'}</b>`;
+    else if (gadgetFull(near.item)) desc += `<br><b>Passives full (${G.itemOrder.length}/${GADGET_SLOTS}): you'll choose one to replace, or salvage it instead.</b>`;
     const salv = salvageXP(near);
     setPrompt({
       icon: `<img alt="" src="${itemIconUrl(near.item)}">`,
       verb: near.price ? 'Stall' : wpn ? 'Weapon' : near.group ? 'Pick one' : 'Gadget',
-      title: info.name + (owned ? ` <span style="font-size:.6em;color:var(--navy-soft)">Lv ${owned} → ${owned + 1}</span>` : ''),
+      title: info.name + (owned ? ` <span style="font-size:.6em;color:var(--navy-soft)">${maxed ? `Lv ${owned} · MAX` : `Lv ${owned} → ${owned + 1}`}</span>` : ''),
       desc, curse: ITEMS[near.item] && ITEMS[near.item].curse, rarity: rar,
       cost: near.price ? { kind: 'gold', amount: near.price, have: G.crystals } : { kind: 'free' },
-      action: near.price ? 'Buy' : wpn ? 'Swap' : 'Take',
+      action: maxed ? 'MAX' : near.price ? 'Buy' : wpn ? 'Swap' : 'Take',
       alt: salv ? { key: 'X', label: `Salvage +${salv} XP` } : null,
     });
     if (salv && pressed('KeyX')) salvagePedestal(near, salv);
     else if (use) {
-      if (near.price > G.crystals) { sfx('deny'); toast('Not enough gold', `Need ${near.price - G.crystals} more`); }
+      if (maxed) { sfx('deny'); toast(`${info.name} is MAX`, near.price ? `Lv ${GADGET_MAX} is as high as it goes` : `Lv ${GADGET_MAX} is as high as it goes. Press X to salvage it`); }
+      else if (near.price > G.crystals) { sfx('deny'); toast('Not enough gold', `Need ${near.price - G.crystals} more`); }
       else if (near.item === 'heal' && p.hp >= p.maxHp) { sfx('deny'); toast('Already full', 'Come back when you\'re hurt'); }
       // full passives: the swap prompt opens first; gold is only spent (and the pedestal cleared) once a slot is chosen
       else offerGadget(near.item, () => {
@@ -7541,7 +7721,7 @@ function updateDrones(dt) {
     }
   }
 }
-// ---------- pets (collectibles only: they follow, hatch and grow, never fight or buff) ----------
+// ---------- pets (they follow, hatch and grow, never fight; collected species give a minor run bonus, see petStats) ----------
 // G.pet = { species, stage 0..3, cleared (isles since last stage), mesh, x, z, y, dropped: { t } | null }
 function makeEggMesh(species) {
   const d = PETS[species], g = new THREE.Group();
@@ -7706,7 +7886,58 @@ function recordPetCollectible() {
   const rec = SAVE.pets[pet.species] || (SAVE.pets[pet.species] = { count: 0, best: 0, first: Date.now() });
   rec.count++; rec.best = Math.max(rec.best, pet.stage); rec.last = { level: G.level, diff: G.diff, at: Date.now() };
   writeSave(); Hub.emit('collectible', { kind: 'pet', id: pet.species, stage: pet.stage });
+  // a newly collected pet's bonus starts at once (stats; max bones refill on the next level), run-start perks from the next run
+  computeStats();
+  if (G.player) G.player.maxHp = G.st.maxHp;
   return pet;
+}
+// ---- pet bonuses: one minor permanent perk per collected species (PET_BONUS in 05-data) ----
+// value for a species, 0 when not collected; the % perks grow a little once the pet was raised to Grown
+function petBonusVal(id) {
+  const b = PET_BONUS[id], r = SAVE.pets[id]; if (!b || !r) return 0;
+  return r.best >= 3 && b.grown ? b.grown : b.v;
+}
+function petBonusText(id, v = petBonusVal(id) || PET_BONUS[id].v, short) {
+  const pc = Math.round(v * 100);
+  switch (PET_BONUS[id].kind) {
+    case 'dash': return `+${pc}% dash distance`;
+    case 'speed': return `+${pc}% ${short ? 'speed' : 'run speed'}`;
+    case 'shield': return short ? `+${v} shield` : `+${v} shield bubble each isle`;
+    case 'xp': return `+${pc}% weapon XP`;
+    case 'key': return short ? `+${v} key` : `+${v} key at run start`;
+    case 'gold': return `+${pc}% gold`;
+    case 'bomb': return short ? `+${v} grenade` : `+${v} grenade at run start`;
+    case 'dashcd': return `${pc}% faster dash recharge`;
+    case 'bones': return short ? `+${v} bone` : `+${v} max bone`;
+  }
+  return '';
+}
+const petBonusIds = () => Object.keys(PET_BONUS).filter(id => petBonusVal(id) > 0);
+// short summary for run-start toasts and menus, e.g. "+1 bone, +5% speed"
+const petBonusSummary = () => petBonusIds().map(id => petBonusText(id, petBonusVal(id), true)).join(', ');
+// hooked into computeStats (15-state), runs only (the hub stays neutral, so the weapon range reads the same for everyone)
+function petStats(s) {
+  s.dashLen = 1; s.goldMul = 1;
+  if (G.mode !== 'story') return;
+  for (const id of petBonusIds()) {
+    const v = petBonusVal(id);
+    switch (PET_BONUS[id].kind) {
+      case 'dash': s.dashLen *= 1 + v; break;
+      case 'speed': s.speed *= 1 + v; break;
+      case 'shield': s.shield += v; break;
+      case 'xp': s.xp *= 1 + v; break;
+      case 'gold': s.goldMul *= 1 + v; break;
+      case 'dashcd': s.dashCd *= 1 - v; break;
+      case 'bones': s.maxHp += v; break;
+    }
+  }
+}
+// run-start resources (startStory, after any head-start kit)
+function petStartKit() {
+  for (const id of petBonusIds()) {
+    const k = PET_BONUS[id].kind, v = petBonusVal(id);
+    if (k === 'key') G.keys += v; else if (k === 'bomb') G.bombs += v;
+  }
 }
 // little portrait images of each pet (Collectibles hall, HUD chip), rendered once on a tiny side renderer and cached
 // Portrait images of 3D models (pets, weapons), rendered once on a tiny side renderer and cached as data URLs.
@@ -8127,7 +8358,8 @@ function rebuildRoomExtras(room) {
 const CROWD_K = 1.25, WAVE_CAP = 12, SPAWN_NEAR = 7.5, SPAWN_FAR = 13;
 function spawnWave(extra = 0, opts = {}) {
   const p = G.player, d = DIFF(); let elites = opts.elites || 0;
-  const count = Math.min(WAVE_CAP, Math.round((3 + Math.floor(G.sector / 2) + (G.level - 1) + (G.level >= 3 ? 1 : 0) + d.count + extra + randi(0, 1)) * CROWD_K));   // Level 3+ waves bring one more
+  // Level 3+ waves bring one more; Endless loops add ENDLESS.waveAdd per loop and lift the cap (15-state)
+  const count = Math.min(endlessWaveCap(WAVE_CAP), Math.round((3 + Math.floor(G.sector / 2) + (G.level - 1) + (G.level >= 3 ? 1 : 0) + d.count + extra + randi(0, 1)) * CROWD_K) + ENDLESS.waveAdd * endlessL());
   const onMesa = [], reach = reachableCells(G.room.obs);   // ground enemies only spawn where you can get to them
   for (let j = 0; j < NC; j++) for (let i = 0; i < NC; i++) if (G.room.obs[j][i] === 'mesa') onMesa.push([cellX(i), cellX(j)]);
   for (let i = 0; i < count; i++) {
@@ -9500,7 +9732,7 @@ function buildHub() {
     addPortal(x, z, { color: col, locked, label: `Level ${lvl}`, labelColor: locked ? '#bdb8cf' : '#ffd34d',
       prompt: () => locked
         ? { icon: PROMPT_ICONS.gate, verb: 'Story · locked', title: `Level ${lvl}: ${b.name}`, desc: `Clear Level ${lvl - 1} to open this portal.`, action: 'Locked' }
-        : { icon: PROMPT_ICONS.portal, verb: `Story · ${DIFF().name}`, title: `Level ${lvl}: ${b.name}`, desc: lvl === 1 ? 'Five sectors and a final boss. Your build carries on into the next level.' : 'Start here with a head-start kit, or begin from Level 1 to build up naturally.', action: 'Enter' },
+        : { icon: PROMPT_ICONS.portal, verb: `Story · ${DIFF().name}`, title: `Level ${lvl}: ${b.name}`, desc: (lvl === 1 ? 'Five sectors and a final boss. Your build carries on into the next level.' : 'Start here with a head-start kit, or begin from Level 1 to build up naturally.') + startWeaponNote(), action: 'Enter' },
       use: () => { if (locked) { sfx('deny'); return; } startStory(lvl); } });
   });
   // Endless and Boss Rush (77-modes): open once Level 1 has been cleared
@@ -9508,7 +9740,7 @@ function buildHub() {
   [['endless', 'Endless', 0x5fe8d8, 6, -10], ['rush', 'Boss Rush', 0xff5a6e, 11, -9]].forEach(([run, name, col, x, z]) => {
     addPortal(x, z, { color: modesOpen ? col : 0x8a86a8, locked: !modesOpen, label: name, labelColor: modesOpen ? '#ffd34d' : '#bdb8cf',
       prompt: () => modesOpen
-        ? { icon: PROMPT_ICONS.portal, verb: `${name} · ${DIFF().name}`, title: name, desc: modeBlurb(run), action: 'Enter' }
+        ? { icon: PROMPT_ICONS.portal, verb: `${name} · ${DIFF().name}`, title: name, desc: modeBlurb(run) + startWeaponNote(), action: 'Enter' }
         : { icon: PROMPT_ICONS.gate, verb: `${name} · locked`, title: name, desc: 'Clear Level 1 to open this portal.', action: 'Locked' },
       use: () => { if (!modesOpen) { sfx('deny'); return; } startStory(1, run); } });
   });
@@ -9557,7 +9789,7 @@ function buildHub() {
   }
   hall.position.set(14, 0, hallZ); shadows(hall); scene.add(hall);
   addInteractable({ x: 14, z: doorZ, r: 1.9, mesh: hall,
-    prompt: () => ({ icon: PROMPT_ICONS.chest, verb: 'Collectibles', title: 'Trophy Hall', desc: 'Pets you raised, weapons you found, and bosses you beat.', action: 'Look' }),
+    prompt: () => ({ icon: PROMPT_ICONS.chest, verb: 'Collectibles', title: 'Trophy Hall', desc: 'Pets you raised (each gives a small bonus to every run), weapons you found, bosses you beat, and your Endless and Boss Rush records.', action: 'Look' }),
     use: () => openCollectibles() });
   // how-to board and sound bell
   const board = new THREE.Group();
@@ -9593,29 +9825,40 @@ function setDifficulty(id) {
 }
 // starting a run: Story Level 1 from scratch, later unlocked levels with a head-start kit;
 // run = 'endless' starts at Level 1 and never stops, 'rush' goes straight to the first boss (77-modes)
-function startStory(level, run = 'story') {
+// The starting weapon is the one held from the hub's weapon range (78-range), else startId (Try again keeps the last
+// run's), else the Zap Blaster. It always starts fresh at Lv 1 (or the kit level), never the range's Lv 5 test copy.
+function startStory(level, run = 'story', startId) {
   initAudio();
+  const held = G.mode === 'hub' && G.weapon && WEAPONS[G.weapon.id] ? G.weapon.id : null;
+  const startW = held || (WEAPONS[startId] ? startId : 'blaster');
+  hideBeams();
   clearPetMesh(); G.pet = null; G.puppy = null;
   showHubUI(false);
-  Object.assign(G, { state: 'play', mode: 'story', run, loop: 0, rush: 0, level, sector: 1, crystals: 0, keys: 0, bombs: 1, kills: 0, items: {}, itemOrder: [], shake: 0, hitstop: 0, flash: 0, ability: 0, phoenixUsed: false, runFound: [], pendingCards: 0, crownBones: 0, houndKills: 0, cloudT: 3, doneT: 0, levelRecorded: 0 });
-  G.runStats = { kills: 0, isles: 0, secrets: 0, hits: 0, start: performance.now() };
+  Object.assign(G, { state: 'play', mode: 'story', run, loop: 0, rush: 0, level, sector: 1, crystals: 0, keys: 0, bombs: 1, kills: 0, items: {}, itemOrder: [], shake: 0, hitstop: 0, flash: 0, ability: 0, phoenixUsed: false, runFound: [], pendingCards: 0, crownBones: 0, houndKills: 0, cloudT: 3, doneT: 0, levelRecorded: 0, goldFrac: 0, startWeapon: startW });
+  // time = play time in seconds, counted in update() only (90-flow), so pauses, menus, cards and intros don't count; id tags this run's record (77-modes)
+  G.runStats = { kills: 0, isles: 0, secrets: 0, hits: 0, start: performance.now(), time: 0, id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6) };
   computeStats();
-  G.weapon = newWeapon('blaster');
+  G.weapon = newWeapon(startW);
   if (level > 1) {
     // head-start kit so a later level is winnable without the earlier ones
-    G.weapon.level = 1 + 3 * (level - 1);
-    // random upgrades, but never more than WEAPON_SLOTS types: once full, a roll levels an owned one
-    for (let k = 0; k < 2 * (level - 1); k++) { let t = pick(AFFIX_KEYS); if (weaponFull(t)) t = pick(Object.keys(G.weapon.aff)); G.weapon.aff[t] = (G.weapon.aff[t] || 0) + 1; }
-    for (let k = 0; k < 3 * (level - 1); k++) { const it = rollItem({ noCursed: true, min: k === 0 ? 'rare' : undefined }); G.items[it] = (G.items[it] || 0) + 1; if (!G.itemOrder.includes(it)) G.itemOrder.push(it); }
+    G.weapon.level = Math.min(WEAPON_MAX_LV, 1 + 3 * (level - 1));
+    // random upgrades, but never more than WEAPON_SLOTS types (once full, a roll levels an owned one) and never past AFF_MAX
+    for (let k = 0; k < 2 * (level - 1); k++) kitAffix();
+    for (let k = 0; k < 3 * (level - 1); k++) kitGadget(k === 0 ? 'rare' : undefined);
     G.crystals = 20; G.keys = 1; G.bombs = 2; computeStats();
   }
   if (run === 'rush') rushKit();
-  discoverWeapon('blaster', G.weapon.level);
+  // collected pets: +key / +grenade on top of any kit (stat perks are already in computeStats)
+  petStartKit();
+  discoverWeapon(startW, G.weapon.level);
   SAVE.runs++; writeSave();
   const p = G.player; p.maxHp = G.st.maxHp; p.hp = p.maxHp; p.shield = G.st.shield; p.inv = 0; p.charge = 0;
   setGunLook(); syncDrones(); syncOrbs();
   $('#hud').hidden = false;
-  Hub.emit('runStart', { level, difficulty: G.diff, mode: run });
+  Hub.emit('runStart', { level, difficulty: G.diff, mode: run, weapon: startW });
+  const pb = petBonusSummary();
+  // shown a beat after the level toast so the two don't overwrite each other
+  if (pb) G.petToastT = 1.8;
   if (run === 'rush') { rushFight(0); updateWeaponHUD(); return; }
   G.map = genMap(level, 1);
   buildWorld();
@@ -9641,10 +9884,10 @@ function levelComplete() {
   const pet = recordPetCollectible();
   const next = G.level + 1;
   Hub.emit('levelClear', { level: G.level, difficulty: G.diff, kills: G.kills, pet: pet ? pet.species : null });
-  const mins = Math.round((performance.now() - G.runStats.start) / 60000);
   $('#doneTitle').textContent = `Level ${G.level} cleared!`;
   $('#doneSub').textContent = `${biome().name} · ${DIFF().name}`;
-  $('#doneStats').innerHTML = `<div><span>Knockouts</span><b>${G.runStats.kills}</b></div><div><span>Isles</span><b>${G.runStats.isles}</b></div><div><span>Secrets</span><b>${G.runStats.secrets}</b></div><div><span>Minutes</span><b>${mins}</b></div>`;
+  $('#doneStats').innerHTML = `<div><span>Knockouts</span><b>${G.runStats.kills}</b></div><div><span>Isles</span><b>${G.runStats.isles}</b></div><div><span>Secrets</span><b>${G.runStats.secrets}</b></div><div><span>Play time</span><b>${fmtTime(playMs())}</b></div>`;
+  $('#doneRecords').innerHTML = '';
   $('#donePet').innerHTML = pet ? `${pet.stage > 0 && petPortrait(pet.species, pet.stage) ? `<img alt="" src="${petPortrait(pet.species, pet.stage)}">` : ''}<b>${PETS[pet.species].name}</b> (${PET_STAGES[pet.stage]}) joined your Collectibles!` : 'No pet this time. Find an egg and keep it safe to collect one.';
   const canGo = next <= STORY_LEVELS;
   $('#continueBtn').hidden = !canGo;
@@ -9660,12 +9903,15 @@ function continueStory() {
   G.level++; G.sector = 1; G.phoenixUsed = false; G.state = 'play';
   G.map = genMap(G.level, 1); buildWorld(); clearRoomEntities(); G.room = null; enterRoom(G.map.start, null);
   G.player.hp = G.player.maxHp;
-  if (G.run === 'endless') toast(`Depth ${depth()}`, `${biome().name}${G.loop ? ` · Loop ${G.loop + 1}` : ''}`, '#5fe8d8');
-  else toast(`Level ${G.level}: ${biome().name}`, `Sector 1 · ${theme().name}`, '#ffd34d');
+  if (G.run === 'endless') {
+    toast(`Depth ${depth()}`, `${biome().name}${G.loop ? ` · Loop ${G.loop + 1}` : ''}`, '#5fe8d8');
+    // a new loop just began (back on Level 1): announce the extra Endless pressure a beat later (counted in update(), 90-flow)
+    if (G.loop > 0 && G.level === 1) G.loopToastT = 2.2;
+  } else toast(`Level ${G.level}: ${biome().name}`, `Sector 1 · ${theme().name}`, '#ffd34d');
 }
 function goHome() {
   if (G.mode === 'story' && G.state !== 'over') recordModeBest();   // quitting mid-run still counts how far you got
-  for (const id of ['#levelDone', '#over', '#pause', '#mapView', '#invView', '#cardView', '#feedView']) $(id).hidden = true;
+  for (const id of ['#levelDone', '#over', '#pause', '#mapView', '#invView', '#cardView', '#feedView', '#swapView']) $(id).hidden = true;
   $('#hud').hidden = true;
   resetActors();
   buildHub();
@@ -9688,14 +9934,23 @@ function updateHub(dt) {
 }
 function openCollectibles(tab = 'pets') {
   G.state = 'collect'; mouse.down = false;
-  const tabs = { pets: 'Pets', weapons: 'Weapons', bosses: 'Bosses' };
+  const tabs = { pets: 'Pets', weapons: 'Weapons', bosses: 'Bosses', records: 'Records' };
   $('#collectTabs').innerHTML = Object.entries(tabs).map(([k, v]) => `<button type="button" class="tab ${k === tab ? 'on' : ''}" data-ctab="${k}">${v}</button>`).join('');
   let html = '';
-  if (tab === 'pets') {
+  // Records: top-10 Endless and Boss Rush runs per difficulty (77-modes), the selected difficulty first
+  $('#collectGrid').className = tab === 'records' ? 'recgrid' : 'cgrid';
+  if (tab === 'records') {
+    const diffs = [G.diff].concat(Object.keys(DIFFICULTY).filter(d => d !== G.diff));
+    html = diffs.flatMap(d => ['endless', 'rush'].map(m => recordsBoardHTML(m, d))).join('') +
+      `<p class="recnote">Your best ${REC_MAX} runs per mode and difficulty. Time is play time: pauses and menus don't count.${SAVE.unlocked >= MODES_UNLOCK ? '' : ' Clear Level 1 to open Endless and Boss Rush.'}</p>`;
+  } else if (tab === 'pets') {
     html = Object.entries(PETS).map(([id, d]) => {
       const r = SAVE.pets[id];
       const pic = r && petPortrait(id, r.best);
-      return `<div class="cslot ${r ? '' : 'locked'}">${pic ? `<img class="petpic" alt="" src="${pic}">` : `<div class="cico" style="background:#${new THREE.Color(r ? d.body : 0x6b6880).getHexString()}">${r ? d.name.slice(0, 2) : '?'}</div>`}<b>${r ? d.name : '???'}</b><span>${r ? `${PET_STAGES[r.best]} · raised ${r.count}×` : `Found in ${BIOMES.find(b => b.id === d.biome).name}`}</span>${r ? `<em>${d.blurb}</em>` : ''}</div>`;
+      // each collected species gives one minor run bonus (PET_BONUS); the % ones grow once raised to Grown
+      const pb = PET_BONUS[id], grow = r && pb.grown && r.best < 3 ? ` <small>(${petBonusText(id, pb.grown)} when Grown)</small>` : '';
+      const bonus = r ? `<i class="pbonus">Bonus: ${petBonusText(id)}${grow}</i>` : `<i class="pbonus">Bonus: ??? (${pb.hint})</i>`;
+      return `<div class="cslot ${r ? '' : 'locked'}">${pic ? `<img class="petpic" alt="" src="${pic}">` : `<div class="cico" style="background:#${new THREE.Color(r ? d.body : 0x6b6880).getHexString()}">${r ? d.name.slice(0, 2) : '?'}</div>`}<b>${r ? d.name : '???'}</b><span>${r ? `${PET_STAGES[r.best]} · raised ${r.count}×` : `Found in ${BIOMES.find(b => b.id === d.biome).name}`}</span>${r ? `<em>${d.blurb}</em>` : ''}${bonus}</div>`;
     }).join('');
   } else if (tab === 'weapons') {
     html = WEAPON_KEYS.map(id => {
@@ -9839,12 +10094,53 @@ const RUSH = BIOMES.flatMap((b, li) => b.bosses.map((id, si) => ({ id, level: li
 const RUSH_SHOP = i => i % 3 === 2;   // fights 3, 6, 9 ... start on a shop isle
 const depth = () => G.level + STORY_LEVELS * (G.loop || 0);
 const rushLast = () => G.run === 'rush' && G.rush >= RUSH.length - 1;
-const fmtTime = ms => { const s = Math.round(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+// m:ss, or h:mm:ss past an hour
+const fmtTime = ms => { const s = Math.max(0, Math.round(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, ss = String(s % 60).padStart(2, '0'); return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`; };
+// the run's play time in ms (G.runStats.time is seconds of update(), so pauses, menus, cards and boss intros don't count)
+const playMs = () => G.runStats ? (G.runStats.time || 0) * 1000 : 0;
 
-// ---- records (per difficulty, saved under SAVE.endless / SAVE.rush) ----
+// ---- personal records ----
+// Old saves keep SAVE.endless[diff] = {depth, kills} and SAVE.rush[diff] = {best, time}; those are still written (modeBlurb reads
+// them) and seed the new lists. SAVE.records['endless:normal'] etc. = top REC_MAX entries, best first. Each entry is one flat
+// object a future online leaderboard can take as-is (see recordEntry); it also goes out as Hub.emit('record', entry).
+const REC_MAX = 10;
+const recKey = (mode, diff) => `${mode}:${diff}`;
+// higher score first; ties: less play time, then more knockouts. Legacy entries (no time) sort after timed ones on a tie.
+const recCmp = (a, b) => (b.score - a.score) || ((a.time ?? Infinity) - (b.time ?? Infinity)) || ((b.kills || 0) - (a.kills || 0));
+function recordList(mode, diff) {
+  if (!SAVE.records || typeof SAVE.records !== 'object') SAVE.records = {};
+  const k = recKey(mode, diff);
+  if (!Array.isArray(SAVE.records[k])) {
+    // first look at this board: seed it from the old single best, if there is one
+    const old = mode === 'endless' ? SAVE.endless[diff] : SAVE.rush[diff], list = [];
+    if (old && (mode === 'endless' ? old.depth : old.best)) list.push({ id: 'legacy', mode, diff, score: mode === 'endless' ? old.depth : old.best, time: mode === 'rush' && old.time && old.best >= RUSH.length ? old.time : null, kills: old.kills || 0, weapon: null, date: null, v: null, game: GAME_MANIFEST.id, legacy: true });
+    SAVE.records[k] = list;
+  }
+  return SAVE.records[k];
+}
+// one record for the run in progress: mode, difficulty, score (Endless depth / Boss Rush bosses beaten), play time (ms), ...
+function recordEntry(score) {
+  return { id: G.runStats.id, mode: G.run, diff: G.diff, score, time: Math.round(playMs()), kills: G.kills, weapon: G.weapon ? G.weapon.id : (G.startWeapon || null),
+    weaponLv: G.weapon ? G.weapon.level : 1, date: new Date().toISOString(), v: GAME_MANIFEST.version, game: GAME_MANIFEST.id };
+}
+// Upsert this run's entry (one per run, by G.runStats.id: an Endless run is saved at every level clear and again when it ends).
+// Returns { entry, rank (1-based, 0 = didn't make the list), pb (beats every other run's entry) } and remembers it on G.runStats.
+function submitRecord(score) {
+  if (!G.runStats || (G.run !== 'endless' && G.run !== 'rush') || !(score > 0)) return null;
+  const list = recordList(G.run, G.diff), e = recordEntry(score), i = list.findIndex(r => r.id === e.id);
+  if (i >= 0) { if (recCmp(e, list[i]) > 0) return G.runStats.rec || null; list.splice(i, 1); }
+  const others = list.slice(), best = others[0];
+  list.push(e); list.sort(recCmp); list.length = Math.min(list.length, REC_MAX);
+  const rank = list.indexOf(e) + 1, pb = !best || recCmp(e, best) < 0;
+  writeSave();
+  // the platform shell (and a future online board) can pick records up here
+  Hub.emit('record', e);
+  return (G.runStats.rec = { entry: e, rank, pb: pb || !!(G.runStats.rec && G.runStats.rec.pb) });
+}
 function recordEndless(d) {
   const r = SAVE.endless[G.diff] || (SAVE.endless[G.diff] = { depth: 0 });
   if (d > r.depth) { r.depth = d; r.kills = G.kills; writeSave(); }
+  return submitRecord(d);
 }
 function rushBeaten() { const r = G.room; return G.rush + (r && r.cleared && (r.type === 'boss' || r.type === 'final') ? 1 : 0); }
 function recordRush(n, ms) {
@@ -9852,15 +10148,36 @@ function recordRush(n, ms) {
   if (n > r.best) r.best = n;
   if (n >= RUSH.length && ms && (!r.time || ms < r.time)) r.time = Math.round(ms);
   writeSave();
+  return submitRecord(n);
 }
 function recordModeBest() {
-  if (G.run === 'endless') recordEndless(depth());
-  else if (G.run === 'rush') recordRush(rushBeaten());
+  if (G.run === 'endless') return recordEndless(depth());
+  if (G.run === 'rush') return recordRush(rushBeaten());
+  return null;
+}
+// ---- the Records board: shown on the cleared / knocked-out screens of these modes and in the Trophy Hall ----
+const REC_MODES = { endless: { name: 'Endless', unit: 'Depth' }, rush: { name: 'Boss Rush', unit: 'Bosses' } };
+function recordScoreText(mode, s) { return mode === 'endless' ? `Depth ${s}` : `${s}/${RUSH.length}`; }
+function recordsBoardHTML(mode, diff, hiId, opts = {}) {
+  const list = recordList(mode, diff), name = `${REC_MODES[mode].name} · ${(DIFFICULTY[diff] || DIFF()).name}`;
+  const day = iso => { const d = iso && new Date(iso); return d && !isNaN(d) ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' }) : '—'; };
+  const rows = list.map((r, i) => `<tr class="${r.id === hiId ? 'me' : ''}"><td>${i + 1}</td><td><b>${recordScoreText(mode, r.score)}</b></td><td>${r.time != null ? fmtTime(r.time) : '—'}</td>` +
+    (mode === 'endless' ? `<td>${r.kills || 0}</td>` : '') + `<td>${r.weapon && WEAPONS[r.weapon] ? WEAPONS[r.weapon].name : '—'}</td><td>${day(r.date)}</td></tr>`).join('');
+  return `<div class="recboard"><h4>${opts.title || name}</h4>` + (list.length
+    ? `<table><thead><tr><th>#</th><th>${REC_MODES[mode].unit}</th><th>Time</th>${mode === 'endless' ? '<th>KOs</th>' : ''}<th>Weapon</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table>`
+    : `<p class="recempty">No runs yet. ${mode === 'endless' ? 'Dive into Endless' : 'Take on the Boss Rush'} to set a record.</p>`) + `</div>`;
+}
+// the run-end panel: "New personal best!" (or the rank) plus this mode's board with the run highlighted
+function recordsResultHTML(rec) {
+  if (G.run !== 'endless' && G.run !== 'rush') return '';
+  const id = rec && rec.entry.id;
+  const head = rec && rec.pb ? '<p class="recpb">New personal best!</p>' : rec && rec.rank ? `<p class="recrank">#${rec.rank} on your ${REC_MODES[G.run].name} board</p>` : '';
+  return head + recordsBoardHTML(G.run, G.diff, id, { title: `Your records · ${DIFF().name}` });
 }
 function modeBlurb(run) {
   if (run === 'endless') {
     const r = SAVE.endless[G.diff];
-    return `Level 1, 2, 3, then round again, tougher every loop. Your build never resets. Best: ${r ? 'Depth ' + r.depth : 'none yet'}.`;
+    return `Level 1, 2, 3, then round again, tougher every loop. Your build never resets. Best: ${r ? 'Depth ' + r.depth : 'none yet'}. Records are in the Trophy Hall.`;
   }
   const r = SAVE.rush[G.diff];
   return `All ${RUSH.length} bosses back to back, with a shop every third fight. Best: ${r ? (r.time ? `cleared in ${fmtTime(r.time)}` : `${r.best}/${RUSH.length}`) : 'none yet'}.`;
@@ -9874,17 +10191,27 @@ function endlessDoneScreen() {
   $('#continueBtn').hidden = false;
   $('#continueBtn').innerHTML = `Onward to Depth ${depth() + 1} <small>Keep your build</small>`;
   $('#doneNote').textContent = (wrap ? `The sky loops back to ${nb.name}, and everything hits harder.` : `Next up: ${nb.name}.`) + (best ? ` Best: Depth ${best.depth}.` : '');
+  // recordLevelClear (75-hub) has just saved this run's entry
+  $('#doneRecords').innerHTML = recordsResultHTML(G.runStats && G.runStats.rec);
+}
+// rushKit / Story head-start kits: one random weapon upgrade or gadget, staying inside the slot and level caps
+function kitAffix() {
+  const w = G.weapon, pool = AFFIX_KEYS.filter(t => (w.aff[t] || 0) < AFF_MAX && !weaponFull(t, w));
+  if (pool.length) { const t = pick(pool); w.aff[t] = (w.aff[t] || 0) + 1; }
+}
+function kitGadget(min) {
+  let it = rollItem({ noCursed: true, min });
+  if (gadgetFull(it) || (G.items[it] || 0) >= GADGET_MAX) { const own = G.itemOrder.filter(k => G.items[k] < GADGET_MAX); if (!own.length) return; it = pick(own); }
+  G.items[it] = (G.items[it] || 0) + 1; if (!G.itemOrder.includes(it)) G.itemOrder.push(it);
 }
 
 // ---- Boss Rush ----
 // a head-start kit, since there are no combat isles to build up on before the first boss
 function rushKit() {
-  G.weapon.level = 4;
-  let t = pick(AFFIX_KEYS);
-  // stays within WEAPON_SLOTS types even on top of a later-level head start
-  if (weaponFull(t)) t = pick(Object.keys(G.weapon.aff));
-  G.weapon.aff[t] = (G.weapon.aff[t] || 0) + 1;
-  for (let k = 0; k < 2; k++) { const it = rollItem({ noCursed: true, min: k === 0 ? 'rare' : undefined }); G.items[it] = (G.items[it] || 0) + 1; if (!G.itemOrder.includes(it)) G.itemOrder.push(it); }
+  G.weapon.level = Math.min(WEAPON_MAX_LV, 4);
+  // stays within WEAPON_SLOTS types and AFF_MAX / GADGET_MAX even on top of a later-level head start
+  kitAffix();
+  for (let k = 0; k < 2; k++) kitGadget(k === 0 ? 'rare' : undefined);
   G.crystals = 15; G.keys = 0; G.bombs = 2; computeStats();
 }
 // one fight = the boss arena, plus a shop isle south of it before every third boss
@@ -9918,8 +10245,9 @@ function addRushPortal() {
 }
 function rushComplete() {
   G.state = 'levelDone'; G.doneT = 0; mouse.down = false; setPrompt(null); hideBeams();
-  const ms = performance.now() - G.runStats.start;
-  recordRush(RUSH.length, ms);
+  // play time only: pauses, menus, cards and boss intros don't count toward the clear time
+  const ms = playMs();
+  const rec = recordRush(RUSH.length, ms);
   const pet = recordPetCollectible(), best = SAVE.rush[G.diff];
   Hub.emit('rushClear', { difficulty: G.diff, ms: Math.round(ms), kills: G.kills, pet: pet ? pet.species : null });
   $('#doneTitle').textContent = 'Boss Rush cleared!';
@@ -9928,12 +10256,14 @@ function rushComplete() {
   $('#donePet').innerHTML = pet ? `<b>${PETS[pet.species].name}</b> (${PET_STAGES[pet.stage]}) joined your Collectibles!` : '';
   $('#continueBtn').hidden = true; $('#continueBtn').innerHTML = '';
   $('#doneNote').textContent = best && best.time ? `Best time on ${DIFF().name}: ${fmtTime(best.time)}.` : '';
+  $('#doneRecords').innerHTML = recordsResultHTML(rec);
   $('#levelDone').hidden = false; $('#hud').hidden = true;
 }
 // ---------- hub weapon range: try every weapon on practice dummies ----------
 // All weapons float in a ring round the plaza (E to try one, E again to put it away). Practice dummies stand on the south
 // lawns: they wobble, pop damage numbers and show a running damage-per-second plaque, and never die or fight back.
-// A weapon picked here is for testing only: the hub drops it on every rebuild and runs start with the Zap Blaster as always.
+// The weapon held here is also your pick for the next run: entering any run portal starts the run with it (fresh at Lv 1
+// or the kit level, see startStory in 75-hub); nothing held = the Zap Blaster. The hub drops it on every rebuild.
 // Hooks: buildHub calls buildWeaponRange; update() runs bullets/fx/decals + updateRange in the hub while a weapon is held;
 // damageEnemy hands dummies to dummyHit; updatePlayer lets you fire in the hub while G.weapon is set.
 const RANGE_LEVEL = 5;                       // test weapons come at a mid-run level so they feel representative
@@ -9958,11 +10288,11 @@ function buildWeaponRange() {
     addInteractable({ x, z, r: 1.25, mesh: g,
       prompt: () => {
         const on = G.weapon && G.weapon.id === id;
-        return { icon: `<img alt="" src="${itemIconUrl('w:' + id)}">`, verb: on ? 'Weapon range · equipped' : 'Weapon range', title: d.name, desc: d.desc + ' Try it on the practice dummies by the lawns.', action: on ? 'Put away' : 'Try it' };
+        return { icon: `<img alt="" src="${itemIconUrl('w:' + id)}">`, verb: on ? 'Weapon range · equipped' : 'Weapon range', title: d.name, desc: d.desc + (on ? ' Your next run starts with it. Put it away to start with the Zap Blaster.' : ' Try it on the practice dummies, and keep holding it to start your next run with it.'), action: on ? 'Put away' : 'Pick up' };
       },
       use: () => {
-        if (G.weapon && G.weapon.id === id) { G.weapon = null; sfx('door'); toast('Weapon put away', 'Pick any weapon on the plaza ring to try it.'); }
-        else { G.weapon = newWeapon(id); G.weapon.level = RANGE_LEVEL; G.player.fireCd = 0; G.player.charge = 0; setGunLook(); sfx('item'); FX.twinkle(x, 1.2, z, col, 10); toast(`Testing: ${d.name}`, `Lv ${RANGE_LEVEL} trial. Shoot the dummies! Runs still start with the Zap Blaster.`, d.color); }
+        if (G.weapon && G.weapon.id === id) { G.weapon = null; sfx('door'); toast('Weapon put away', 'Runs start with the Zap Blaster. Pick any weapon on the plaza ring to try it.'); }
+        else { G.weapon = newWeapon(id); G.weapon.level = RANGE_LEVEL; G.player.fireCd = 0; G.player.charge = 0; setGunLook(); sfx('item'); FX.twinkle(x, 1.2, z, col, 10); toast(`Testing: ${d.name}`, `Lv ${RANGE_LEVEL} trial on the dummies. Enter a portal holding it to start your run with it (from Lv 1).`, d.color); }
         hideBeams(); computeStats();
       },
       tick: (dt) => {
@@ -9971,11 +10301,16 @@ function buildWeaponRange() {
         glow += ((on ? 1 : 0.15) - glow) * Math.min(1, dt * 6); halo.material.opacity = glow * 0.6; ring.scale.setScalar(1 + glow * 0.15);
       } });
   });
-  const tag = textSprite('Weapon range: walk up and press E', '#ffd34d', 0.42); tag.position.set(RANGE_RING.x, 3.4, RANGE_RING.z - RANGE_RING.r - 0.6); G.roomGroup.add(tag);
+  const tag = textSprite('Weapon range: pick one to start your run with', '#ffd34d', 0.42); tag.position.set(RANGE_RING.x, 3.4, RANGE_RING.z - RANGE_RING.r - 0.6); G.roomGroup.add(tag);
   for (const [x, z] of DUMMY_SPOTS) makeDummy(x, z);
   // signs sit between and above each pair, clear of the DPS plaques
   const lt = textSprite('Practice dummies', '#fff4dc', 0.42); lt.position.set(-12.6, 5.1, 7.6); G.roomGroup.add(lt);
   const rt = textSprite('Practice dummies', '#fff4dc', 0.42); rt.position.set(13.1, 5.1, 6.0); G.roomGroup.add(rt);
+}
+// run-portal prompt line: which weapon the run will start with (the one held from the range, else the Zap Blaster)
+function startWeaponNote() {
+  const id = G.mode === 'hub' && G.weapon && WEAPONS[G.weapon.id] ? G.weapon.id : 'blaster';
+  return `<br><b>Starting weapon: ${WEAPONS[id].name}</b>${id === 'blaster' ? ' <small>(pick another on the weapon range)</small>' : ''}`;
 }
 // a straw practice dummy on a post with a painted target: an entry in G.enemies (so every weapon, homing shot and blast finds it)
 // that damageEnemy routes to dummyHit instead of hurting
@@ -10101,6 +10436,8 @@ function runSync(save = true) {
   const c = LOG.cur; if (!c) return;
   try {
     c.reached = reachedLabel(); c.kills = G.kills; c.hits = G.runStats ? G.runStats.hits : 0; c.secs = Math.round((performance.now() - c.t0) / 1000);
+    // play time (pauses, menus, cards and intros excluded), the clock shown in the HUD and on the results screens
+    if (G.runStats) c.play = Math.round(G.runStats.time || 0);
     c.build = buildInfo(); c.errors = LOG.errs - c.e0;
     const rec = Object.assign({}, c); delete rec.t0; delete rec.e0;
     const i = HIST.runs.findIndex(r => r.id === c.id);
@@ -10397,7 +10734,7 @@ function logbookHTML(tab) {
   if (tab === 'runs') return HIST.runs.length ? HIST.runs.map(r => {
     const tone = r.outcome === 'cleared' ? 'good' : r.outcome === 'knocked out' ? 'bad' : '';
     return `<div class="lb-item"><div class="lb-top"><b>${runModeName(r.mode)} · ${escHtml(r.reached || 'L' + r.from)}</b><span class="lb-tag ${tone}">${escHtml(r.outcome)}</span>${r.errors ? `<span class="lb-tag err">${r.errors} error${r.errors > 1 ? 's' : ''}</span>` : ''}<time>${when(r.start)}</time></div>
-      <div class="lb-line">${escHtml(r.diff)} · ${fmtSecs(r.secs || 0)} · ${r.kills || 0} KOs · ${r.hits || 0} hits · ${r.isles || 0} isles${r.clears && r.clears.length ? ' · cleared ' + escHtml(r.clears.join(', ')) : ''}${r.cause ? ' · by ' + escHtml(r.cause) : ''}</div>
+      <div class="lb-line">${escHtml(r.diff)} · ${r.play != null ? `played ${fmtTime(r.play * 1000)} (${fmtSecs(r.secs || 0)} total)` : fmtSecs(r.secs || 0)} · ${r.kills || 0} KOs · ${r.hits || 0} hits · ${r.isles || 0} isles${r.clears && r.clears.length ? ' · cleared ' + escHtml(r.clears.join(', ')) : ''}${r.cause ? ' · by ' + escHtml(r.cause) : ''}</div>
       ${r.bosses && r.bosses.length ? `<div class="lb-line">Bosses: ${escHtml(r.bosses.join(', '))}</div>` : ''}<div class="lb-line">${escHtml(buildText(r.build))}</div></div>`;
   }).join('') : empty('No runs yet. Jump through a portal to start one.');
   if (tab === 'issues') return HIST.issues.length ? HIST.issues.map(i => `<div class="lb-item"><div class="lb-top"><span class="lb-tag ${i.kind === 'error' ? 'err' : ''}">${escHtml(i.kind)}</span><b>${escHtml(i.where)}</b><time>${when(i.at)}</time></div><div class="lb-line">${escHtml(i.msg)}${i.how ? ` <em>(${escHtml(i.how.join(', '))})</em>` : ''}</div></div>`).join('')
@@ -10405,7 +10742,7 @@ function logbookHTML(tab) {
   return LOG.ev.length ? `<pre class="lb-log">${escHtml(LOG.ev.slice().reverse().map(logLine).join('\n'))}</pre>` : empty('Nothing logged yet this session.');
 }
 function historyText() {
-  const runs = HIST.runs.map(r => `${r.start} ${runModeName(r.mode)} ${r.diff} from L${r.from} -> ${r.reached} · ${r.outcome}${r.cause ? ' by ' + r.cause : ''} · ${fmtSecs(r.secs || 0)} · ${r.kills} KOs · ${r.hits} hits · ${r.isles} isles · errors ${r.errors}${r.bosses && r.bosses.length ? ' · bosses ' + r.bosses.join(', ') : ''} · ${buildText(r.build)} · v${r.v}`);
+  const runs = HIST.runs.map(r => `${r.start} ${runModeName(r.mode)} ${r.diff} from L${r.from} -> ${r.reached} · ${r.outcome}${r.cause ? ' by ' + r.cause : ''} · ${fmtSecs(r.secs || 0)}${r.play != null ? ' (play ' + fmtTime(r.play * 1000) + ')' : ''} · ${r.kills} KOs · ${r.hits} hits · ${r.isles} isles · errors ${r.errors}${r.bosses && r.bosses.length ? ' · bosses ' + r.bosses.join(', ') : ''} · ${buildText(r.build)} · v${r.v}`);
   const iss = HIST.issues.map(i => `${i.at} [${i.kind}] ${i.where}: ${i.msg}${i.how ? ' (' + i.how.join(', ') + ')' : ''} · v${i.v}`);
   const env = envInfo();
   return `${GAME_MANIFEST.name} logbook · v${GAME_MANIFEST.version} · ${new Date().toISOString()}\n${env.ua} · ${env.view} @${env.dpr}x · ${env.gpu}\n\n=== Runs (newest first) ===\n${runs.join('\n') || '(none)'}\n\n=== Issues ===\n${iss.join('\n') || '(none)'}\n\n=== This session's log ===\n${LOG.ev.map(logLine).join('\n') || '(empty)'}`;
@@ -10455,9 +10792,10 @@ function updateWeaponHUD() {
   const w = G.weapon; if (!w) return;
   const d = WEAPONS[w.id], need = xpNeed(w.level);
   $('#wIcon').src = itemIconUrl('w:' + w.id);
-  $('#wName').textContent = d.name; $('#wLvl').textContent = `Lv ${w.level}`;
+  // at WEAPON_MAX_LV the bar fills toward the next bonus bone / gold instead (gainXP)
+  $('#wName').textContent = d.name; $('#wLvl').textContent = weaponMaxed(w) ? `Lv ${w.level} MAX` : `Lv ${w.level}`;
   $('#wXp').style.width = Math.min(100, w.xp / need * 100) + '%';
-  $('#wAff').innerHTML = Object.entries(w.aff).map(([t, n]) => `<span style="background:${AFFIXES[t].color}" title="${AFFIXES[t].name} Lv ${n}: ${affixText(t, w.id)}">${AFFIXES[t].name.slice(0, 3)}${n > 1 ? n : ''}</span>`).join('');
+  $('#wAff').innerHTML = Object.entries(w.aff).map(([t, n]) => `<span style="background:${AFFIXES[t].color}" title="${AFFIXES[t].name} Lv ${n}${n >= AFF_MAX ? ' (MAX)' : ''}: ${affixText(t, w.id)}">${AFFIXES[t].name.slice(0, 3)}${n >= AFF_MAX ? '★' : n > 1 ? n : ''}</span>`).join('');
   updateUpPill();
 }
 // bottom-left "Upgrades" pill: slot counts for the weapon and Schiffy; opens the upgrades panel (the bag, Tab).
@@ -10562,13 +10900,14 @@ function drawBigMap() {
   }
 }
 // Upgrade cards shared by the upgrades panel and the swap prompt: weapon upgrades (affixes) and Schiffy's passives (gadgets)
-const lvTag = n => `<em class="lv">Lv ${n}</em>`;
+// max: the level cap for this kind (AFF_MAX / GADGET_MAX); at the cap the tag reads "Lv n · MAX"
+const lvTag = (n, max) => `<em class="lv${max && n >= max ? ' max' : ''}">Lv ${n}${max && n >= max ? ' · MAX' : ''}</em>`;
 function affCardHTML(t, n, attrs = '') {
-  return `<div class="invitem aff" style="--c:${AFFIXES[t].color}" ${attrs}><i class="affico">${affixIcon(t)}</i><div><b>${AFFIXES[t].name}</b><span>${affixText(t, G.weapon.id)}</span></div>${lvTag(n)}</div>`;
+  return `<div class="invitem aff" style="--c:${AFFIXES[t].color}" ${attrs}><i class="affico">${affixIcon(t)}</i><div><b>${AFFIXES[t].name}</b><span>${affixText(t, G.weapon.id)}</span></div>${lvTag(n, AFF_MAX)}</div>`;
 }
 function gadgetCardHTML(k, n, attrs = '') {
   const it = ITEMS[k];
-  return `<div class="invitem r-${it.r}" ${attrs}><img alt="" src="${itemIconUrl(k)}"><div><b>${it.name}</b><span>${it.desc}${it.curse ? `<br><i class="curse">Curse: ${it.curse}</i>` : ''}</span></div>${lvTag(n)}</div>`;
+  return `<div class="invitem r-${it.r}" ${attrs}><img alt="" src="${itemIconUrl(k)}"><div><b>${it.name}</b><span>${it.desc}${it.curse ? `<br><i class="curse">Curse: ${it.curse}</i>` : ''}</span></div>${lvTag(n, GADGET_MAX)}</div>`;
 }
 const affCardsHTML = () => G.weapon ? Object.entries(G.weapon.aff).map(([t, n]) => affCardHTML(t, n)).join('') : '';
 const gadgetCardsHTML = () => G.itemOrder.map(k => gadgetCardHTML(k, G.items[k])).join('');
@@ -10582,7 +10921,7 @@ function renderInv() {
     `<span class="pill">${KEY_TAG}${G.keys} key${G.keys === 1 ? '' : 's'}</span>` +
     `<span class="pill"><span class="bombico"></span>${G.bombs} grenade${G.bombs === 1 ? '' : 's'}</span>` +
     `<span class="pill">${document.querySelector('#hud .skull').outerHTML}${G.kills} knockouts</span>`;
-  $('#invWeapon').innerHTML = `<img alt="" src="${itemIconUrl('w:' + w.id)}"><div><b>${WEAPONS[w.id].name} · Lv ${w.level}</b><span>${WEAPONS[w.id].desc}</span></div>`;
+  $('#invWeapon').innerHTML = `<img alt="" src="${itemIconUrl('w:' + w.id)}"><div><b>${WEAPONS[w.id].name} · Lv ${w.level}${weaponMaxed(w) ? ' · MAX' : ''}</b><span>${WEAPONS[w.id].desc}</span></div>`;
   $('#invWCount').textContent = `${affCount(w)}/${WEAPON_SLOTS}`;
   $('#invCount').textContent = `${G.itemOrder.length}/${GADGET_SLOTS}`;
   $('#invAff').innerHTML = affCardsHTML() || '<div class="invempty">No weapon upgrades yet. Defeat enemies to level up your weapon, then pick one.</div>';
@@ -10597,6 +10936,7 @@ function renderInv() {
     ['Run speed', st.speed.toFixed(1), st.speed > 7.41], ['Air jumps', st.airJumps, st.airJumps > 0], ['Dash recharge', `${st.dashCd.toFixed(2)}s`, st.dashCd < 0.849],
     ['Buddy drones', st.drones || '—', st.drones > 0], ['Orbiting snacks', st.orbit || '—', st.orbit > 0], ['Bubble shield', st.shield || '—', st.shield > 0],
     ['Static hoop', st.halo ? `×${st.halo}` : '—', st.halo > 0], ['Loot luck', st.luck ? `+${st.luck}` : '—', st.luck > 0],
+    ['Dash distance', `${Math.round((st.dashLen || 1) * 100)}%`, st.dashLen > 1], ['Pet bonuses', `${petBonusIds().length}/${Object.keys(PETS).length}`, petBonusIds().length > 0],
   ];
   $('#invStats').innerHTML = rows.map(([k, v, up]) => `<dt>${k}</dt><dd class="${up ? 'up' : ''}">${v}</dd>`).join('');
 }
@@ -10638,7 +10978,7 @@ function openCards() {
     const have = w.aff[t] || 0, pips = Array.from({ length: Math.min(have, 5) }, () => '<i></i>').join('') + '<i class="next"></i>';
     const badge = have ? '' : full ? '<em class="new swap">Swap</em>' : '<em class="new">New</em>';
     return `<button class="upcard" type="button" data-card="${t}" style="--c:${AFFIXES[t].color};--i:${i}"><kbd>${i + 1}</kbd>${badge}` +
-      `<div class="ico">${affixIcon(t)}</div><b>${AFFIXES[t].name}</b><em class="lvline">${have ? `Lv ${have} → <b>Lv ${have + 1}</b>` : full ? 'Lv 1 · replaces one' : 'Lv 1'}</em>` +
+      `<div class="ico">${affixIcon(t)}</div><b>${AFFIXES[t].name}</b><em class="lvline">${have ? `Lv ${have} → <b>Lv ${have + 1}${have + 1 >= AFF_MAX ? ' MAX' : ''}</b>` : full ? 'Lv 1 · replaces one' : 'Lv 1'}</em>` +
       `<span>${affixText(t, w.id)}</span><div class="pips" title="Lv ${have}">${pips}</div></button>`;
   }).join('');
   const v = $('#cardView'); v.hidden = false;
@@ -10755,16 +11095,19 @@ function togglePause() {
 }
 function itemListHTML() {
   const w = G.weapon;
-  const wl = w ? `<div class="it"><img alt="" src="${itemIconUrl('w:' + w.id)}" style="width:40px;height:40px"><div><b>${WEAPONS[w.id].name} · Lv ${w.level}</b><span>${WEAPONS[w.id].desc}</span></div></div>` : '';
+  const wl = w ? `<div class="it"><img alt="" src="${itemIconUrl('w:' + w.id)}" style="width:40px;height:40px"><div><b>${WEAPONS[w.id].name} · Lv ${w.level}${weaponMaxed(w) ? ' · MAX' : ''}</b><span>${WEAPONS[w.id].desc}</span></div></div>` : '';
   // two sections: the weapon's upgrades, then Schiffy's passives (gadgets)
   const aff = w ? Object.entries(w.aff) : [];
   const ws = `<h4 class="ilsec">Weapon upgrades <span>${aff.length}/${WEAPON_SLOTS}</span></h4>` + (aff.length
-    ? aff.map(([t, n]) => `<div class="it aff" style="--c:${AFFIXES[t].color}"><i class="affico">${affixIcon(t)}</i><div><b>${AFFIXES[t].name} <em class="lv">Lv ${n}</em></b><span>${affixText(t, w.id)}</span></div></div>`).join('')
+    ? aff.map(([t, n]) => `<div class="it aff" style="--c:${AFFIXES[t].color}"><i class="affico">${affixIcon(t)}</i><div><b>${AFFIXES[t].name} ${lvTag(n, AFF_MAX)}</b><span>${affixText(t, w.id)}</span></div></div>`).join('')
     : '<p>No weapon upgrades yet. Level your weapon up by defeating enemies.</p>');
   const gs = `<h4 class="ilsec">Schiffy's passives <span>${G.itemOrder.length}/${GADGET_SLOTS}</span></h4>` + (G.itemOrder.length
-    ? G.itemOrder.map(i => `<div class="it"><img alt="" src="${itemIconUrl(i)}" style="width:40px;height:40px"><div><b>${ITEMS[i].name} <em class="lv">Lv ${G.items[i]}</em></b><span>${ITEMS[i].desc}${ITEMS[i].curse ? ' · Curse: ' + ITEMS[i].curse : ''}</span></div></div>`).join('')
+    ? G.itemOrder.map(i => `<div class="it"><img alt="" src="${itemIconUrl(i)}" style="width:40px;height:40px"><div><b>${ITEMS[i].name} ${lvTag(G.items[i], GADGET_MAX)}</b><span>${ITEMS[i].desc}${ITEMS[i].curse ? ' · Curse: ' + ITEMS[i].curse : ''}</span></div></div>`).join('')
     : '<p>No passives yet. Clear isles and find the cache.</p>');
-  return wl + ws + gs;
+  // collected pets' permanent run bonuses (65-pets)
+  const pb = petBonusIds();
+  const ps = pb.length ? `<h4 class="ilsec">Pet bonuses <span>${pb.length}/${Object.keys(PETS).length}</span></h4><p>${pb.map(id => `${PETS[id].name}: ${petBonusText(id)}`).join(' · ')}</p>` : '';
+  return wl + ws + gs + ps;
 }
 function gameOver() {
   G.state = 'over'; hideBeams();
@@ -10772,9 +11115,13 @@ function gameOver() {
   G.player.mesh.visible = false;
   const total = Object.values(G.items).reduce((a, b) => a + b, 0);
   const reached = G.run === 'rush' ? `Boss ${G.rush + 1}/${RUSH.length}` : G.run === 'endless' ? `Depth ${depth()}` : `L${G.level}-${Math.min(G.sector, 5)}`;
-  recordModeBest();   // 77-modes: Endless depth / Boss Rush bosses beaten
-  $('#againBtn').innerHTML = G.run === 'rush' ? 'Try again <small>Boss Rush from the top</small>' : G.run === 'endless' ? 'Try again <small>A fresh Endless run</small>' : 'Try again <small>Same level, new sky</small>';
-  $('#overStats').innerHTML = `<div><span>Reached</span><b>${reached}</b></div><div><span>Knockouts</span><b>${G.kills}</b></div><div><span>Gadgets</span><b>${total}</b></div><div><span>Weapon</span><b>Lv ${G.weapon ? G.weapon.level : 1}</b></div>`;
+  // 77-modes: Endless depth / Boss Rush bosses beaten, plus this run's entry on the Records board
+  const rec = recordModeBest();
+  const swName = WEAPONS[G.startWeapon] ? ` · ${WEAPONS[G.startWeapon].name}` : '';
+  $('#againBtn').innerHTML = (G.run === 'rush' ? 'Try again <small>Boss Rush from the top' : G.run === 'endless' ? 'Try again <small>A fresh Endless run' : 'Try again <small>Same level, new sky') + swName + '</small>';
+  $('#overStats').innerHTML = `<div><span>Reached</span><b>${reached}</b></div><div><span>Knockouts</span><b>${G.kills}</b></div><div><span>Play time</span><b>${fmtTime(playMs())}</b></div><div><span>Gadgets</span><b>${total}</b></div><div><span>Weapon</span><b>Lv ${G.weapon ? G.weapon.level : 1}</b></div>`;
+  $('#overRecords').innerHTML = recordsResultHTML(rec);
+  $('#overRecords').hidden = !(G.run === 'endless' || G.run === 'rush');
   $('#overItems').innerHTML = itemListHTML();
   $('#overPet').textContent = G.pet ? `${PETS[G.pet.species].name} wandered home. Finish a level with a pet to collect it.` : '';
   $('#bossbar').hidden = true; setPrompt(null);
@@ -10784,8 +11131,9 @@ function gameOver() {
 function setSound(on) { muted = !on; SAVE.sound = on; writeSave(); $('#muteLbl').textContent = on ? 'On' : 'Off'; }
 // buttons
 $('#againBtn').addEventListener('click', () => {
-  const lvl = G.level, run = G.run; $('#over').hidden = true; resetActors(); G.player = makePlayer(); G.players = [G.player];
-  if (run === 'story') startStory(SAVE.unlocked >= lvl ? lvl : 1); else startStory(1, run);
+  const lvl = G.level, run = G.run, sw = G.startWeapon; $('#over').hidden = true; resetActors(); G.player = makePlayer(); G.players = [G.player];
+  // same starting weapon as the run that just ended
+  if (run === 'story') startStory(SAVE.unlocked >= lvl ? lvl : 1, 'story', sw); else startStory(1, run, sw);
 });
 $('#titleBtn').addEventListener('click', goHome);
 $('#resumeBtn').addEventListener('click', togglePause);
@@ -10849,8 +11197,19 @@ function guard(fn, dt, name) {
 // (looked up by name every frame, so debug wrappers such as the playtest recorder's still apply)
 const STORY_STEPS = [['bullets', dt => updateBullets(dt)], ['enemies', dt => updateEnemies(dt)], ['eBullets', dt => updateEBullets(dt)], ['hazards', dt => updateHazards(dt)],
   ['traps', dt => updateTraps(dt)], ['tidePools', dt => updateTidePools(dt)], ['snow', dt => updateSnow(dt)], ['pickups', dt => updatePickups(dt)], ['fx', dt => updateFx(dt)], ['decals', dt => updateDecals(dt)]];
+// run play-time clock: frame() hands update() the real (unwarped) frame time, so hitstop / slow-mo still count as play time;
+// manual stepping (tests: update(1/60)) falls back to dt. Only runs reach here in 'story' mode, and update() only runs in play.
+let playDt = null;
+function tickRunClock(dt) {
+  const rs = G.runStats, real = playDt != null ? playDt : dt; playDt = null;
+  if (G.mode !== 'story' || !rs) return;
+  rs.time = (rs.time || 0) + real;
+  const el = $('#runTimer'), s = Math.floor(rs.time);
+  if (el && el.dataset.s !== String(s)) { el.dataset.s = s; el.querySelector('b').textContent = fmtTime(s * 1000); }
+}
 function update(dt) {
   G.transit -= dt;
+  tickRunClock(dt);
   guard(updatePlayer, dt); guard(updateDrones, dt); guard(updatePet, dt); guard(updatePuppy, dt);
   if (G.mode === 'story') {
     for (const [name, f] of STORY_STEPS) guard(f, dt, name);
@@ -10877,6 +11236,16 @@ function update(dt) {
     if (G.pendingCards > 0 && G.state === 'play') openCards();
     // level cleared screen after the final boss: only counts down during play, so it waits behind any open card or menu
     if (G.doneT > 0 && G.state === 'play') { G.doneT -= dt; if (G.doneT <= 0) levelComplete(); }
+    // run start: list the collected pets' bonuses once the level toast has had its moment (set in startStory)
+    if (G.petToastT > 0) { G.petToastT -= dt; if (G.petToastT <= 0) toast('Pet bonuses', petBonusSummary(), '#ff9fb8'); }
+    // Endless: a new loop's extra pressure (set in continueStory, knobs in ENDLESS, 15-state)
+    if (G.loopToastT > 0) {
+      G.loopToastT -= dt;
+      if (G.loopToastT <= 0) {
+        if (endlessDoubleHit() > 0) toast('The sky grows wild', 'Hits may cost 2 bones', '#ff8f8f');
+        else toast('The sky stirs', 'More enemies, quicker shots, more elites', '#5fe8d8');
+      }
+    }
   }
   updateBossBar(); updateHUD(false);
 }
@@ -10885,7 +11254,8 @@ function frame(now) {
   const rawMs = now - last, rdt = Math.min(0.033, rawMs / 1000); let dt = rdt; last = now;
   G.time += dt;
   logFrame(rawMs);
-  if (G.state === 'play') { dt *= timeWarp(rdt); update(dt); }   // hitstop / boss-kill slow-mo (68-juice)
+  // hitstop / boss-kill slow-mo (68-juice); playDt = real frame time for the run clock (capped so a backgrounded tab adds little)
+  if (G.state === 'play') { dt *= timeWarp(rdt); playDt = Math.min(0.25, Math.max(0, rawMs / 1000)); update(dt); }
   else if (G.state === 'intro') updateBossIntro(dt);
   else if (G.state === 'scope') updateScope(dt);       // looking through the lookout telescope   // the world is frozen while a boss makes its entrance
   else if (G.state === 'over') { updateEnemies(dt * 0.3); updateEBullets(dt * 0.3); }
