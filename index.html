@@ -1,4 +1,7 @@
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>Schiffy Sky Patrol</title>
 <meta name="description" content="Schiffy Sky Patrol, a toon 3D roguelike shooter on floating sky isles.">
 
@@ -507,6 +510,83 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 .recnote { margin: 0; font-weight: 700; font-size: 12px; color: var(--navy-soft); }
 #overRecords .recboard, #doneRecords .recboard { max-height: 30vh; overflow: auto; }
 @media (prefers-reduced-motion: reduce) { .recpb { animation: none; } }
+
+/* ---------- touch controls (85-touch): floating twin sticks + a thumb cluster of round buttons on the right ---------- */
+#app.touch { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+#app.touch textarea { -webkit-user-select: text; user-select: text; }
+#touchUI { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+.tstick { position: absolute; left: 0; top: 0; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%;
+  border: 3px solid rgba(38,49,92,.45); background: rgba(255,244,220,.18); opacity: .5; transition: opacity .15s; }
+.tstick i { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%;
+  background: var(--cream); border: 3px solid var(--navy); box-shadow: 0 3px 0 var(--navy); }
+.tstick span { position: absolute; left: 50%; top: 100%; transform: translateX(-50%); margin-top: 6px; white-space: nowrap;
+  font: 400 13px var(--display); letter-spacing: .04em; color: var(--cream); text-shadow: 0 2px 0 var(--navy), 0 0 6px rgba(38,49,92,.6); }
+.tstick.live { opacity: 1; background: rgba(255,244,220,.28); }
+.tstick.live span { display: none; }
+.tstick.aim i { background: #ffd6de; }
+.tstick.aim.firing i { background: var(--berry); box-shadow: 0 3px 0 var(--navy), 0 0 0 4px rgba(255,107,154,.35); }
+.tbtns { position: absolute; right: calc(env(safe-area-inset-right, 0px) + 14px); bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); width: 170px; height: 236px; }
+.tbtn { position: absolute; pointer-events: auto; touch-action: none; width: 62px; height: 62px; border-radius: 50%; padding: 0;
+  border: 3px solid var(--navy); background: var(--cream); box-shadow: 0 4px 0 var(--navy); font: 400 15px/1 var(--display); letter-spacing: .02em; color: var(--navy);
+  display: flex; align-items: center; justify-content: center; gap: 3px; text-align: center; }
+.tbtn.down { transform: translateY(3px); box-shadow: 0 1px 0 var(--navy); background: var(--sun); }
+.tbtn[data-t="jump"] { right: 0; bottom: 0; width: 80px; height: 80px; font-size: 18px; background: #c9f7b5; }
+.tbtn[data-t="dash"] { right: 92px; bottom: 4px; background: #bfe6ff; }
+.tbtn[data-t="bomb"] { right: 98px; bottom: 80px; }
+.tbtn[data-t="bomb"] b { font: 400 16px var(--display); }
+.tbtn[data-t="bomb"].empty { opacity: .45; }
+.tbtn.use { right: 0; bottom: 94px; width: auto; min-width: 74px; height: 54px; border-radius: 999px; padding: 0 12px; background: var(--sun); animation: abPulse 1s ease-in-out infinite; }
+.tbtn.alt { right: 0; bottom: 160px; width: auto; min-width: 74px; height: 44px; border-radius: 999px; padding: 0 12px; font-size: 13px; background: #bfe6ff; }
+#touchUI.scope .tstick, #touchUI.scope .tbtn:not(.use) { display: none; }
+/* HUD changes while touch is on: weapon panel to bottom centre, tappable Bark dial and prompt card, no keyboard hints */
+.touch .corner.br { right: auto; left: 50%; transform: translateX(-50%) scale(.8); transform-origin: bottom center; }
+.touch #ability { pointer-events: auto; touch-action: none; width: 58px; height: 58px; }
+.touch #ability b { font-size: 0; }
+.touch #ability b::after { content: "Bark"; font-size: 14px; }
+.touch #upPill { margin-top: 2px; }
+.touch .uppill kbd, .touch .uppill .upsep { display: none; }
+.touch #prompt { bottom: calc(env(safe-area-inset-bottom, 0px) + 96px); width: min(360px, calc(100% - 380px)); min-width: min(280px, calc(100% - 32px));
+  grid-template-columns: 44px minmax(0, 1fr); gap: 9px; padding: 8px 12px 8px 9px; border-width: 3px; border-radius: 18px; }
+.touch #prompt .ico { width: 44px; height: 44px; border-radius: 12px; }
+.touch #prompt .ico img, .touch #prompt .ico svg { width: 38px; height: 38px; }
+.touch #prompt .body { gap: 2px; }
+.touch #prompt .title { font-size: 18px; }
+.touch #prompt .desc { font-size: 12px; line-height: 1.25; }
+.touch #prompt .foot { margin-top: 2px; }
+.touch #prompt .foot:not(:has(.cost)) { display: none; }
+.touch #prompt .cost { font-size: 14px; padding: 0 10px 0 6px; }
+.touch #prompt .act { display: none; }   /* the Use / alt buttons in the thumb cluster carry these */
+#rotateHint { position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 40%); transform: translateX(-50%); z-index: 6; width: min(300px, calc(100% - 32px));
+  display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; background: var(--cream); border: 4px solid var(--navy); border-radius: 20px;
+  box-shadow: 0 6px 0 var(--navy); padding: 14px 16px; }
+#rotateHint b { font: 400 22px var(--display); }
+#rotateHint span { font-weight: 800; font-size: 14px; color: var(--navy-soft); }
+/* short screens (phones held sideways): shrink the corner HUD so the play area stays open */
+@media (max-height: 520px) {
+  .corner.tl { transform: scale(.74); transform-origin: top left; }
+  .corner.tr { transform: scale(.74); transform-origin: top right; }
+  .corner.br { transform: scale(.8); transform-origin: bottom right; }
+  .touch .corner.br { transform: translateX(-50%) scale(.66); transform-origin: bottom center; }
+  .hubbar { transform: scale(.8); transform-origin: top right; }
+  #bossbar { width: min(440px, 42vw); }
+  .touch #prompt { bottom: calc(env(safe-area-inset-bottom, 0px) + 70px); }
+  #hubLogo { transform: scale(.7); transform-origin: top left; top: 8vh; }
+  #hubLogo.gone { transform: scale(.7) translateY(-14px); }
+  #pause .logo, #over .logo { font-size: 38px !important; }
+  .menu { gap: 9px; }
+  .screen { padding-block: 12px; }
+}
+/* narrow (portrait) phones: a smaller thumb cluster */
+@media (max-width: 520px) {
+  .tbtns { transform: scale(.85); transform-origin: bottom right; }
+  .touch #prompt { width: calc(100% - 32px); bottom: calc(env(safe-area-inset-bottom, 0px) + 230px); }
+  .corner.tl { transform: scale(.66); transform-origin: top left; left: 10px; }
+  .corner.tr { transform: scale(.66); transform-origin: top right; right: 10px; }
+  .touch .corner.br { left: 10px; right: auto; transform: scale(.7); transform-origin: bottom left; }
+  .touch .corner.br .winfo { width: 104px; }
+  .touch .corner.br .waff { display: none; }
+  .corner.tr > .row { flex-direction: column; align-items: flex-end; }
+}
 </style>
 
 <div id="app">
@@ -1448,8 +1528,16 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => keys.delete(e.code));
 window.addEventListener('blur', () => { keys.clear(); mouse.down = false; });
-window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; if (G.state === 'play') mouse.active = true; });
+// touch sticks and buttons (85-touch) write here; updatePlayer reads it. touchT stamps the last finger so the
+// browser's emulated mouse events after a tap can't grab the aim or pull the trigger.
+const TOUCH = { on: false, mx: 0, mz: 0, fire: false, ax: 0, az: 0, move: null, aim: null };
+let touchT = -1e9;
+const fromTouch = () => performance.now() - touchT < 900;
+const ctl = (mouseTxt, touchTxt) => TOUCH.on ? touchTxt : mouseTxt;   // control hints in game text
+window.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse') { touchT = performance.now(); initAudio(); } }, true);
+window.addEventListener('mousemove', e => { if (fromTouch()) return; mouse.x = e.clientX; mouse.y = e.clientY; if (G.state === 'play') mouse.active = true; });
 canvas.addEventListener('mousedown', e => {
+  if (fromTouch()) return;
   initAudio();
   if (e.button === 0) { mouse.down = true; mouse.active = true; }
   if (e.button === 2 && G.state === 'play') G.throwQueued = true; // right-click throws a grenade
@@ -1458,7 +1546,6 @@ window.addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 // mouse wheel zooms the camera in or out a little
 canvas.addEventListener('wheel', e => { e.preventDefault(); G.zoom = clamp(G.zoom * (e.deltaY > 0 ? 1.07 : 0.935), 0.72, 1.35); }, { passive: false });
-const isTouch = false; // mouse and keyboard only for now
 const raycaster = new THREE.Raycaster(), aimPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -1), aimHit = new THREE.Vector3(), ndc = new THREE.Vector2();
 function mouseGround(yLevel) {
   const r = canvas.getBoundingClientRect();
@@ -2435,7 +2522,8 @@ function buildIsland(room) {
     if (room.type === 'final') grp.add(arenaRing(7.6 * ISLE_K, Math.round(44 * ISLE_K), th, true));
   }
   if (room.type === 'start' && G.level === 1 && G.sector === 1 && !G.loop) {
-    const s = textSprite('WASD move · Mouse aim + click · Space jump · Shift dash · Right-click grenade · Q bark', '#fff4dc', 0.36); s.position.set(0, 3.2, -4); grp.add(s);
+    const s = textSprite(ctl('WASD move · Mouse aim + click · Space jump · Shift dash · Right-click grenade · Q bark',
+      'Left thumb moves · Right thumb aims and fires · Tap Bark when the dial glows'), '#fff4dc', 0.36); s.position.set(0, 3.2, -4); grp.add(s);
   }
   shadows(grp, true, true);
   under.traverse(n => { n.castShadow = false; });
@@ -3173,7 +3261,7 @@ function addCrackTell(room, g, th) {
   let glintT = rand(1, 2.5), moteT = 0, knock = 0;
   addInteractable({ x: cx, z: cz, r: CRACK_NEAR, crackFence: true, when: () => !sec.open,
     prompt: () => ({ icon: crackIcon(), verb: 'Something\'s off', title: 'Cracked fence',
-      desc: `Fresh splinters, and a draught blowing through the gap. A grenade might break it: <b>right-click</b> to throw one (you have ${G.bombs}).`, action: 'Knock' }),
+      desc: `Fresh splinters, and a draught blowing through the gap. A grenade might break it: ${ctl('<b>right-click</b>', 'tap the <b>grenade button</b>')} to throw one (you have ${G.bombs}).`, action: 'Knock' }),
     use: () => {
       knock = 1; sfx('thump');
       const [x, z] = W(0.2, -0.3); FX.dust(x, 0.3, z, biome === 'peaks' ? 0xffffff : 0xe8d8b8, 6);
@@ -3828,6 +3916,7 @@ function updatePlayer(dt) {
   if (p.falling > 0) { updateFalling(p, dt); return; }
   let mx = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
   let mz = (keys.has('KeyS') ? 1 : 0) - (keys.has('KeyW') ? 1 : 0);
+  if (TOUCH.on) { mx += TOUCH.mx; mz += TOUCH.mz; }   // analog left stick (85-touch)
   const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
   const jumpHeld = keys.has('Space'), jumpP = pressed('Space');
   const dashP = pressed('ShiftLeft') || pressed('ShiftRight');
@@ -3835,8 +3924,10 @@ function updatePlayer(dt) {
 
   let firing = false;
   const ax = (keys.has('ArrowRight') ? 1 : 0) - (keys.has('ArrowLeft') ? 1 : 0), az = (keys.has('ArrowDown') ? 1 : 0) - (keys.has('ArrowUp') ? 1 : 0);
-  if (ax || az) { const l = Math.hypot(ax, az); p.aimX = ax / l; p.aimZ = az / l; firing = true; }
-  else if (mouse.active) {
+  const ta = TOUCH.on ? touchAim(p) : null;   // right stick: aims and fires while held
+  if (ta) { p.aimX = ta[0]; p.aimZ = ta[1]; firing = true; }
+  else if (ax || az) { const l = Math.hypot(ax, az); p.aimX = ax / l; p.aimZ = az / l; firing = true; }
+  else if (mouse.active && !TOUCH.on) {
     const h = mouseGround(p.y + 1.0);
     if (h) { const dx = h.x - p.x, dz = h.z - p.z, l = Math.hypot(dx, dz); if (l > 0.2) { p.aimX = dx / l; p.aimZ = dz / l; } }
     firing = mouse.down;
@@ -7430,7 +7521,7 @@ function giveItem(k) {
   const p = G.player;
   if (k === 'heal') { p.hp = p.maxHp; sfx('heart'); toast('Good snack!', 'Bones restored'); updateHUD(true); return; }
   if (k === 'key') { G.keys++; sfx('clear'); toast('Brass Key', 'Opens one chest or vault gate'); updateHUD(true); return; }
-  if (k === 'bombs') { G.bombs += 2; sfx('clear'); toast('Grenade Pack', '+2 grenades. Right-click to throw'); updateHUD(true); return; }
+  if (k === 'bombs') { G.bombs += 2; sfx('clear'); toast('Grenade Pack', '+2 grenades. ' + ctl('Right-click', 'Tap the grenade button') + ' to throw'); updateHUD(true); return; }
   if (isWeaponItem(k)) { takeWeapon(k.slice(2)); updateHUD(true); return; }
   // already at GADGET_MAX: nothing to stack, so it turns into weapon XP like a salvage (pedestals block this before it gets here)
   if (gadgetMaxed(k)) {
@@ -7550,6 +7641,7 @@ function setPrompt(opts) {
       (opts.desc ? `<div class="desc">${opts.desc}</div>` : '') + (opts.curse ? `<div class="desc curse">Curse: ${opts.curse}</div>` : '') +
       `<div class="foot">${cost}<span class="act"><kbd>E</kbd>${opts.action}</span>` +
       (opts.alt ? `<span class="act alt"><kbd>${opts.alt.key}</kbd>${opts.alt.label}</span>` : '') + `</div></div>`;
+    el.dataset.act = opts.action; el.dataset.alt = opts.alt ? opts.alt.key + '|' + opts.alt.label : '';   // the touch Use buttons read these
     if (fresh) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
   }
   el.hidden = false;
@@ -11074,6 +11166,195 @@ function updateBossBar() {
   if (!b) { bar.hidden = true; return; }
   bar.hidden = false; $('#bossname').textContent = b.mini ? `Rival ${b.name}` : b.name; $('#bossfill').style.width = Math.max(0, b.hp / b.maxHp * 100) + '%';
 }
+// ---------- touch controls (phones first) ----------
+// Twin sticks: a floating move stick anywhere on the left of the screen, a floating aim stick on the right that fires while
+// held (hold without dragging = fire at the nearest enemy). Buttons on the right edge: Jump, Dash, Grenade, Bark, and Use
+// (labelled with the prompt's verb) plus the prompt's alt action (Salvage). The prompt card stays click-through so it
+// never blocks a thumb landing on a stick. Touch mode switches on with the first finger
+// (or a coarse pointer at load) and off again when a real mouse clicks, so touchscreen laptops keep both.
+// The sticks write TOUCH (10-renderer); updatePlayer reads it. Buttons feed the same keys/pressedSet the keyboard does.
+const STICK_R = 54;
+const TUI = {};
+function touchAim(p) {
+  if (!TOUCH.fire) return null;
+  const R = 15;
+  if (!TOUCH.ax && !TOUCH.az) {
+    const e = nearestEnemy(p.x, p.z, R);
+    if (!e) return [p.aimX, p.aimZ];
+    const dx = e.x - p.x, dz = e.z - p.z, l = Math.hypot(dx, dz) || 1;
+    return [dx / l, dz / l];
+  }
+  // light aim assist: snap to the enemy closest to the stick's line, within ~14 degrees
+  let best = null, bc = Math.cos(0.25);
+  for (const e of G.enemies) {
+    if (e.spawnT > 0 || e.dead) continue;
+    const ex = e.x - p.x, ez = e.z - p.z, l = Math.hypot(ex, ez);
+    if (l < 0.5 || l > R) continue;
+    const c = (ex * TOUCH.ax + ez * TOUCH.az) / l;
+    if (c > bc) { bc = c; best = [ex / l, ez / l]; }
+  }
+  return best || [TOUCH.ax, TOUCH.az];
+}
+
+function buildTouchUI() {
+  const ui = document.createElement('div'); ui.id = 'touchUI'; ui.hidden = true;
+  ui.innerHTML = `<div class="tstick move"><i></i><span>Move</span></div><div class="tstick aim"><i></i><span>Aim + fire</span></div>
+    <div class="tbtns">
+      <button type="button" class="tbtn big" data-t="jump">Jump</button>
+      <button type="button" class="tbtn" data-t="dash">Dash</button>
+      <button type="button" class="tbtn" data-t="bomb"><span class="bombico"></span><b>0</b></button>
+      <button type="button" class="tbtn use" data-t="use">Use</button>
+      <button type="button" class="tbtn alt" data-t="alt">X</button>
+    </div>`;
+  const hint = document.createElement('div'); hint.id = 'rotateHint'; hint.hidden = true;
+  hint.innerHTML = `<b>Turn your phone sideways</b><span>The sticks have more room in landscape.</span><button type="button" class="smallbtn">Play upright</button>`;
+  $('#app').append(ui, hint);
+  Object.assign(TUI, { ui, hint, move: ui.querySelector('.tstick.move'), aim: ui.querySelector('.tstick.aim'), btns: ui.querySelector('.tbtns') });
+  for (const b of ui.querySelectorAll('[data-t]')) TUI[b.dataset.t] = b;
+  TUI.bombN = TUI.bomb.querySelector('b');
+  hint.querySelector('button').addEventListener('click', () => { TUI.hintOff = true; hint.hidden = true; });
+  // buttons act on pointerdown (no click delay); preventDefault stops focus and emulated mouse events
+  const press = (b, down, up) => {
+    b.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); b.classList.add('down'); down(); });
+    for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => { if (b.classList.contains('down')) { b.classList.remove('down'); if (up) up(); } });
+  };
+  press(TUI.jump, () => { keys.add('Space'); pressedSet.add('Space'); }, () => keys.delete('Space'));
+  press(TUI.dash, () => pressedSet.add('ShiftLeft'));
+  press(TUI.bomb, () => { if (G.state === 'play') G.throwQueued = true; });
+  press(TUI.use, () => pressedSet.add('KeyE'));
+  press(TUI.alt, () => { const k = ($('#prompt').dataset.alt || '').split('|')[0]; if (k) pressedSet.add('Key' + k); });
+  // Bark Wave: the HUD's ability dial becomes a button while touch is on
+  $('#ability').addEventListener('pointerdown', e => { if (!TOUCH.on) return; e.preventDefault(); e.stopPropagation(); pressedSet.add('KeyQ'); });
+}
+
+// ---------- sticks ----------
+function stickSet(which, s, e) {
+  s.x = e.clientX; s.y = e.clientY;
+  let dx = s.x - s.ox, dy = s.y - s.oy, l = Math.hypot(dx, dy);
+  if (l > STICK_R) { const k = (l - STICK_R) / l; s.ox += dx * k; s.oy += dy * k; dx = s.x - s.ox; dy = s.y - s.oy; l = STICK_R; }   // the base follows a long drag
+  if (which === 'move') {
+    const a = clamp((l / STICK_R - 0.15) / 0.55, 0, 1);   // small dead zone, full speed at ~70% tilt
+    TOUCH.mx = l ? dx / l * a : 0; TOUCH.mz = l ? dy / l * a : 0;
+  } else {
+    TOUCH.fire = true;
+    if (l > 12) { TOUCH.ax = dx / l; TOUCH.az = dy / l; s.dragged = true; }
+    else if (!s.dragged) TOUCH.ax = TOUCH.az = 0;   // not dragged yet: auto-aim
+  }
+}
+function stickEnd(which) {
+  TOUCH[which] = null;
+  if (which === 'move') TOUCH.mx = TOUCH.mz = 0; else { TOUCH.fire = false; TOUCH.ax = TOUCH.az = 0; }
+}
+canvas.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'mouse') { if (TOUCH.on) setTouchMode(false); return; }
+  if (!TOUCH.on) setTouchMode(true);
+  e.preventDefault();
+  if (G.state !== 'play') return;
+  const which = e.clientX < window.innerWidth * 0.45 ? 'move' : 'aim';
+  if (TOUCH[which]) return;
+  const s = { id: e.pointerId, ox: e.clientX, oy: e.clientY };
+  TOUCH[which] = s; stickSet(which, s, e);
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+}, { passive: false });
+canvas.addEventListener('pointermove', e => {
+  for (const w of ['move', 'aim']) { const s = TOUCH[w]; if (s && s.id === e.pointerId) stickSet(w, s, e); }
+});
+for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(ev, e => {
+  for (const w of ['move', 'aim']) { const s = TOUCH[w]; if (s && s.id === e.pointerId) stickEnd(w); }
+});
+
+// ---------- mode switch: labels, layout, render resolution ----------
+const TOUCH_TEXT = [
+  ['#invBtn', 'Upgrades'], ['#mapBtn', 'Map'], ['#hubReport', 'Report bug'],
+  ['#mapClose', 'Close'], ['#invClose', 'Close'], ['#collectClose', 'Close'], ['#howClose', 'Close'], ['#reportClose', 'Close'], ['#logClose', 'Close'],
+  ['#resumeBtn', 'Resume'], ['#reportBtn', 'Report a bug'], ['#overReport', 'Report a bug'], ['#feedOk', 'Let\'s go'], ['#swapCancel', 'Cancel'],
+  ['#hubLogo small', 'Walk to a portal and tap <kbd>Use</kbd>'],
+  ['.bi-skip', 'Tap to skip'],
+  ['#scopeView small', 'Drag to look · tap <kbd>Back</kbd> to step back'],
+  ['#howView .controls', `<dt><kbd>Left thumb</kbd></dt><dd>Run around: touch anywhere on the left side and drag</dd>
+    <dt><kbd>Right thumb</kbd></dt><dd>Aim and fire: touch the right side and drag where you want to shoot. Just hold it to fire at the closest enemy</dd>
+    <dt><kbd>Jump</kbd></dt><dd>Jump (and again in the air with Cloud Boots). Hold for a higher jump</dd>
+    <dt><kbd>Dash</kbd></dt><dd>Dash where you're running. You can't be hit mid-dash</dd>
+    <dt><kbd>Grenade</kbd></dt><dd>Throw a grenade where you're aiming. Grenades smash crates and break cracked fences</dd>
+    <dt><kbd>Q dial</kbd></dt><dd>Bark Wave: tap the glowing dial by your weapon once it fills</dd>
+    <dt><kbd>Use</kbd></dt><dd>Pops up above Jump near gadgets, weapons, chests, springs and portals, named for what it does (Take, Buy, Open...). A second button salvages</dd>
+    <dt><kbd>Upgrades</kbd> <kbd>Map</kbd> <kbd>Pause</kbd></dt><dd>Buttons in the top right</dd>`],
+];
+const touchOrig = new Map();
+function setTouchMode(on) {
+  if (!TUI.ui) buildTouchUI();
+  TOUCH.on = on;
+  $('#app').classList.toggle('touch', on);
+  if (on) { mouse.active = false; mouse.down = false; }
+  stickEnd('move'); stickEnd('aim'); keys.delete('Space');
+  for (const [sel, html] of TOUCH_TEXT) {
+    const el = document.querySelector(sel); if (!el) continue;
+    if (!touchOrig.has(sel)) touchOrig.set(sel, el.innerHTML);
+    el.innerHTML = on ? html : touchOrig.get(sel);
+  }
+  // the upgrades pill moves out of the move stick's corner, under the counters
+  (on ? $('.corner.tl') : $('.corner.bl')).appendChild($('#upPill'));
+  // phones: render at up to 1.5x instead of 2x (a big frame-rate win for little visible loss on small screens)
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, on ? 1.5 : 2)); resize();
+  $('#fullBtn').hidden = !on || !(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+}
+function toggleFullscreen() {
+  const d = document, el = d.documentElement;
+  try {
+    if (d.fullscreenElement || d.webkitFullscreenElement) (d.exitFullscreen || d.webkitExitFullscreen).call(d);
+    else {
+      const r = (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+      if (r && r.then) r.then(() => { try { screen.orientation.lock('landscape').catch(() => {}); } catch (e) {} }).catch(() => {});
+    }
+  } catch (e) {}
+}
+{
+  const fb = document.createElement('button'); fb.className = 'bigbtn'; fb.id = 'fullBtn'; fb.type = 'button'; fb.hidden = true;
+  fb.innerHTML = 'Full screen <small>Hides the browser bars</small>';
+  $('#muteBtn').before(fb); fb.addEventListener('click', toggleFullscreen);
+}
+
+// ---------- per-frame sync: what shows, button labels, stick drawing ----------
+function touchSync() {
+  requestAnimationFrame(touchSync);
+  if (!TOUCH.on || !TUI.ui) return;
+  const play = G.state === 'play', scope = G.state === 'scope';
+  if (!play && (TOUCH.move || TOUCH.aim)) { stickEnd('move'); stickEnd('aim'); }
+  if (!play && keys.has('Space') && !TUI.jump.classList.contains('down')) keys.delete('Space');
+  TUI.ui.hidden = !(play || scope);
+  TUI.ui.classList.toggle('scope', scope);
+  const portrait = window.innerHeight > window.innerWidth;
+  TUI.hint.hidden = !play || !portrait || !!TUI.hintOff;
+  if (TUI.ui.hidden) return;
+  const hub = G.mode === 'hub', pr = $('#prompt'), prOn = !pr.hidden;
+  TUI.bomb.hidden = hub || scope;
+  TUI.bombN.textContent = G.bombs;
+  TUI.bomb.classList.toggle('empty', G.bombs < 1);
+  TUI.use.hidden = !(prOn || scope);
+  const act = scope ? 'Back' : (pr.dataset.act || 'Use');
+  if (TUI.use.textContent !== act) TUI.use.textContent = act;
+  const alt = prOn && pr.dataset.alt ? pr.dataset.alt.split('|')[1] : '';
+  TUI.alt.hidden = !alt || scope;
+  if (alt && TUI.alt.textContent !== alt) TUI.alt.textContent = alt;
+  // idle sticks sit faintly where thumbs rest, so new players see where to put them
+  const W = window.innerWidth, H = window.innerHeight;
+  const draw = (el, s, ix, iy) => {
+    const ox = s ? s.ox : ix, oy = s ? s.oy : iy;
+    el.style.transform = `translate(${ox}px, ${oy}px)`;
+    el.firstChild.style.transform = s ? `translate(${s.x - s.ox}px, ${s.y - s.oy}px)` : '';
+    el.classList.toggle('live', !!s);
+  };
+  if (portrait) {   // upright: rest the sticks above the weapon panel and the button cluster
+    draw(TUI.move, TOUCH.move, W * 0.24, H - 300);
+    draw(TUI.aim, TOUCH.aim, W * 0.74, H - 330);
+  } else {
+    draw(TUI.move, TOUCH.move, Math.min(150, W * 0.2), H - Math.min(150, H * 0.36));
+    draw(TUI.aim, TOUCH.aim, W - Math.min(270, W * 0.36), H - Math.min(170, H * 0.42));
+  }
+  TUI.aim.classList.toggle('firing', TOUCH.fire);
+}
+requestAnimationFrame(touchSync);
+if (window.matchMedia && matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches) setTouchMode(true);
 // ---------- flow ----------
 function resetActors() {
   clearRoomEntities();
