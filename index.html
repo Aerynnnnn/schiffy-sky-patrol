@@ -217,6 +217,12 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #ffc8a6; col
 .he-row .smallbtn { font-size: 15px; line-height: 1; padding: 3px 9px; flex: none; }
 .he-row input { flex: 1 1 auto; min-width: 50px; accent-color: var(--berry); height: 24px; }
 .he-row span { min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; flex: none; }
+.he-warn { flex: 1 1 100%; display: flex; align-items: center; gap: 6px 10px; padding: 5px 10px; border-radius: 12px; background: #ffe7c7; color: #8a3b12; font-weight: 800; font-size: 13px; }
+.he-warn span { flex: 1 1 auto; min-width: 0; }
+.he-warn .smallbtn { flex: none; font-size: 13px; padding: 3px 12px; white-space: nowrap; background: var(--sun); }
+.he-bar.pv .he-warn { display: none; }
+@media (max-width: 640px) { .he-warn { flex-wrap: wrap; font-size: 12px; } .he-warn .smallbtn { flex: 1 1 100%; } }
+@media (max-height: 520px) { .he-warn { padding: 3px 8px; font-size: 12px; } .he-warn .smallbtn { padding: 2px 10px; } }
 .he-quick { gap: 8px; }
 .he-quick .smallbtn { font-size: 13px; padding: 3px 12px; }
 @media (max-width: 640px) { .he-pose { grid-template-columns: 1fr; } }
@@ -1094,6 +1100,8 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
       <div class="he-pvbtns"><button class="smallbtn he-buy" id="hePvBuy" type="button">Buy &amp; place</button><button class="smallbtn" id="hePvCancel" type="button">Cancel · Esc</button></div>
     </div>
     <div class="he-top"><span class="verb">Schiffy's Home</span><p id="heInfo"></p></div>
+    <!-- the jump pad is too far from the lookout to bounce Schiffy up (75-hub heWarn / hePadFix) -->
+    <div class="he-warn" id="heWarn" hidden><span>The jump pad can't reach the lookout from here, so Schiffy can't bounce up to the telescope.</span><button class="smallbtn" id="hePadFix" type="button">Move the pad beside it</button></div>
     <div class="he-pose" id="hePose" hidden>
       <div class="he-row"><b>Turn</b><button class="smallbtn" id="he_rot_m" type="button" title="Turn left 15° (Q)" aria-label="Turn left">⟲</button><input type="range" id="he_rot" min="-180" max="180" step="1" aria-label="Turn"><button class="smallbtn" id="he_rot_p" type="button" title="Turn right 15° (E)" aria-label="Turn right">⟳</button><span id="he_rot_v"></span></div>
       <div class="he-row"><b>Tilt</b><button class="smallbtn" id="he_pitch_m" type="button" title="Tilt back 15° (R)" aria-label="Tilt back">⤺</button><input type="range" id="he_pitch" min="-180" max="180" step="1" aria-label="Tilt"><button class="smallbtn" id="he_pitch_p" type="button" title="Tilt forward 15° (F)" aria-label="Tilt forward">⤻</button><span id="he_pitch_v"></span></div>
@@ -4358,8 +4366,11 @@ function updatePlayer(dt) {
   }
   let g = 26; if (p.vy > 0 && !jumpHeld && !p.padBoost) g *= 1.9;
   if (p.dashT <= 0) p.vy -= g * dt;
+  const yPrev = p.y;
   p.y += p.vy * dt;
-  const gh = groundAt(p.x, p.z, p.r, p.y);
+  // land on any top passed through this frame: a fast fall (a pad launch comes down at ~12 m/s, 0.2 m a frame) used to step
+  // past groundAt's 0.08 tolerance, miss the plateau and get pushed off its side by depenetrate
+  const gh = groundAt(p.x, p.z, p.r, Math.max(p.y, yPrev));
   const wasAir = !p.onGround;
   if (p.y <= gh) { p.y = gh; if (st.springy && wasAir && p.vy < -7 && !inHub) explodeAt(p.x, p.z, 2.2, 1.1 * st.springy * st.dmg * levelScale(), null, false); if (p.vy < -4 && wasAir) { p.squash = 0.25; emit(p.x, p.y + 0.05, p.z, 6, 0xfff4dc, { speed: 2.4, flat: true, size: 0.35, grav: 0 }); } p.vy = 0; p.onGround = true; p.padBoost = false; }
   else p.onGround = false;
@@ -10101,7 +10112,7 @@ const HOME = { x: 40.5, z: 8, hx: 14, hz: 11 }, HOME_BRIDGE = { z: 8, w: 1.5 }, 
 // Items are solid in 3D: HOME_PARTS gives each kind's shape as boxes [cx, cz, hx, hz, y0, y1] (centre, half sizes, bottom,
 // top, before turning). An item that would run into another rises to rest on top of it (stacking); taking the lower one
 // away lets it drop back to its own hover height. Those boxes are also what Schiffy collides with, walks under and lands on.
-// HOME_KEEP = spots nothing may cover below their top: the bridge landing (lanterns, sign, Edit home board) and the lookout.
+// HOME_KEEP = spots nothing may cover below their top: the bridge landing (lanterns, sign, Edit home board).
 const HOME_NATURE = [
   { id: 'n0', kind: 'tree', v: 0, dx: -11, dz: -8.5 }, { id: 'n1', kind: 'tree', v: 2, dx: 12, dz: 9 }, { id: 'n2', kind: 'tree', v: 4, dx: 12, dz: -2.5 },
   { id: 'n3', kind: 'tree', v: 1, dx: -3, dz: -9 }, { id: 'n4', kind: 'bush', v: 2, dx: -8, dz: 9.4 }, { id: 'n5', kind: 'bush', v: 0, dx: 4.5, dz: 9.6 },
@@ -10116,7 +10127,29 @@ const HOME_PARTS = {
   'cos.decor.doghouse': [[0, 0, 0.93, 0.93, 0, 2.2], [0, 1.25, 0.85, 0.32, 0, 0.3]], 'cos.decor.fountain': [[0, 0, 1.45, 1.45, 0, 2.5]],
   'cos.decor.arch': [[-1.55, 0, 0.25, 0.25, 0, 1.6], [1.55, 0, 0.25, 0.25, 0, 1.6], [0, 0, 1.75, 0.25, 1.5, 3.2]],
   'cos.decor.statues': [[0, -2.2, 0.7, 0.7, 0, 2.7], [0, 0, 0.7, 0.7, 0, 2.7], [0, 2.2, 0.7, 0.7, 0, 2.7]],
+  lookout: [[0, 0, 2, 1, 0, 1.6]], jumppad: [[0, 0, 0.8, 0.8, 0, 0.3]],
 };
+// Fixtures (v3.2): the lookout (plateau of two mesa blocks + brass telescope + its label) and the jump pad up to it. They
+// drag and turn like items (the lookout in quarter turns, so its collision box stays exact), but never tilt, hover, stack,
+// get stacked on or go into storage: nothing may come into their column (up to top), and they may not overlap anything.
+// Saved as SAVE.home.items.lookout / .jumppad; saves without them use these default spots (where they stood before v3.2).
+// The pad must stay within PAD_REACH of the plateau's top (homePadReach), else edit mode warns and offers to move it.
+const HOME_FIXED = {
+  lookout: { name: 'Lookout', dx: LOOKOUT.x - HOME.x, dz: LOOKOUT.z - HOME.z, top: 4.5, step: 90 },
+  jumppad: { name: 'Jump pad', dx: LOOKOUT.x - HOME.x - 3.4, dz: LOOKOUT.z - HOME.z, top: 6 },
+};
+// how far (flat, pad centre to the nearest edge of the plateau's top) a pad launch carries Schiffy onto it: vy 15.5 under
+// gravity 26 (30-player) gives ~1.08 s in the air before he drops back below the 1.6 m top, ~7 m at hub walking speed 7.4
+// even from a standstill on the pad; 4.5 keeps a wide margin for steering
+const PAD_REACH = 4.5;
+function homePadReach(L) {
+  const lk = L.find(i => i.id === 'lookout'), pd = L.find(i => i.id === 'jumppad');
+  if (!lk || !pd || !lk.box) return true;
+  const q = lk.box[0], ex = Math.max(q.x0 - pd.dx, 0, pd.dx - q.x1), ez = Math.max(q.z0 - pd.dz, 0, pd.dz - q.z1);
+  return Math.hypot(ex, ez) <= PAD_REACH;
+}
+// a flat offset (x, z) in an item's frame, turned by its rot (the models' rotation.y = -rot)
+function homeRotXZ(x, z, rot) { const a = -(rot || 0) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a); return [x * c + z * s, -x * s + z * c]; }
 // ---- the home catalogue (75-hub) ----
 // Furniture, buildings and trophies for the home isle, modelled in Blender (home.glb, blender/build_home.py; references:
 // Animal Crossing's furniture + storage, Stardew Valley's paths, crops and farm buildings, The Sims' showpiece builds and
@@ -10370,7 +10403,7 @@ const homeStored = () => HOME_CAT.filter(h => Wallet.owned(h.sku) && !homeIsOut(
   .concat(Object.keys(HOME_BUILT).filter(sku => Wallet.owned(sku) && !cosIsOn(sku)));
 const STATUE_ROW = [-2.2, 0, 2.2];   // the three plinths along z (DECOR_BUILD statues, 84-shop)
 const HOME_TOP = 12;                 // nothing rests higher than this
-const HOME_KEEP = [{ x: -HOME.hx + 2.4, z: -1.1, hx: 2.4, hz: 3.8, top: 4 }, { x: LOOKOUT.x - HOME.x - 1, z: LOOKOUT.z - HOME.z, hx: 3.6, hz: 1.6, top: 4 }];
+const HOME_KEEP = [{ x: -HOME.hx + 2.4, z: -1.1, hx: 2.4, hz: 3.8, top: 4 }];   // the lookout + pad keep their own columns (HOME_FIXED)
 const HOME_NAMES = { tree: 'Tree', bush: 'Bush', rock: 'Rock' };
 const PLANNER_AT = { dx: -HOME.hx + 2.6, dz: -3.6 };   // the Edit home notice board, inside the bridge landing's keep-clear spot
 const D2R = Math.PI / 180;
@@ -10402,12 +10435,12 @@ const boxHit = (p, q) => p.x0 < q.x1 - 0.05 && p.x1 > q.x0 + 0.05 && p.z0 < q.z1
 // run into another item, rises to rest on the top of what it hit. ok = inside the isle, off the keep-clear spots, not too high.
 // Returns { ok, b (bottom height), box (its boxes in place), low } and leaves it.y = b, it.box = box for the next item.
 function homePlace(it, others) {
-  const { boxes, low } = homeTurned(it);
+  const { boxes, low } = homeTurned(it), fx = HOME_FIXED[it.kind];
   const at = b => boxes.map(q => ({ x0: q.x0 + it.dx, x1: q.x1 + it.dx, z0: q.z0 + it.dz, z1: q.z1 + it.dz, y0: q.y0 - low + b, y1: q.y1 - low + b }));
-  let b = clamp(it.lift || 0, 0, HOME_TOP), cur = at(b), rest = null;
-  for (let k = 0; k < 24; k++) {
+  let b = fx ? 0 : clamp(it.lift || 0, 0, HOME_TOP), cur = at(b), rest = null;
+  for (let k = 0; k < 24 && !fx; k++) {   // fixtures never stack, and nothing stacks on them (checked below)
     let top = -1, on = null;
-    for (const o of others) if (o !== it && !o.off && o.box) for (const q of o.box) for (const p of cur) if (boxHit(p, q) && q.y1 > top) { top = q.y1; on = o; }
+    for (const o of others) if (o !== it && !o.off && o.box && !HOME_FIXED[o.kind]) for (const q of o.box) for (const p of cur) if (boxHit(p, q) && q.y1 > top) { top = q.y1; on = o; }
     if (top < 0) break;
     b = top; cur = at(b); rest = on;
   }
@@ -10416,6 +10449,14 @@ function homePlace(it, others) {
   for (const p of cur) {
     if (p.x0 < -HOME.hx + 0.2 || p.x1 > HOME.hx - 0.2 || p.z0 < -HOME.hz + 0.2 || p.z1 > HOME.hz - 0.2) ok = false;
     for (const k of HOME_KEEP) if (p.x0 < k.x + k.hx && p.x1 > k.x - k.hx && p.z0 < k.z + k.hz && p.z1 > k.z - k.hz && p.y0 < k.top) ok = false;
+  }
+  // a fixture's column (its boxes raised to its top) stays clear, and a fixture itself may not overlap anything
+  for (const o of others) {
+    const ofx = o !== it && !o.off && o.box && HOME_FIXED[o.kind]; if (!ofx && !(fx && o !== it && !o.off && o.box)) continue;
+    for (const q of o.box) for (const p of cur) {
+      const qq = ofx ? { ...q, y1: Math.max(q.y1, ofx.top) } : q, pp = fx ? { ...p, y1: Math.max(p.y1, fx.top) } : p;
+      if (boxHit(pp, qq)) ok = false;
+    }
   }
   return { ok, b, box: cur, low, rest };
 }
@@ -10440,8 +10481,15 @@ function homeLayout() {
   for (const n of HOME_NATURE) list.push(make(n.id, n.kind, { v: n.v, nature: true, name: HOME_NAMES[n.kind] }, n, (+n.id.slice(1) * 137) % 360));
   for (const sku in HOME_BUILT) if (cosIsOn(sku)) list.push(make(sku, sku, { nature: false, name: COS_BY[sku].name }, HOME_BUILT[sku], 0));
   for (const h of HOME_CAT) if (homeIsOut(h.sku)) list.push(make(h.sku, h.sku, { nature: false, cat: true, name: h.name }, { dx: 0, dz: 0 }, 0));
+  // the lookout and the jump pad: always out, flat on the grass, the lookout squared to a quarter turn
+  for (const id in HOME_FIXED) {
+    const f = HOME_FIXED[id], it = make(id, id, { nature: false, fixed: true, name: f.name }, f, 0);
+    it.pitch = it.roll = it.lift = it.y = 0; it.off = false; if (f.step) it.rot = wrapDeg(Math.round((it.rot || 0) / f.step) * f.step);
+    list.push(it);
+  }
   const placed = [];
-  for (const it of list.filter(i => !i.off).sort((a, b) => (b.saved - a.saved) || (a.y - b.y) || (a.nature - b.nature))) {
+  // fixtures first (everything else makes room for them), then what you have placed, lowest first
+  for (const it of list.filter(i => !i.off).sort((a, b) => (!!b.fixed - !!a.fixed) || (b.saved - a.saved) || (a.y - b.y) || (a.nature - b.nature))) {
     let r = homePlace(it, placed);
     if (!r.ok || (!it.saved && r.b > it.lift + 0.01)) { const f = homeFree(it, placed); if (f) { [it.dx, it.dz] = f; r = homePlace(it, placed); } }
     it.y = r.b; it.box = r.box; it.low = r.low;
@@ -10564,14 +10612,9 @@ function buildHome(grp, room, th, dm) {
   addInteractable({ x: bx, z: bzz + 1.4, r: 1.8, mesh: board,
     prompt: () => ({ icon: '', verb: 'Edit home', title: "Arrange Schiffy's Home", desc: 'Shop the home catalogue (gold, Paw Gems and trophies), place things from storage, then drag, stack, turn and hover them. Trees, bushes and rocks can be cleared.', action: 'Edit' }),
     use: () => startHomeEdit() });
-  // the plateau lookout with a jump pad
-  const L = LOOKOUT;
-  grp.add(makeObstacle('mesa', th, 0).translateX(L.x - 1).translateZ(L.z));
-  grp.add(makeObstacle('mesa', th, 0).translateX(L.x + 1).translateZ(L.z));
-  room.boxes.push({ x: L.x, z: L.z, w: 4, d: 2, h: 1.6 });
-  const pad = makeJumpPad(th); pad.position.set(L.x - 3.4, 0, L.z); grp.add(pad); G.padMeshes.push({ m: pad, x: L.x - 3.4, z: L.z, t: 0 });
-  buildLookout(grp, room);   // brass telescope trained on the sky whale (76-lookout)
-  const hint = textSprite('Lookout', '#fff4dc', 0.5); hint.position.set(L.x - 0.6, 4.2, L.z); grp.add(hint);
+  // the plateau lookout and its jump pad are home fixtures (HOME_FIXED), built where the layout puts them by
+  // refreshHomeProps (homeFixture); this only sets up the telescope's prompt and where it stands (76-lookout)
+  buildLookout(grp, room);
   return under;
 }
 // a catalogue item's model (a stand-in box of its shape in builds without the Blender models)
@@ -10580,6 +10623,16 @@ function homeModel(sku) {
   const m = makeProp('Home_' + (h ? h.model : sku.slice(5)), h && h.tint ? { recolor: h.tint } : {}); if (m) return m;
   const g = new THREE.Group();
   for (const [cx, cz, hx, hz, y0, y1] of HOME_PARTS[sku]) g.add(outline(mesh(new THREE.BoxGeometry(hx * 2, y1 - y0, hz * 2), toon(0xd9c9a0), cx, (y0 + y1) / 2, cz), 1.04));
+  return g;
+}
+// a fixture's model, built round its spot: the lookout = two mesa blocks side by side along x, the brass telescope on top
+// (lookoutScope, 76-lookout) and its floating label; the jump pad = the spring pad (bobbed through G.padMeshes)
+function homeFixture(it, th, room) {
+  if (it.id !== 'lookout') return makeJumpPad(th);
+  const g = new THREE.Group();
+  g.add(makeObstacle('mesa', th, 0).translateX(-1), makeObstacle('mesa', th, 0).translateX(1));
+  const hint = textSprite('Lookout', '#fff4dc', 0.5); hint.position.set(-0.6, 4.2, 0); g.add(hint);
+  lookoutScope(g);
   return g;
 }
 // moving parts: each returns a tick(dt) for its model (the Blender pivots: sails on their hub, the tyre on the beam ...)
@@ -10655,6 +10708,12 @@ function refreshHomeProps() {
     homePose(o, null, it, it.y, it.low); o.userData.homeId = it.id; G.homeMeshes[it.id] = o; grp.add(o);
     homeColliders(it, room, 'homeProp');
     const anim = it.cat && homeAnim(it.id); if (anim) G.homeTicks.push(anim(o));
+  }
+  G.padMeshes = (G.padMeshes || []).filter(p => !p.home);
+  for (const it of on) if (it.fixed) {
+    const o = homeFixture(it, th, room); homePose(o, null, it, 0, it.low || 0); o.userData.homeId = it.id; G.homeMeshes[it.id] = o; grp.add(o);
+    if (it.id === 'lookout') { homeColliders(it, room, 'homeProp'); lookoutPlaced(it, room); }
+    else G.padMeshes.push({ m: o, x: HOME.x + it.dx, z: HOME.z + it.dz, t: 0, home: true });   // the pad has no collider: you step onto it
   }
   const fc = th.flowers.map(c => new THREE.Color(c)), flowers = new THREE.InstancedMesh(new THREE.SphereGeometry(0.13, 8, 6), (() => { const m = toonU(0xffffff); m.emissive.setHex(0xffffff); m.emissiveIntensity = 0.3; return m; })(), 110);
   let fn = 0;
@@ -10732,6 +10791,8 @@ function endHomeEdit() {
   if (HE.fog) { scene.fog.near = HE.fog[0]; scene.fog.far = HE.fog[1]; HE.fog = null; }
   G.state = 'play'; G.zoom = HE.zoom; HE.zt = null; HE.cx = null; mouse.down = false; keys.clear();
   $('#homeEditBar').hidden = true; $('#hubHud').hidden = false;
+  heFreePlayer();
+  if (!homePadReach(G.homeLayout || HE.L)) toast("The jump pad can't reach the lookout", 'Move it closer at the Edit home board to bounce up to the telescope', '#ffb84a');
 }
 window.addEventListener('resize', () => { if (G.state === 'homeEdit') heFrame(); });
 // Esc: leaves the preview (back to the catalogue, nothing charged), else closes the catalogue, else ends edit mode
@@ -10770,6 +10831,7 @@ function heShow(it) {
 // the selected item's shadow on the grass (its boxes seen from above) and a frame round it: gold, or red where it won't fit
 function heRings() {
   if (HE.rings) { removeObj(HE.rings); HE.rings = null; }
+  heWarn();   // the pad's reach follows every move, drags included
   const it = HE.sel && heItem(HE.sel); if (!it || it.off || !it.box) return;
   const g = new THREE.Group(), col = HE.bad ? 0xff4f6a : 0xffd34d;
   for (const q of it.box) {
@@ -10794,13 +10856,20 @@ function heMarks(on) {
 }
 const heFmt = (k, v) => k === 'lift' ? `${(+v).toFixed(1)} m` : `${Math.round(v)}°`;
 function hePanel() {
-  const it = HE.sel && heItem(HE.sel), off = HE.L.filter(i => i.off), tap = TOUCH.on ? 'Tap' : 'Click';
-  $('#heInfo').innerHTML = !it ? `${tap} anything on the isle and drag it to move it, or onto something else to stack it. Select it to turn, flip or raise it.`
+  const it = HE.sel && heItem(HE.sel), off = HE.L.filter(i => i.off), tap = TOUCH.on ? 'Tap' : 'Click', fx = it && HOME_FIXED[it.kind];
+  $('#heInfo').innerHTML = !it ? `${tap} anything on the isle (the lookout and its jump pad too) and drag it to move it, or onto something else to stack it. Select it to turn, flip or raise it.`
+    : fx ? `<b>${it.name}</b> · drag it across the isle${fx.step ? ' and turn it a quarter at a time' : ' and turn it'}. It stays on the grass and can't be put away.${it.id === 'jumppad' ? ' Keep it close to the lookout so Schiffy can bounce up.' : ''}`
     : `<b>${it.name}</b> · drag it across the isle${it.y > (it.lift || 0) + 0.01 ? ` (resting on top of something, ${it.y.toFixed(1)} m up)` : ''}.${it.nature ? ' Clear it if you like.' : ' Put it away to keep it in storage.'}`;
   $('#heClear').disabled = !(it && it.nature);
-  $('#hePose').hidden = !it; $('#heStore').hidden = !(it && !it.nature);
+  $('#hePose').hidden = !it; $('#heStore').hidden = !(it && !it.nature && !fx);
+  // fixtures only turn (the lookout in quarter turns): no tilt, roll, hover or flip
+  for (const k of ['pitch', 'roll', 'lift']) $(`#he_${k}`).closest('.he-row').hidden = !!fx;
+  $('#heFlip').closest('.he-row').hidden = !!fx;
+  $('#he_rot').step = fx && fx.step ? fx.step : 1;
+  $('#he_rot_m').title = `Turn left ${fx && fx.step ? fx.step : 15}° (Q)`; $('#he_rot_p').title = `Turn right ${fx && fx.step ? fx.step : 15}° (E)`;
   const st = homeStored().length; $('#heCat').innerHTML = `Catalogue${st ? ` <i>${st} in storage</i>` : ''}`;
   if (it) for (const k in HE_CTL) { $(`#he_${k}`).value = it[k] || 0; $(`#he_${k}_v`).textContent = heFmt(k, it[k] || 0); }
+  heWarn();
   $('#heCleared').innerHTML = off.length ? `<span>Cleared:</span>` + off.map(i => `<button type="button" class="smallbtn" data-restore="${i.id}">${i.name} · Put back</button>`).join('') : '';
   $('#homeEditBar').classList.toggle('pv', !!HE.pv); $('#hePv').hidden = !HE.pv;
   if (HE.pv) hpPanel();
@@ -10819,12 +10888,40 @@ function heCommit() {
     if (i.off) v.off = true;
     items[i.id] = v;
   }
-  writeSave(); refreshDecor(); HE.L = G.homeLayout; hpKeep(); heRings(); hePanel();
+  writeSave(); refreshDecor(); HE.L = G.homeLayout; hpKeep(); heRings(); hePanel(); heFreePlayer();
+}
+// Schiffy never ends up inside something just placed (the plateau dropped on him): push him out to the nearest clear spot
+function heFreePlayer() {
+  const p = G.player; if (!p || HE.pv || !G.room || !G.room.hub || !hubOverlap(p.x, p.z, p.r, p.y)) return;
+  depenetrate(p);
+  p.mesh.position.set(p.x, p.y, p.z); if (p.blob) p.blob.position.set(p.x, groundAt(p.x, p.z, p.r, p.y) + 0.03, p.z);
+}
+// the jump pad can't reach the lookout's top: a gentle note in the bar, with a button that moves the pad beside it
+function heWarn() { const el = $('#heWarn'); if (el) el.hidden = !!HE.pv || G.state !== 'homeEdit' || homePadReach(HE.L); }
+function hePadFix() {
+  if (HE.pv) return;
+  if (HE.drag) heDrop();
+  if (HE.from) heSettle(true);
+  const lk = heItem('lookout'), pd = heItem('jumppad'); if (!lk || !pd || !lk.box) return;
+  const q = lk.box[0], cx = (q.x0 + q.x1) / 2, cz = (q.z0 + q.z1) / 2, hx = (q.x1 - q.x0) / 2, hz = (q.z1 - q.z0) / 2, from = [pd.dx, pd.dz];
+  // spots a step off each side of the plateau (middle and both ends), the nearest to where the pad is now first; the far
+  // (north) side last, where the plateau would hide the pad from the camera
+  const spots = [];
+  for (const s of [-1, 1]) for (const t of [0, -1, 1]) { spots.push([cx + s * (hx + 1.4), cz + t * Math.max(0, hz - 0.8)]); spots.push([cx + t * Math.max(0, hx - 0.8), cz + s * (hz + 1.4)]); }
+  const cost = ([x, z]) => Math.hypot(x - from[0], z - from[1]) + (z < q.z0 ? 40 : 0);
+  spots.sort((a, b) => cost(a) - cost(b));
+  let ok = false;
+  for (const [x, z] of spots) { pd.dx = Math.round(x * 2) / 2; pd.dz = Math.round(z * 2) / 2; if (homePlace(pd, HE.L).ok && homePadReach(HE.L)) { ok = true; break; } }
+  if (!ok) { pd.dx = cx; pd.dz = cz; const f = homeFree(pd, HE.L); if (f) { [pd.dx, pd.dz] = f; ok = homePadReach(HE.L); } }
+  if (!ok) { pd.dx = from[0]; pd.dz = from[1]; sfx('deny'); toast('No room beside the lookout', 'Move something away from the plateau first', '#ff8f8f'); return; }
+  HE.sel = 'jumppad'; HE.bad = false; sfx('item'); heCommit();
 }
 // change the selected item's angles / height. A slider previews (HE.from remembers where it began) and heSettle(true) commits
 // on release; a button or key commits straight away. A change that won't fit is refused and the item springs back.
 function heSet(changes, commit) {
   const it = HE.sel && heItem(HE.sel); if (!it) return;
+  const fx = HOME_FIXED[it.kind];   // fixtures only turn, the lookout in quarter turns
+  if (fx) { delete changes.pitch; delete changes.roll; delete changes.lift; if (changes.rot != null && fx.step) changes.rot = wrapDeg(Math.round(changes.rot / fx.step) * fx.step); if (!Object.keys(changes).length) return; }
   if (!HE.from) HE.from = { rot: it.rot, pitch: it.pitch, roll: it.roll, lift: it.lift };
   Object.assign(it, changes);
   HE.bad = !heShow(it); heRings();
@@ -10839,7 +10936,7 @@ function heSettle(commit) {
   Object.assign(it, from); HE.bad = false; heShow(it); heRings(); hePanel();
   if (commit) { sfx('deny'); toast('No room for that', 'It would poke out of the isle or into a keep-clear spot', '#ff8f8f'); }
 }
-const heNudge = (k, d) => { const it = HE.sel && heItem(HE.sel); if (!it) return; heSet({ [k]: k === 'lift' ? clamp(Math.round(((it.lift || 0) + d) * 4) / 4, 0, HOME_TOP) : wrapDeg((it[k] || 0) + d) }, true); };
+const heNudge = (k, d) => { const it = HE.sel && heItem(HE.sel); if (!it) return; const fx = HOME_FIXED[it.kind]; if (fx && fx.step && k === 'rot') d = Math.sign(d) * fx.step; heSet({ [k]: k === 'lift' ? clamp(Math.round(((it.lift || 0) + d) * 4) / 4, 0, HOME_TOP) : wrapDeg((it[k] || 0) + d) }, true); };
 for (const k in HE_CTL) {
   const c = HE_CTL[k];
   $(`#he_${k}`).addEventListener('input', e => heSet({ [k]: k === 'lift' ? +e.target.value : wrapDeg(+e.target.value) }, false));
@@ -10889,6 +10986,7 @@ $('#heCleared').addEventListener('click', e => {
 });
 $('#heReset').addEventListener('click', () => { homeSave().items = {}; writeSave(); refreshDecor(); HE.L = G.homeLayout; HE.sel = null; HE.from = null; heRings(); hePanel(); sfx('door'); });
 $('#heDone').addEventListener('click', endHomeEdit);
+$('#hePadFix').addEventListener('click', hePadFix);
 // keys: Q / E turn, R / F tilt, Z / C roll (15°, Shift for 1°), X flips, PageUp / PageDown raise and lower, Delete clears
 window.addEventListener('keydown', e => {
   if (G.state !== 'homeEdit' || (e.target.matches && e.target.matches('input')) || !$('#catView').hidden) return;
@@ -10901,8 +10999,8 @@ window.addEventListener('keydown', e => {
 // Put away: the selected structure or catalogue item goes back into storage. Place: a stored item comes out at the nearest
 // free spot to the middle of the isle (or where it last stood), already selected so you can drag and turn it.
 $('#heStore').addEventListener('click', () => {
-  const it = HE.sel && heItem(HE.sel); if (!it || it.nature || it.ghost) return;
-  heCommit();                 // save every spot first (this one included, so it comes back where it stood)
+  const it = HE.sel && heItem(HE.sel); if (!it || it.nature || it.ghost || it.fixed) return;
+  heCommit();                // save every spot first (this one included, so it comes back where it stood)
   homeSetOut(it.id, false); HE.sel = null; sfx('door');
   refreshDecor(); HE.L = G.homeLayout; heRings(); hePanel();
   toast(`${it.name} put away`, 'Place it again from the catalogue\'s Storage tab', '#ffd34d');
@@ -11551,26 +11649,54 @@ function closeHowTo() { $('#howView').hidden = true; G.state = 'play'; }
 // Climb the plateau (jump pad), press E at the telescope and the view drops into the eyepiece: a round brass-rimmed lens view
 // that zooms out across the sky to Skywhale Village, a whale carrying a little town on its back, with Cloudspire Keep drifting nearby.
 // The game is paused in G.state 'scope' while you look; drag / WASD to pan, scroll to zoom, E or Esc to step back.
+// The plateau is a movable home fixture (HOME_FIXED.lookout, 75-hub): SCOPE_POS (world) follows wherever the layout puts it
+// (lookoutSpot), and the telescope re-aims at the whale from there (lookoutPlaced), so the view always finds the landmarks.
 const SCOPE_POS = new THREE.Vector3(LOOKOUT.x + 0.4, 1.6, LOOKOUT.z + 0.2);   // on the home isle's plateau
+const SCOPE_AT = [0.4, 1.6, 0.2];                                              // the telescope's spot on the plateau (its frame)
 const SKY_SPOTS = [
   { key: 'whale', name: 'Skywhale Village', note: 'A whole village riding on a gentle sky whale.', pos: new THREE.Vector3(58, 10, -80), scale: 1.45 },
   { key: 'castle', name: 'Cloudspire Keep', note: 'A little castle isle that follows the whale around.', pos: new THREE.Vector3(92, 19, -58), scale: 1.5 },
 ];
+// the telescope's world spot for a lookout layout item (dx, dz, rot)
+function lookoutSpot(it) {
+  const [ox, oz] = homeRotXZ(SCOPE_AT[0], SCOPE_AT[2], it.rot);
+  SCOPE_POS.set(HOME.x + it.dx + ox, SCOPE_AT[1], HOME.z + it.dz + oz);
+}
+// once per hub build (buildHome): the telescope's prompt, and SCOPE_POS from the saved layout so the sky landmarks
+// (addSkyLandmarks, next) turn toward where it really stands. The telescope model comes with the plateau (refreshHomeProps).
 function buildLookout(grp, room) {
+  const lk = homeLayout().find(i => i.id === 'lookout'); if (lk) lookoutSpot(lk);
+  const ia = addInteractable({ x: SCOPE_POS.x, z: SCOPE_POS.z + 0.2, r: 1.5, when: () => G.player.y > 1.2 && !!(G.lookout && G.lookout.scope),
+    prompt: () => ({ icon: '', verb: 'Lookout', title: 'Brass telescope', desc: 'Something big is drifting through the clouds out there. Take a look.', action: 'Look' }),
+    use: () => enterScope() });
+  G.lookout = { scope: null, tube: null, yaw0: 0, aim: scopeAim(SKY_SPOTS[0].pos), target: null, ia };
+}
+// the telescope model, on the plateau group g (its own frame: the group turns with the plateau)
+function lookoutScope(g) {
   const th = theme();
   let scope = makeProp('Scope_A'), tube = scope && scope.getObjectByName('Scope_A_tube');
   if (!scope) {   // lite build fallback: the old stick-and-tube scope
     scope = new THREE.Group(); scope.add(outline(mesh(new THREE.CylinderGeometry(0.05, 0.05, 1, 6), toon(th.post), 0, 0.5, 0), 1.2));
     tube = outline(mesh(new THREE.CylinderGeometry(0.14, 0.1, 0.9, 10), toon(0xffc93c), 0, 1.05, 0.2), 1.1); tube.rotation.x = 1.0; scope.add(tube);
   } else scope.scale.setScalar(1.15);
-  scope.position.copy(SCOPE_POS); grp.add(scope);
-  room.colliders.push({ x: SCOPE_POS.x, z: SCOPE_POS.z, r: 0.45, h: 4 });
-  const aim = scopeAim(SKY_SPOTS[0].pos);
-  scope.rotation.y = aim.yaw; if (tube && scope.userData.tinted) tube.rotation.set(-aim.pitch, 0, 0);
-  G.lookout = { scope, tube, aim };
-  addInteractable({ x: SCOPE_POS.x, z: SCOPE_POS.z + 0.2, r: 1.5, when: () => G.player.y > 1.2,
-    prompt: () => ({ icon: '', verb: 'Lookout', title: 'Brass telescope', desc: 'Something big is drifting through the clouds out there. Take a look.', action: 'Look' }),
-    use: () => enterScope() });
+  scope.position.set(...SCOPE_AT); g.add(scope);
+  if (G.lookout) Object.assign(G.lookout, { scope, tube });
+}
+// after the plateau is built or moved (refreshHomeProps): the telescope's world spot, collider and prompt follow it, and it
+// re-aims at the whale (the landmarks stay put, so only the angles change)
+function lookoutPlaced(it, room) {
+  lookoutSpot(it);
+  room.colliders.push({ x: SCOPE_POS.x, z: SCOPE_POS.z, r: 0.45, h: 4, homeProp: true });
+  const L = G.lookout; if (!L) return;
+  if (L.ia) { L.ia.x = SCOPE_POS.x; L.ia.z = SCOPE_POS.z + 0.2; }
+  L.yaw0 = -(it.rot || 0) * Math.PI / 180;
+  L.aim = scopeAim(L.target || SKY_SPOTS[0].pos);
+  scopeTurn(L.aim.yaw, L.aim.pitch);
+}
+// point the telescope (world yaw / pitch); its model sits in the plateau's turned frame
+function scopeTurn(yaw, pitch) {
+  const L = G.lookout; if (!L || !L.scope) return;
+  L.scope.rotation.y = yaw - (L.yaw0 || 0); if (L.tube && L.scope.userData.tinted) L.tube.rotation.set(-pitch, 0, 0);
 }
 function scopeAim(target) {
   const eye = scopeEye(), dx = target.x - eye.x, dz = target.z - eye.z;
@@ -11594,8 +11720,8 @@ function addSkyLandmarks(grp) {
     grp.add(m);
     // centre the telescope on the whole whale (body, village and raised tail), not just its middle
     if (s.key === 'whale' && G.lookout) {
-      m.updateMatrixWorld(true); const L = G.lookout; L.aim = scopeAim(m.localToWorld(new THREE.Vector3(4.5, 1.6, 0)));
-      L.scope.rotation.y = L.aim.yaw; if (L.tube && L.scope.userData.tinted) L.tube.rotation.set(-L.aim.pitch, 0, 0);
+      m.updateMatrixWorld(true); const L = G.lookout; L.target = m.localToWorld(new THREE.Vector3(4.5, 1.6, 0)); L.aim = scopeAim(L.target);
+      scopeTurn(L.aim.yaw, L.aim.pitch);
     }
     G.sky.push({ s, m, tail: m.getObjectByName('SkyWhale_tail'), finL: m.getObjectByName('SkyWhale_finL'), finR: m.getObjectByName('SkyWhale_finR'), ph: rand(0, 6) });
   }
@@ -11628,7 +11754,7 @@ function exitScope() {
   scene.fog.near = S.fogNear; scene.fog.far = S.fogFar;
   G.scope = null; G.state = 'play'; keys.clear();
   $('#scopeView').hidden = true; $('#app').classList.remove('scoping');
-  const L = G.lookout; if (L) { L.scope.rotation.y = L.aim.yaw; if (L.tube && L.scope.userData.tinted) L.tube.rotation.set(-L.aim.pitch, 0, 0); }
+  const L = G.lookout; if (L) scopeTurn(L.aim.yaw, L.aim.pitch);
 }
 function updateScope(dt) {
   const S = G.scope; if (!S) return;
@@ -11641,7 +11767,7 @@ function updateScope(dt) {
   if (keys.has('KeyS') || keys.has('ArrowDown')) S.pitch -= k;
   const a = G.lookout.aim; S.yaw = clamp(S.yaw, a.yaw - 0.75, a.yaw + 0.75); S.pitch = clamp(S.pitch, a.pitch - 0.25, a.pitch + 0.4);
   S.fov += (S.want - S.fov) * Math.min(1, dt * (S.t < 1.2 ? 2.5 : 6));      // the opening zoom glides in, then zoom follows the wheel
-  const L = G.lookout; L.scope.rotation.y = S.yaw; if (L.tube && L.scope.userData.tinted) L.tube.rotation.set(-S.pitch, 0, 0);
+  scopeTurn(S.yaw, S.pitch);
   // name whichever landmark is nearest the middle of the lens
   const dir = scopeDir(S), eye = scopeEye(); let best = null, bd = 1e9;
   for (const k2 of G.sky || []) { const to = k2.m.position.clone().sub(eye).normalize(), d = 1 - to.dot(dir); if (d < bd) { bd = d; best = k2.s; } }
