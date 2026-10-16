@@ -128,6 +128,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #ffc8a6; col
 .cat-pic img { width: 100%; height: 100%; object-fit: contain; }
 .cat-pic span { font: 400 34px var(--display); color: var(--navy-soft); opacity: .5; }
 .cat-item.locked .cat-pic img { filter: grayscale(.85) brightness(.9); }
+/* boss trophies not earned yet: their icon is already a dark silhouette (75-hub catIcon) */
+.cat-item.locked.sil .cat-pic img { filter: none; }
 .cat-sw { display: flex; flex-wrap: wrap; gap: 5px; }
 .cat-sw button { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--navy); padding: 0; cursor: pointer; box-shadow: inset 0 -3px 0 rgba(0,0,0,.15); }
 .cat-sw button.on { outline: 3px solid var(--berry); outline-offset: 1px; }
@@ -10971,6 +10973,7 @@ function onBossDead(b) {
   if (!b.mini) { spawnPickup('key', b.x, b.z); spawnPickup('bomb', b.x, b.z); }
   flashScreen(0.6, '#ffffff');
   SAVE.bosses[b.id] = (SAVE.bosses[b.id] || 0) + 1; writeSave();
+  try { bossTrophyEarned(b.id); } catch (e) { console.error('[trophy]', e); }   // first defeat: its home trophy unlocks (75-hub)
   petIsleCleared();
   if (b.mini) { makePedestalMesh(addPedestal(r, 0, -3, rollItem({ min: 'rare', noCursed: true }), 0)); toast('Rival defeated!', 'It left something behind'); updateHUD(true); return; }
   Hub.emit('sectorClear', { level: G.level, sector: G.sector, boss: b.id, kills: G.kills });
@@ -12158,9 +12161,8 @@ const HUB_X = 19.4, HUB_Z = 14.2;
 // 2 * BRIDGE.w wide, landing on the middle of its west edge. The lookout plateau lives on it (LOOKOUT: the plateau's centre).
 const HOME = { x: 40.5, z: 8, hx: 14, hz: 11 }, HOME_BRIDGE = { z: 8, w: 1.5 }, LOOKOUT = { x: HOME.x + 8.5, z: HOME.z - 7.5 };
 // ---- the home layout (75-hub; edit mode, startHomeEdit, changes it) ----
-// Everything players arrange on the home isle: its trees, bushes and rocks (HOME_NATURE: move, turn or clear) and the
-// boutique's structures and buildings (HOME_BUILT, COSMETICS entries with home: true: move or turn; show / hide them at the
-// boutique). Those structures only ever stand here; the flags, garlands, picnic and hedges stay on the lawn.
+// Everything players arrange on the home isle: its trees, bushes and rocks (HOME_NATURE: move, turn or clear) and the home
+// catalogue's items (HOME_CAT, below), the fixtures (lookout, jump pad) included.
 // Each item has a spot (dx, dz, relative to HOME's centre), three angles in degrees (rot = turn clockwise seen from above,
 // pitch = tilt forward / back, roll = lean sideways; roll 180 = upside down) and lift = the height its lowest point hovers at.
 // Items are solid in 3D: HOME_PARTS gives each kind's shape as boxes [cx, cz, hx, hz, y0, y1] (centre, half sizes, bottom,
@@ -12172,15 +12174,25 @@ const HOME_NATURE = [
   { id: 'n3', kind: 'tree', v: 1, dx: -3, dz: -9 }, { id: 'n4', kind: 'bush', v: 2, dx: -8, dz: 9.4 }, { id: 'n5', kind: 'bush', v: 0, dx: 4.5, dz: 9.6 },
   { id: 'n6', kind: 'bush', v: 1, dx: -12, dz: 7.5 }, { id: 'n7', kind: 'rock', v: 2, dx: -12, dz: 4.5 }, { id: 'n8', kind: 'rock', v: 1, dx: 12, dz: 3.5 },
 ];
-const HOME_BUILT = {
+// where the boutique's old decorations go when a save that showed them is moved over (homeMigrateDecor): the four that
+// already stood here keep their old default spots; any that doesn't fit takes the nearest free spot
+const HOME_DECOR_SPOT = {
   'cos.decor.doghouse': { dx: -5.5, dz: 5 }, 'cos.decor.fountain': { dx: 0, dz: 0.5 },
   'cos.decor.arch': { dx: 0, dz: 7.5 }, 'cos.decor.statues': { dx: 8, dz: 3.5 },
+  'cos.decor.banners': { dx: -7, dz: -5 }, 'cos.decor.lanterns': { dx: 0, dz: -5 }, 'cos.decor.bunting': { dx: -6, dz: -1 },
+  'cos.decor.picnic': { dx: 4.5, dz: 6.5 }, 'cos.decor.topiary': { dx: 2, dz: -8.5 },
 };
 const HOME_PARTS = {
   tree: [[0, 0, 0.4, 0.4, 0, 2], [0, 0, 1.1, 1.1, 2, 5]], bush: [[0, 0, 0.8, 0.8, 0, 1]], rock: [[0, 0, 0.85, 0.85, 0, 1.6]],
+  // the boutique's old decorations (models: DECOR_MODEL, 84-shop); string garlands and canopies hover, so Schiffy walks under
   'cos.decor.doghouse': [[0, 0, 0.93, 0.93, 0, 2.2], [0, 1.25, 0.85, 0.32, 0, 0.3]], 'cos.decor.fountain': [[0, 0, 1.45, 1.45, 0, 2.5]],
   'cos.decor.arch': [[-1.55, 0, 0.25, 0.25, 0, 1.6], [1.55, 0, 0.25, 0.25, 0, 1.6], [0, 0, 1.75, 0.25, 1.5, 3.2]],
   'cos.decor.statues': [[0, -2.2, 0.7, 0.7, 0, 2.7], [0, 0, 0.7, 0.7, 0, 2.7], [0, 2.2, 0.7, 0.7, 0, 2.7]],
+  'cos.decor.banners': [[-1, 0, 0.16, 0.16, 0, 3.9], [1, 0, 0.16, 0.16, 0, 3.9], [-1.6, 0, 0.6, 0.28, 1.8, 3.6], [1.6, 0, 0.6, 0.28, 1.8, 3.6]],
+  'cos.decor.bunting': [[-1.6, 0, 0.15, 0.15, 0, 2.75], [1.6, 0, 0.15, 0.15, 0, 2.75], [0, 0, 1.45, 0.12, 1.7, 2.65]],
+  'cos.decor.lanterns': [[-2.2, 0, 0.15, 0.15, 0, 3.3], [2.2, 0, 0.15, 0.15, 0, 3.3], [0, 0, 2.05, 0.25, 1.9, 3.05]],
+  'cos.decor.picnic': [[0, 0, 1.1, 0.85, 0, 0.06], [0.45, -0.25, 0.3, 0.3, 0, 0.6], [-0.85, -0.55, 0.1, 0.1, 0, 2.3], [-0.85, -0.55, 0.95, 0.95, 1.9, 2.55]],
+  'cos.decor.topiary': [[-1.3, 0, 0.5, 0.5, 0, 1.9], [0, 0, 0.5, 0.5, 0, 1.9], [1.3, 0, 0.5, 0.5, 0, 1.9]],
   lookout: [[0, 0, 2, 1, 0, 1.6]], jumppad: [[0, 0, 0.8, 0.8, 0, 0.3]],
 };
 // Fixtures (v3.2): the lookout (plateau of two mesa blocks + brass telescope + its label) and the jump pad up to it. They
@@ -12406,13 +12418,49 @@ const HOME_MORE = [
   ['t_rosette', 'trophy', 'unlock', 'home20', 'Homemaker\'s Rosette', 'A blue ribbon for a well-furnished home.'],
 ];
 for (const [id, sec, cur, p, name, desc, f] of HOME_MORE) HOME_CAT.push(Object.assign({ id, sec, cur, name, desc }, cur === 'unlock' ? { task: p } : { price: p }, f ? { f } : {}));
-for (const h of HOME_CAT) { h.sku = 'home.' + h.id; h.home = true; h.cat = 'home'; }
+// ---- boss trophies (2026-10-17): one per boss, built from BIOMES, so a new level's bosses get theirs automatically ----
+// A statue of the boss (its own model, recoloured, never animated) on a stone plinth with a name plate: sector bosses in
+// bronze, level (final) bosses in gold and a size bigger (bossTrophyModel). Earned the first time that boss goes down
+// (SAVE.bosses[id] > 0): bossTrophyEarned (called from onBossDead, 70-rooms) grants it mid-run and queues a toast;
+// homeCheckUnlocks grants any an older save had already earned. sku 'home.t_boss_<boss id>', task 'boss:<boss id>'.
+// Locked ones show as dark silhouettes in the catalogue. They replace the boutique's paid "Boss Statues" (retired, 83-cosmetics).
+const BOSS_TROPHIES = BIOMES.flatMap((b, li) => b.bosses.map((id, si) => ({ id, li, si, final: false })).concat({ id: b.finalBoss, li, si: 5, final: true }));
+for (const t of BOSS_TROPHIES) {
+  const d = BOSSES[t.id] || { name: t.id }, b = BIOMES[t.li];
+  const where = t.final ? `Level ${t.li + 1} final boss, ${b.finalName}` : `Level ${t.li + 1}, sector ${t.si + 1}: ${b.sectors[t.si]}`;
+  HOME_CAT.push({ id: 't_boss_' + t.id, sec: 'trophy', cur: 'unlock', task: 'boss:' + t.id, boss: t.id, final: t.final, where, name: `${d.name} Trophy`,
+    desc: t.final ? `A golden statue of ${d.name}, the ${b.name} final boss, on a plinth with its name plate.` : `A bronze statue of ${d.name}, the ${b.sectors[t.si]} boss of ${b.name}, on a stone plinth.` });
+}
+// ---- the boutique's old decorations (moved here 2026-10-17) ----
+// Sold in Bijou's Boutique until 2026-10-17 at fixed hub spots; now ordinary home items on their old Paw Gem prices. They keep
+// their skus ('cos.decor.<id>': owned in SAVE.cosmetics.owned, so purchases carry over) and models (DECOR_MODEL, 84-shop).
+// homeMigrateDecor moves a save's shown ones onto the isle once. retired = never sold, listed only for players who own it.
+// Rows: [id, section, price, name, description, flags].
+const HOME_DECOR = [
+  ['banners', 'decor', 100, 'Paw Banners', 'Two pink swallowtail banners on tall poles, waving in the breeze. Walk under the flags.'],
+  ['bunting', 'decor', 100, 'Party Bunting', 'A string of bright flags between two posts. Walk under it.'],
+  ['lanterns', 'light', 250, 'Lantern Garland', 'Five glowing paper lanterns swaying between two posts. Walk under them.'],
+  ['arch', 'build', 250, 'Flower Arch', 'A green arch covered in blooms. Walk through it.'],
+  ['picnic', 'kitchen', 250, 'Picnic Spot', 'A checked blanket, a basket with a bone and a parasol that turns in the breeze.'],
+  ['fountain', 'water', 500, 'Bone Fountain', 'A two-tier splashing fountain with a spinning bone on top.'],
+  ['doghouse', 'structure', 500, 'Cosy Doghouse', 'Schiffy\'s own little house, with a cushion, a bowl and a bone.'],
+  ['topiary', 'garden', 500, 'Paw Topiaries', 'Three hedges in tubs, clipped into a paw, a bone and a ball.'],
+  ['statues', 'decor', 900, 'Boss Statues', 'Stone statues of the three bosses you have beaten most. No longer sold: every boss now earns its own trophy.', 'retired'],
+];
+for (const [id, sec, price, name, desc, flag] of HOME_DECOR)
+  HOME_CAT.push({ id: 'cd_' + id, sku: 'cos.decor.' + id, sec, cur: 'gems', price, name, desc, decor: true, retired: flag === 'retired' });
+for (const h of HOME_CAT) { h.sku = h.sku || 'home.' + h.id; h.home = true; h.cat = 'home'; }
 const HOME_CAT_BY = Object.fromEntries(HOME_CAT.map(h => [h.sku, h]));
 // each item's shape as boxes [cx, cz, hx, hz, y0, y1] (blender/build_home.py writes these next to the models)
 const HOME_CAT_PARTS = {"fence":[[0,0,1.58,0.12,0,1.15]],"path":[[0,0,1.05,1.05,0,0.14]],"bench":[[0,0,0.98,0.36,0,1.05]],"lamp":[[0,0,0.32,0.32,0,3.15]],"planter":[[0,0,0.78,0.33,0,1]],"mailbox":[[0,0,0.3,0.42,0,1.55]],"birdbath":[[0,0,0.62,0.62,0,1.25]],"campfire":[[0,0,0.62,0.62,0,0.45],[-1.45,0,0.32,0.62,0,0.5],[1.45,0,0.32,0.62,0,0.5]],"hydrant":[[0,0,0.36,0.36,0,1]],"toybox":[[0,0,0.62,0.42,0,0.95]],"hay":[[0,0,0.66,0.4,0,0.75]],"picnic":[[0,0,0.95,0.42,0,0.82],[0,0.72,0.95,0.2,0,0.5],[0,-0.72,0.95,0.2,0,0.5]],"veggies":[[0,0,1.08,0.78,0,0.65]],"swing":[[-1.25,0,0.22,0.62,0,2.6],[1.25,0,0.22,0.62,0,2.6],[0,0,1.45,0.16,2.35,2.7],[0,0,0.45,0.22,0.35,1.25]],"cottage":[[0,0,2.25,1.75,0,2.6],[0,0,2.55,2,2.6,4.6],[1.25,-0.55,0.3,0.3,3.4,5.1],[0,1.95,0.55,0.3,0,0.2]],"treehouse":[[0,0,0.62,0.62,0,2.6],[0,0,1.65,1.65,2.45,2.75],[0,0,1,0.9,2.75,4.9],[0,0,2.1,2.1,4.9,6.9],[0,1.85,0.42,0.18,0,2.6]],"windmill":[[0,0,1.35,1.35,0,4.6],[0,0,1.05,1.05,4.6,5.9],[0,1.5,0.45,0.35,3.6,4.8]],"lighthouse":[[0,0,1.15,1.15,0,6.3],[0,0,0.95,0.95,6.3,8.4]],"balloon":[[0,0,0.55,0.55,0,0.85],[0,0,1.75,1.75,1.7,5.6]],"gazebo":[[1.07,1.85,0.16,0.16,0,2.7],[2.14,0,0.16,0.16,0,2.7],[1.07,-1.85,0.16,0.16,0,2.7],[-1.07,-1.85,0.16,0.16,0,2.7],[-2.14,0,0.16,0.16,0,2.7],[-1.07,1.85,0.16,0.16,0,2.7],[0,0,2.4,2.4,2.6,4.4]],"hotspring":[[0,0,1.9,1.5,0,0.6]],"agility":[[-1.7,0,0.95,0.5,0,1.2],[0.45,0,0.12,0.62,0,1.8],[2.15,0,0.75,0.12,0,1]],"t_oak":[[0,0,0.8,0.8,0,2.7]],"t_aquarium":[[0,0,1,0.55,0,1.95]],"t_throne":[[0,0,0.95,0.85,0,2.7]],"t_lantern":[[0,0,0.48,0.48,0,2.45]],"t_podium":[[0,0,1.5,0.62,0,0.9],[0,0,0.38,0.38,0.9,1.95]],"t_obelisk":[[0,0,0.62,0.62,0,4.3]],"t_sundial":[[0,0,0.72,0.72,0,1.35]],"t_playhouse":[[0,0,1.15,0.82,0,2.5]],"t_rack":[[0,0,1.25,0.38,0,1.85]],"t_flag":[[0,0,0.55,0.55,0,4.4]],"sofa":[[0,0,1.12,0.47,0,1]],"armchair":[[0,0,0.56,0.48,0,1.18]],"rocker":[[0,0,0.45,0.58,0,1.28]],"dogbed":[[0,0,0.76,0.76,0,0.47]],"table_round":[[0,0,0.62,0.62,0,0.8]],"table_long":[[0,0,0.98,0.5,0,0.82]],"coffee":[[0,0,0.66,0.38,0,0.46]],"shelf":[[0,0,0.72,0.25,0,1.64]],"wardrobe":[[0,0,0.66,0.34,0,2.28]],"stool":[[0,0,0.3,0.3,0,0.56]],"beanbag":[[0,0,0.58,0.58,0,0.8]],"clock":[[0,0,0.36,0.27,0,2.38]],"stove":[[0,0,0.56,0.37,0,0.94],[0.3,-0.24,0.12,0.12,0.94,2.2]],"fridge":[[0,0,0.42,0.36,0,1.68]],"counter":[[0,0,0.84,0.34,0,0.9]],"bbq":[[0,0,0.44,0.44,0,1.12],[0.62,0,0.22,0.17,0.5,0.68]],"teaset":[[0,0,0.32,0.22,0,0.36]],"bowls":[[0,0,0.5,0.3,0,0.18]],"oven":[[0,0,0.78,0.72,0,1.25],[0.3,-0.3,0.14,0.14,1.2,1.95]],"cafe":[[0,0,0.42,0.42,0,0.8],[-0.8,0,0.3,0.27,0,1],[0.8,0,0.3,0.27,0,1],[0,0,1.1,1.1,1.75,2.45]],"stonelantern":[[0,0,0.42,0.42,0,1.6]],"stringlights":[[-1.5,0,0.16,0.16,0,2.36],[1.5,0,0.16,0.16,0,2.36]],"streetlamp":[[0,0,0.3,0.3,0,3],[0,0,0.8,0.22,2.2,3.3]],"paperlanterns":[[-1.2,0,0.14,0.14,0,2.3],[1.2,0,0.14,0.14,0,2.3]],"fireflies":[[0,0,0.2,0.2,0,0.47]],"torch":[[0,0,0.22,0.22,0,2]],"floorlamp":[[0,0,0.33,0.33,0,1.82]],"flowerbed":[[0,0,0.86,0.86,0,0.72]],"fern":[[0,0,0.32,0.32,0,0.82]],"hedge":[[0,0,0.8,0.38,0,1.02]],"topiary_dog":[[0,0,0.76,0.42,0,1.75]],"fruittree":[[0,0,0.3,0.3,0,1.45],[0,0,1.2,1.2,1.45,3.15]],"sunflowers":[[0,0,0.76,0.32,0,2.15]],"tulips":[[0,0,0.56,0.4,0,0.62]],"wheelbarrow":[[0,0,0.86,0.42,0,0.92]],"scarecrow":[[0,0,0.82,0.25,0,2.15]],"hammock":[[-1.4,0,0.16,0.22,0,1.75],[1.4,0,0.16,0.22,0,1.75],[0,0,1.15,0.42,0.3,0.85]],"slide":[[-0.75,0,0.48,0.48,0,2.3],[0.62,0,0.82,0.34,0,1.3]],"sandbox":[[0,0,0.86,0.86,0,0.3]],"ballpit":[[0,0,1.02,1.02,0,0.72]],"seesaw":[[0,0,1.42,0.25,0,0.98]],"kennel":[[0,0,0.78,0.82,0,1.6]],"tunnel":[[0,0,1.2,0.5,0,0.95]],"tent":[[0,-0.05,1.02,1.05,0,1.62]],"deckchair":[[0,0,0.4,0.6,0,0.98]],"fence_rustic":[[0,0,1.62,0.12,0,1.08]],"railing":[[0,0,1.62,0.1,0,1.2]],"gate":[[-0.98,0,0.16,0.16,0,1.62],[0.98,0,0.16,0.16,0,1.62],[-0.8,0.45,0.07,0.42,0,1.12],[0.8,0.45,0.07,0.42,0,1.12],[0,0,1.15,0.1,1.42,2.4]],"stonewall":[[0,0,1.25,0.3,0,0.78]],"brickwall":[[0,0,1.25,0.2,0,1.45]],"tiles":[[0,0,1,1,0,0.06]],"pawstones":[[0,0,0.78,0.82,0,0.09]],"rosearch":[[-1.1,0,0.2,0.26,0,2.15],[1.1,0,0.2,0.26,0,2.15],[0,0,1.32,0.26,1.9,2.8]],"rug":[[0,0,1.05,1.05,0,0.04]],"runner":[[0,0,1.32,0.55,0,0.04]],"pond":[[0,0,1.45,1.1,0,0.36]],"pawfountain":[[0,0,1.3,1.3,0,0.6],[0,0,0.42,0.42,0.6,2]],"well":[[0,0,0.76,0.76,0,0.82],[-0.72,0,0.1,0.1,0,2],[0.72,0,0.1,0.1,0,2],[0,0,0.92,0.62,1.95,2.6]],"footbridge":[[0,-0.6,1.62,0.08,0,1.15],[0,0.6,1.62,0.08,0,1.15],[0,0,1.62,0.55,0,0.56]],"waterwheel":[[-0.4,0,0.58,0.78,0,2.5],[0.55,0,0.22,1.05,0,2.1]],"easel":[[0,0,0.5,0.48,0,1.82]],"dogstatue":[[0,0,0.5,0.5,0,1.6]],"windchime":[[0,0,0.3,0.3,0,2.2],[0.4,0,0.18,0.18,1.1,2]],"signpost":[[0,0,0.62,0.22,0,2.2]],"banner":[[0,0,0.3,0.3,0,3.1],[0.45,0,0.45,0.08,1.35,2.9]],"barrel":[[0,0,0.43,0.43,0,0.93]],"weathervane":[[0,0,0.3,0.3,0,3]],"pinwheels":[[0,0,0.36,0.32,0,1.45]],"gnome":[[0,0,0.3,0.3,0,0.98]],"birdhouse":[[0,0,0.3,0.3,0,2.15]],"blossom":[[0,0,0.35,0.35,0,1.6],[0,0,1.5,1.5,1.6,3.7]],"umbrella":[[0.08,0.04,0.14,0.14,0,2],[0.18,0.05,1.15,1.15,1.65,2.35]],"sandcastle":[[0,0,0.76,0.62,0,1.12]],"jackolantern":[[0,0,0.62,0.5,0,0.85]],"leafpile":[[0,0,0.76,0.6,0,0.5]],"xmastree":[[0,0,1.05,1.05,0,3.35]],"gifts":[[0,0,0.62,0.46,0,0.82]],"snowpup":[[0,0,0.62,0.45,0,1.5]],"greenhouse":[[0,0,1.62,1.22,0,2],[0,0,1.62,1.28,2,2.92]],"shed":[[0,0,1.15,0.95,0,2.62]],"stall":[[0,0,1.3,0.48,0,1.12],[-1.2,-0.4,0.08,0.08,0,2.2],[1.2,-0.4,0.08,0.08,0,2.2],[0,0.05,1.42,0.8,1.95,2.75]],"ferris":[[0,0,1.85,0.62,0,0.3],[0,0.1,2.15,0.45,0.3,4.95]],"carousel":[[0,0,2.05,2.05,0,3.85]],"barn":[[0,0,1.9,1.5,0,2.4],[0,0,2,1.62,2.4,4.35]],"toadstool":[[0,0,0.45,0.45,0,1.25],[0,0,1.1,1.1,1.25,2.05]],"glowshrooms":[[0,0,0.56,0.46,0,0.95]],"clamchair":[[0,0,0.8,0.62,0,1.55]],"coral":[[0,0,0.62,0.52,0,1.25]],"palm":[[0.2,0,0.3,0.3,0,2.7],[0.45,0,1.45,1.45,2.7,4]],"icesculpture":[[0,0,0.55,0.55,0,1.75]],"pine":[[0,0,0.3,0.3,0,0.9],[0,0,1.08,1.08,0.6,3.45]],"igloo":[[0,0,1.55,1.55,0,1.55],[0,1.65,0.55,0.4,0,0.95]],"t_bone":[[0,0,0.55,0.55,0,1.55]],"t_captain":[[0,0,0.55,0.55,0,2.05]],"t_shields":[[0,0,1.25,0.32,0,1.75]],"t_rosette":[[0,0,0.5,0.45,0,1.95]]};
 const HOME_VARIANTS = {"sofa_blue":{"model":"sofa","tint":{"HSofa":"#7fbfff","HSofaD":"#4f8fe0"}},"sofa_mint":{"model":"sofa","tint":{"HSofa":"#8fe8c8","HSofaD":"#4fbf98"}},"armchair_teal":{"model":"armchair","tint":{"HArm":"#2ec4c6","HArmD":"#1f9a9c"}},"dogbed_blue":{"model":"dogbed","tint":{"HDogBed":"#7fbfff","HDogBedD":"#4f8fe0"}},"dogbed_green":{"model":"dogbed","tint":{"HDogBed":"#8fd96f","HDogBedD":"#5fbf4f"}},"table_round_white":{"model":"table_round","tint":{"HTblTop":"#fffaf0"}},"wardrobe_lilac":{"model":"wardrobe","tint":{"HWard":"#e6d8ff","HWardD":"#9a7ad8"}},"stool_teal":{"model":"stool","tint":{"HStool":"#2ec4c6"}},"beanbag_teal":{"model":"beanbag","tint":{"HBean":"#2ec4c6","HBeanD":"#1f9a9c"}},"fridge_pink":{"model":"fridge","tint":{"HFridge":"#ffb3d1"}},"fridge_cream":{"model":"fridge","tint":{"HFridge":"#fff1d6"}},"cafe_blue":{"model":"cafe","tint":{"HCafe":"#5fb8ff"}},"paperlanterns_blue":{"model":"paperlanterns","tint":{"GlowHPaper":"#7fc8ff"}},"floorlamp_sun":{"model":"floorlamp","tint":{"GlowHShade":"#ffe08a"}},"flowerbed_sun":{"model":"flowerbed","tint":{"HPetal":"#ffd34d","HPetalC":"#ff8a3d"}},"flowerbed_blue":{"model":"flowerbed","tint":{"HPetal":"#8fc8ff"}},"fruittree_orange":{"model":"fruittree","tint":{"HFruit":"#ff9a3d"}},"fruittree_lemon":{"model":"fruittree","tint":{"HFruit":"#ffe14d"}},"tulips_pink":{"model":"tulips","tint":{"HTulip":"#ff8fc0"}},"kennel_blue":{"model":"kennel","tint":{"HKennel":"#7fbfff"}},"tent_green":{"model":"tent","tint":{"HTent":"#8fd96f","HTentD":"#5fbf4f"}},"deckchair_blue":{"model":"deckchair","tint":{"HStripe":"#5fb8ff"}},"tiles_brick":{"model":"tiles","tint":{"HTile":"#d06a4a","HTileD":"#a84a34"}},"tiles_wood":{"model":"tiles","tint":{"HTile":"#e0a877","HTileD":"#c98a5a"}},"rug_blue":{"model":"rug","tint":{"HRug":"#7fbfff","HRugD":"#4f8fe0"}},"rug_mint":{"model":"rug","tint":{"HRug":"#8fe8c8","HRugD":"#4fbf98"}},"runner_teal":{"model":"runner","tint":{"HRunner":"#7fe0c0","HRunnerD":"#3fb8a0"}},"easel_sea":{"model":"easel","tint":{"HPaint":"#8fd3ff"}},"dogstatue_gold":{"model":"dogstatue","tint":{"HStatue":"#ffc53d"}},"banner_teal":{"model":"banner","tint":{"HBanner":"#2ec4c6"}},"umbrella_blue":{"model":"umbrella","tint":{"HUmb":"#5fb8ff"}},"stall_blue":{"model":"stall","tint":{"HAwning":"#5fb8ff"}},"toadstool_lilac":{"model":"toadstool","tint":{"HCap":"#b48cff"}},"coral_sun":{"model":"coral","tint":{"HCoralV":"#ffa04d"}}};
 // h.model = the mesh (Home_<model>); h.tint = material name -> colour for a variant (homeModel); shapes follow the model
-for (const h of HOME_CAT) { const v = HOME_VARIANTS[h.id]; h.model = v ? v.model : h.id; if (v) h.tint = v.tint; HOME_PARTS[h.sku] = HOME_CAT_PARTS[h.model]; }
+for (const h of HOME_CAT) { const v = HOME_VARIANTS[h.id]; h.model = v ? v.model : h.id; if (v) h.tint = v.tint; HOME_PARTS[h.sku] = HOME_CAT_PARTS[h.model] || HOME_PARTS[h.sku]; }
+// a boss trophy's shape: the plinth, then a box round the statue measured from the boss model (bossTrophyFit)
+for (const h of HOME_CAT) if (h.boss) Object.defineProperty(HOME_PARTS, h.sku, { configurable: true, enumerable: true, get: () => {
+  const f = bossTrophyFit(h), p = f.s * 0.8;
+  return [[0, 0, p, p, 0, f.top], [f.cx, f.cz, Math.max(0.2, f.hx), Math.max(0.2, f.hz), f.top, f.top + f.h]];
+} });
 const homeFlag = it => { const h = it && HOME_CAT_BY[it.kind]; return h ? h.f || '' : ''; };   // 'floor' | 'small' | 'surface' | ''
 const clearedLevel = l => !!(SAVE.cleared[l] && Object.values(SAVE.cleared[l]).some(n => n > 0));
 // tasks: text, and progress as [have, need]
@@ -12435,6 +12483,71 @@ const HOME_TASKS = {
   bosses: { get text() { return `Beat every one of the ${RUSH.length} bosses`; }, prog: () => [RUSH.filter(r => (SAVE.bosses || {})[r.id] > 0).length, RUSH.length] },
   home20: { text: 'Own 20 things for the home (bought or earned)', prog: () => [HOME_CAT.filter(h => h.cur !== 'unlock' && Wallet.owned(h.sku)).length, 20] },
 };
+for (const h of HOME_CAT) if (h.boss) HOME_TASKS[h.task] = { text: `Defeat ${(BOSSES[h.boss] || {}).name || h.boss} to unlock`, where: h.where, prog: () => [(SAVE.bosses || {})[h.boss] > 0 ? 1 : 0, 1] };
+// a boss just went down (onBossDead, 70-rooms): its trophy unlocks at once (first defeat only) and a toast follows once the
+// boss-kill toast has had its moment (G.trophyToastT counts down in update(), 90-flow, so menus and cards only delay it)
+function bossTrophyEarned(id) {
+  const h = HOME_CAT_BY['home.t_boss_' + id]; if (!h || Wallet.owned(h.sku) || !((SAVE.bosses || {})[id] > 0)) return;
+  Wallet.grant(h.sku, { via: 'unlock' });
+  (G.trophyToasts = G.trophyToasts || []).push(h); G.trophyToastT = 1.7;
+  try { logEvent('home', `trophy unlocked: ${h.name}`); } catch (e) {}
+}
+function bossTrophyToast() {
+  const list = (G.trophyToasts || []).splice(0); if (!list.length) return;
+  toast(list.length > 1 ? `${list.length} trophies unlocked` : `${list[0].name} unlocked`, 'Place it on your Home isle from the Edit home board', '#c69bff');
+}
+// how a boss statue sits on its plinth: model scale k and offsets (centred, feet on the plinth), its size after scaling, the
+// plinth top. Measured once per boss from the model; builds without boss models (-Lite) get a star (bossTrophyModel).
+const BT_FIT = {};
+function bossTrophyFit(h) {
+  if (BT_FIT[h.boss]) return BT_FIT[h.boss];
+  const s = h.final ? 1.2 : 1, H = h.final ? 2.3 : 1.8, W = h.final ? 1.75 : 1.45, top = 0.76 * s;
+  const g = PROPS && STATUE_MODEL[h.boss] ? makeProp(STATUE_MODEL[h.boss]) : null;
+  let f = { s, top, k: 0, cx: 0, cz: 0, h: 1.0 * s, hx: 0.5 * s, hz: 0.15 * s };
+  if (g) {
+    g.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(g), size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+    const k = Math.min(H / Math.max(0.1, size.y), W / Math.max(0.1, size.x, size.z));
+    f = { s, top, k, ox: -c.x * k, oz: -c.z * k, oy: top - box.min.y * k, cx: 0, cz: 0, h: size.y * k, hx: size.x * k / 2 + 0.03, hz: size.z * k / 2 + 0.03 };
+  }
+  if (PROPS) BT_FIT[h.boss] = f;
+  return f;
+}
+// a boss trophy: a two-step stone plinth with a bronze (gold for final bosses) band and name plate, the boss on top. The
+// boss model is a fresh clone with its own materials (every part recoloured to the metal, keeping a hint of its own colour),
+// so no statue touches the live bosses' shared materials, and nothing on it moves.
+function bossTrophyModel(h) {
+  const f = bossTrophyFit(h), s = f.s, g = new THREE.Group(), gold = h.final;
+  const metal = gold ? 0xffc53d : 0xc98a4b, glow = gold ? 0x5a3800 : 0x2a1200, stone = toon(0xd9d3c7), stoneD = toon(0xb9b1a4);
+  const trim = new THREE.MeshToonMaterial({ color: metal, gradientMap: toonGrad, emissive: glow, emissiveIntensity: 0.45 });
+  g.add(outline(mesh(new THREE.BoxGeometry(1.6 * s, 0.16 * s, 1.6 * s), stoneD, 0, 0.08 * s, 0), 1.03));
+  g.add(outline(mesh(new THREE.BoxGeometry(1.34 * s, 0.5 * s, 1.34 * s), stone, 0, 0.41 * s, 0), 1.03));
+  g.add(mesh(new THREE.BoxGeometry(1.38 * s, 0.06 * s, 1.38 * s), trim, 0, 0.62 * s, 0));
+  g.add(outline(mesh(new THREE.BoxGeometry(1.5 * s, 0.1 * s, 1.5 * s), stone, 0, 0.71 * s, 0), 1.03));
+  if (gold) for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) g.add(outline(mesh(new THREE.SphereGeometry(0.07 * s, 10, 8), trim, x * 0.67 * s, 0.82 * s, z * 0.67 * s), 1.12));
+  const name = (BOSSES[h.boss] || {}).name || h.name, plate = signPlane(name, 1.16 * s, 0.26 * s, gold ? '#5a3800' : '#3a2420', gold ? '#ffd76b' : '#e2b27a');
+  plate.position.set(0, 0.37 * s, 0.67 * s + 0.006); g.add(plate);
+  const model = f.k ? makeProp(STATUE_MODEL[h.boss]) : null;
+  if (model) {
+    const made = {};
+    model.traverse(n => {
+      if (!n.isMesh || n.userData.outline) return;
+      const conv = [].concat(n.material).map(m => {
+        if (!m || !m.color) return m;
+        if (!made[m.uuid]) made[m.uuid] = new THREE.MeshToonMaterial({ color: mixColor(m.color.getHex(), metal, 0.8), gradientMap: toonGrad, emissive: glow, emissiveIntensity: 0.35 });
+        return made[m.uuid];
+      });
+      n.material = Array.isArray(n.material) ? conv : conv[0];
+    });
+    model.scale.setScalar(f.k); model.position.set(f.ox, f.oy, f.oz); g.add(model);
+  } else {
+    // no boss models in this build: a star stands in for the statue
+    const st = new THREE.Shape(); for (let q = 0; q < 10; q++) { const a = q / 10 * Math.PI * 2 + Math.PI / 2, r = (q % 2 ? 0.2 : 0.46) * s; q ? st.lineTo(Math.cos(a) * r, Math.sin(a) * r) : st.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
+    const geo = new THREE.ExtrudeGeometry(st, { depth: 0.16 * s, bevelEnabled: true, bevelSize: 0.04, bevelThickness: 0.04, bevelSegments: 1 }); geo.center();
+    g.add(outline(mesh(geo, trim, 0, f.top + f.h / 2, 0), 1.06));
+  }
+  return g;
+}
 const homeGold = () => Math.max(0, Math.floor(SAVE.homeGold || 0));
 // every coin ever banked (SAVE.homeGoldAll, since v3.1; older saves start from what they have saved now)
 const homeGoldAll = () => Math.max(homeGold(), Math.floor(SAVE.homeGoldAll || 0));
@@ -12446,18 +12559,36 @@ function homeCheckUnlocks() {
   for (const h of HOME_CAT) if (h.cur === 'unlock' && !Wallet.owned(h.sku)) { const [a, b] = HOME_TASKS[h.task].prog(); if (a >= b) { Wallet.grant(h.sku, { via: 'unlock' }); fresh.push(h); } }
   return fresh;
 }
-// on the isle (true) or in storage: catalogue items keep it in SAVE.home.items[sku].out; the boutique's structures use its
-// Show / Hide (cosSave().decor)
-const homeIsOut = sku => HOME_CAT_BY[sku] ? Wallet.owned(sku) && !!(homeSave().items[sku] && homeSave().items[sku].out) : cosIsOn(sku);
+// on the isle (true) or in storage: SAVE.home.items[sku].out
+const homeIsOut = sku => !!HOME_CAT_BY[sku] && Wallet.owned(sku) && !!(homeSave().items[sku] && homeSave().items[sku].out);
 function homeSetOut(sku, on) {
   if (HOME_CAT_BY[sku]) { const it = homeSave().items; it[sku] = Object.assign({}, it[sku], { out: !!on }); }
-  else cosSave().decor[sku] = !!on;
   writeSave();
 }
 // everything you own for the isle that is in storage right now
-const homeStored = () => HOME_CAT.filter(h => Wallet.owned(h.sku) && !homeIsOut(h.sku)).map(h => h.sku)
-  .concat(Object.keys(HOME_BUILT).filter(sku => Wallet.owned(sku) && !cosIsOn(sku)));
-const STATUE_ROW = [-2.2, 0, 2.2];   // the three plinths along z (DECOR_BUILD statues, 84-shop)
+const homeStored = () => HOME_CAT.filter(h => Wallet.owned(h.sku) && !homeIsOut(h.sku)).map(h => h.sku);
+// once per save (SAVE.home.decorMoved): the boutique's old decorations become home items. Owned ones stay owned (same skus);
+// the ones a save showed (cosSave().decor[sku] !== false, the old default) go out onto the isle at their saved spot, else
+// their HOME_DECOR_SPOT, else the nearest free spot, else they wait in storage. Returns true if the save owned any.
+function homeMigrateDecor() {
+  const S = homeSave(); if (S.decorMoved) return false;
+  S.decorMoved = 1;
+  const shown = cosSave().decor || {}, mine = HOME_CAT.filter(h => h.decor && Wallet.owned(h.sku));
+  if (!mine.length) { writeSave(); return false; }
+  const placed = homeLayout().filter(i => !i.off);
+  for (const h of mine) {
+    if (shown[h.sku] === false || (S.items[h.sku] && S.items[h.sku].out)) continue;
+    const v = S.items[h.sku] || {}, d = HOME_DECOR_SPOT[h.sku] || { dx: 0, dz: 0 };
+    const it = { id: h.sku, kind: h.sku, cat: true, dx: v.dx != null ? v.dx : d.dx, dz: v.dz != null ? v.dz : d.dz, rot: v.rot || 0, pitch: v.pitch || 0, roll: v.roll || 0, lift: v.lift || 0 };
+    let r = homePlace(it, placed);
+    if (!r.ok || r.b > it.lift + 0.01) { const f = homeFree(it, placed); if (!f) continue; [it.dx, it.dz] = f; r = homePlace(it, placed); }
+    it.y = r.b; it.box = r.box; it.low = r.low; placed.push(it);
+    S.items[h.sku] = Object.assign({}, v, { dx: it.dx, dz: it.dz, out: true });
+  }
+  try { logEvent('home', `boutique decorations moved to the home catalogue: ${mine.map(h => h.name).join(', ')}`); } catch (e) {}
+  writeSave(); return true;
+}
+const STATUE_ROW = [-2.2, 0, 2.2];   // the retired Boss Statues' three plinths along z (DECOR_MODEL, 84-shop)
 const HOME_TOP = 12;                 // nothing rests higher than this
 const HOME_KEEP = [{ x: -HOME.hx + 2.4, z: -1.1, hx: 2.4, hz: 3.8, top: 4 }];   // the lookout + pad keep their own columns (HOME_FIXED)
 const HOME_NAMES = { tree: 'Tree', bush: 'Bush', rock: 'Rock' };
@@ -12527,15 +12658,13 @@ function homeFree(it, others) {
   }
   it.dx = ox0; it.dz = oz0; return null;
 }
-// the isle as it stands: every nature item (cleared ones flagged off) and every shown boutique structure, each with its
-// saved spot and angles, else its default. Items you have placed go first, lowest first, so stacks rebuild bottom-up and a
-// newly shown structure makes room for your arrangement instead of landing on it; one that doesn't fit moves to the
-// nearest free spot (not saved).
+// the isle as it stands: every nature item (cleared ones flagged off), every catalogue item out of storage and the fixtures,
+// each with its saved spot and angles, else its default. Items you have placed go first, lowest first, so stacks rebuild
+// bottom-up; one that doesn't fit moves to the nearest free spot (not saved).
 function homeLayout() {
   const saved = homeSave().items, list = [];
   const make = (id, kind, extra, def, defRot) => { const v = saved[id]; return { id, kind, ...extra, dx: v ? v.dx : def.dx, dz: v ? v.dz : def.dz, rot: v && v.rot != null ? v.rot : defRot, pitch: v && v.pitch || 0, roll: v && v.roll || 0, lift: v && v.lift || 0, y: v && v.y || 0, off: !!(v && v.off), saved: !!v }; };
   for (const n of HOME_NATURE) list.push(make(n.id, n.kind, { v: n.v, nature: true, name: HOME_NAMES[n.kind] }, n, (+n.id.slice(1) * 137) % 360));
-  for (const sku in HOME_BUILT) if (cosIsOn(sku)) list.push(make(sku, sku, { nature: false, name: COS_BY[sku].name }, HOME_BUILT[sku], 0));
   for (const h of HOME_CAT) if (homeIsOut(h.sku)) list.push(make(h.sku, h.sku, { nature: false, cat: true, name: h.name }, { dx: 0, dz: 0 }, 0));
   // the lookout and the jump pad: always out, flat on the grass, the lookout squared to a quarter turn
   for (const id in HOME_FIXED) {
@@ -12552,11 +12681,6 @@ function homeLayout() {
     placed.push(it);
   }
   return list;
-}
-// where a boutique structure stands right now (world x, z)
-function homeSpot(sku) {
-  const it = (G.homeLayout || []).find(i => i.id === sku), d = it || HOME_BUILT[sku];
-  return [HOME.x + d.dx, HOME.z + d.dz];
 }
 // pose a model: o = a nature model built at its spot's origin (base null), or a structure group whose children were built at
 // absolute world spots around base. It turns about the spot and its bottom sits at height b: world = T + R * p, so
@@ -12676,6 +12800,8 @@ function buildHome(grp, room, th, dm) {
 // a catalogue item's model (a stand-in box of its shape in builds without the Blender models)
 function homeModel(sku) {
   const h = HOME_CAT_BY[sku];   // a colour variant shares its model's mesh and recolours materials by name (h.tint)
+  if (h && h.boss) return bossTrophyModel(h);
+  if (h && h.decor) return decorModel(sku);   // the boutique's old decorations (84-shop)
   const m = makeProp('Home_' + (h ? h.model : sku.slice(5)), h && h.tint ? { recolor: h.tint } : {}); if (m) return m;
   const g = new THREE.Group();
   for (const [cx, cz, hx, hz, y0, y1] of HOME_PARTS[sku]) g.add(outline(mesh(new THREE.BoxGeometry(hx * 2, y1 - y0, hz * 2), toon(0xd9c9a0), cx, (y0 + y1) / 2, cz), 1.04));
@@ -12749,7 +12875,9 @@ function homePuff(o, chance, p, spread, col, shape, grav = -1.4) {
   o.localToWorld(HOME_PUFF.set(p[0] + rand(-spread, spread), p[1], p[2] + rand(-spread, spread)));
   emit(HOME_PUFF.x, HOME_PUFF.y, HOME_PUFF.z, 1, col, shape ? { speed: 0.35, size: 0.3, life: 1.2, grav, shape } : { speed: 0.9, size: 0.12, life: 0.9, grav, glow: true });
 }
-const homeAnim = sku => { const h = HOME_CAT_BY[sku]; return h ? HOME_ANIM['home.' + h.model] : null; };
+const HOME_DECOR_ANIM = o => dt => { for (const t of o.userData.ticks || []) t(dt); };   // decorModel's own ticks
+const HOME_DECOR_MOVES = new Set(['cos.decor.banners', 'cos.decor.bunting', 'cos.decor.lanterns', 'cos.decor.picnic', 'cos.decor.fountain', 'cos.decor.topiary']);
+const homeAnim = sku => { const h = HOME_CAT_BY[sku]; return !h ? null : h.decor ? (HOME_DECOR_MOVES.has(sku) ? HOME_DECOR_ANIM : null) : HOME_ANIM['home.' + h.model]; };
 // the home isle's trees, bushes, rocks and flowers, from the layout (G.homeLayout, which the boutique structures read too).
 // Called by refreshDecor (84-shop), so buying, showing or hiding a structure and every edit rebuild them together.
 function refreshHomeProps() {
@@ -13082,10 +13210,18 @@ const CAT = { sec: 'all', cur: 'all', own: 'all', q: '', hooked: false, iconQ: [
 const CAT_CUR = [['all', 'Any'], ['gold', 'Gold'], ['gems', null], ['unlock', 'Earned']];   // null = the gem currency's name (82-wallet loads later)
 const CAT_OWN = [['all', 'All'], ['new', 'Not owned'], ['own', 'Owned']];
 const HOME_FAMILY = {}; for (const h of HOME_CAT) (HOME_FAMILY[h.model] = HOME_FAMILY[h.model] || []).push(h);
-const catIcon = sku => modelPortrait('home:' + sku, () => HOME_CAT_BY[sku] ? homeModel(sku) : null, { rotY: -0.5, tilt: 0.35, dist: 1.25 });
+// a boss trophy not earned yet gets a dark silhouette icon (its model drawn in one flat dark colour)
+const catSil = sku => { const h = HOME_CAT_BY[sku]; return !!(h && h.boss && !Wallet.owned(sku)); };
+const catKey = sku => (catSil(sku) ? 'homesil:' : 'home:') + sku;
+const CAT_SIL_MAT = new THREE.MeshBasicMaterial({ color: 0x3a3f5c });
+const catIcon = sku => modelPortrait(catKey(sku), () => {
+  if (!HOME_CAT_BY[sku]) return null;
+  const m = homeModel(sku); if (catSil(sku)) m.traverse(n => { if (n.isMesh && !n.userData.outline) n.material = CAT_SIL_MAT; });
+  return m;
+}, { rotY: -0.5, tilt: 0.35, dist: 1.25 });
 // a cached 3D icon, or null after queueing it (catIconPump draws them in the background and swaps them in)
 function catIconLazy(sku) {
-  const k = 'home:' + sku; if (portraits[k] !== undefined) return portraits[k];
+  const k = catKey(sku); if (portraits[k] !== undefined) return portraits[k];
   if (!CAT.iconQ.includes(sku)) CAT.iconQ.push(sku);
   if (!CAT.pump) CAT.pump = requestAnimationFrame(catIconPump);
   return null;
@@ -13116,7 +13252,7 @@ const catPrice = h => h.cur === 'gold' ? `<b>${h.price.toLocaleString()}</b> gol
 // how much more of its currency an item needs (0 = affordable)
 const catShort = h => h.cur === 'gold' ? Math.max(0, h.price - homeGold()) : h.cur === 'gems' ? (Wallet.available() ? Math.max(0, h.price - Wallet.balance()) : h.price) : 0;
 const HOME_FLAG_TEXT = { floor: 'Walk-over', small: 'Tabletop', surface: 'Holds tabletop pieces' };
-const catTags = h => { const t = []; if (HOME_FLAG_TEXT[h.f]) t.push(HOME_FLAG_TEXT[h.f]); if (homeAnim(h.sku)) t.push('Moves'); if (h.tint || (HOME_FAMILY[h.model] || []).length > 1) t.push(`${HOME_FAMILY[h.model].length} colours`); return t.length ? `<span class="cat-tags">${t.map(x => `<i>${x}</i>`).join('')}</span>` : ''; };
+const catTags = h => { const t = []; if (h.retired) t.push('Retired'); if (HOME_FLAG_TEXT[h.f]) t.push(HOME_FLAG_TEXT[h.f]); if (homeAnim(h.sku)) t.push('Moves'); if (h.tint || (HOME_FAMILY[h.model] || []).length > 1) t.push(`${HOME_FAMILY[h.model].length} colours`); return t.length ? `<span class="cat-tags">${t.map(x => `<i>${x}</i>`).join('')}</span>` : ''; };
 function openCatalogue(sec) {
   if (!CAT.hooked) { CAT.hooked = true; Wallet.onChange(() => { if (!$('#catView').hidden) catRender(); if (HE.pv) hpPanel(); }); }   // the Wallet (82-wallet) loads after this file
   homeCheckUnlocks();
@@ -13125,10 +13261,11 @@ function openCatalogue(sec) {
   $('#catGrid').scrollTop = CAT.scroll;
 }
 function closeCatalogue() { $('#catView').hidden = true; hePanel(); }
+const catListed = h => !h.retired || Wallet.owned(h.sku);   // retired items (no longer sold) show only to their owners
 function catList() {
   if (CAT.sec === 'storage') return homeStored();
   const q = CAT.q.trim().toLowerCase(), secName = Object.fromEntries(HOME_SECS);
-  return HOME_CAT.filter(h => (CAT.sec === 'all' || h.sec === CAT.sec) && (CAT.cur === 'all' || h.cur === CAT.cur)
+  return HOME_CAT.filter(h => catListed(h) && (CAT.sec === 'all' || h.sec === CAT.sec) && (CAT.cur === 'all' || h.cur === CAT.cur)
     && (CAT.own === 'all' || (CAT.own === 'own') === Wallet.owned(h.sku))
     && (!q || `${h.name} ${h.desc} ${secName[h.sec]} ${h.cur === 'gems' ? CURRENCY.name : h.cur}`.toLowerCase().includes(q))).map(h => h.sku);
 }
@@ -13138,7 +13275,7 @@ function catRender() {
   $('#catGems').innerHTML = Wallet.available() ? `<b>${Wallet.balance().toLocaleString()}</b> ${CURRENCY.name}${Wallet.tag() ? ` <small>${Wallet.tag()}</small>` : ''}` : `${CURRENCY.name}: coming soon`;
   const tabs = [['all', 'All']].concat(HOME_SECS, [['storage', 'Storage']]);
   $('#catTabs').innerHTML = tabs.map(([k, n]) => {
-    const all = k === 'all' ? HOME_CAT : HOME_CAT.filter(h => h.sec === k);
+    const all = HOME_CAT.filter(h => catListed(h) && (k === 'all' || h.sec === k));
     const count = k === 'storage' ? stored.length : `${all.filter(h => Wallet.owned(h.sku)).length}/${all.length}`;
     return `<button type="button" class="tab ${CAT.sec === k ? 'on' : ''}" data-cattab="${k}">${n}<small>${count}</small></button>`;
   }).join('');
@@ -13148,7 +13285,7 @@ function catRender() {
   $('#catChips').innerHTML = CAT.sec === 'storage' ? '' : `<span class="cat-chipset">${chips(CAT_CUR, 'cur', 'catcur')}</span><span class="cat-chipset">${chips(CAT_OWN, 'own', 'catown')}</span>`;
   $('#catSearch').hidden = CAT.sec === 'storage';
   $('#catNote').innerHTML = CAT.sec === 'storage' ? (stored.length ? `Everything you own that isn't on the isle. Place it, then drag, turn, stack or hover it.` : `Storage is empty: everything you own is out on the isle.`)
-    : `Preview anything on your isle before you buy it. Gold is what Schiffy saves from runs (spending gold in a run never costs savings); ${CURRENCY.name} buy the showpieces; trophies are earned. Looks only: nothing here changes how a run plays.`;
+    : `Preview anything on your isle before you buy it. Gold is what Schiffy saves from runs (spending gold in a run never costs savings); ${CURRENCY.name} buy the showpieces; trophies are earned (every boss you beat adds its statue). Looks only: nothing here changes how a run plays.`;
   catRenderGrid();
 }
 function catRenderGrid() {
@@ -13161,6 +13298,7 @@ function catCard(sku) {
   const pic = h ? catIconLazy(sku) : '';
   let foot;
   if (own) foot = out ? `<span class="cat-state">On the isle</span>` : `<button type="button" class="smallbtn cat-go" data-place="${sku}">Place</button><span class="cat-state">In storage</span>`;
+  else if (h.boss) foot = `<span class="cat-task">${HOME_TASKS[h.task].text}</span><span class="cat-state">${h.where}</span><button type="button" class="smallbtn cat-pv" data-pv="${sku}">Preview</button>`;
   else if (h.cur === 'unlock') {
     const [a, b] = HOME_TASKS[h.task].prog(), p = Math.min(1, a / b);
     foot = `<span class="cat-task">${HOME_TASKS[h.task].text}</span><span class="cat-prog"><i style="width:${Math.round(p * 100)}%"></i></span><span class="cat-state">${Math.min(a, b)} / ${b}</span><button type="button" class="smallbtn cat-pv" data-pv="${sku}">Preview</button>`;
@@ -13169,7 +13307,7 @@ function catCard(sku) {
     foot = `<span class="cat-price${short > 0 ? ' short' : ''}">${catPrice(h)}</span><button type="button" class="smallbtn cat-pv cat-go" data-pv="${sku}">Preview</button>${short > 0 ? `<span class="cat-state">${h.cur === 'gems' && !Wallet.available() ? 'Coming soon' : `${short.toLocaleString()} more ${h.cur === 'gold' ? 'gold to save' : CURRENCY.name}`}</span>` : ''}`;
   }
   const fam = h && HOME_FAMILY[h.model].length > 1 ? `<span class="cat-sw">${HOME_FAMILY[h.model].map(o => `<button type="button" class="${o === h ? 'on' : ''}${Wallet.owned(o.sku) ? ' own' : ''}" data-jump="${o.sku}" title="${o.name}" aria-label="${o.name}" style="background:${catSwatch(o)}"></button>`).join('')}</span>` : '';
-  return `<div class="cat-item ${own ? 'own' : h && h.cur === 'unlock' ? 'locked' : ''}" data-sku="${sku}"><div class="cat-pic" data-ico="${sku}">${pic ? `<img alt="" src="${pic}">` : `<span>${it.name.slice(0, 1)}</span>`}</div><b>${it.name}</b>${fam}${h ? catTags(h) : ''}<span class="cat-desc">${it.desc || ''}</span><div class="cat-foot">${foot}</div></div>`;
+  return `<div class="cat-item ${own ? 'own' : h && h.cur === 'unlock' ? 'locked' + (h.boss ? ' sil' : '') : ''}" data-sku="${sku}"><div class="cat-pic" data-ico="${sku}">${pic ? `<img alt="" src="${pic}">` : `<span>${it.name.slice(0, 1)}</span>`}</div><b>${it.name}</b>${fam}${h ? catTags(h) : ''}<span class="cat-desc">${it.desc || ''}</span><div class="cat-foot">${foot}</div></div>`;
 }
 // a catalogue item's main action: place it if it is in storage, else preview it
 function catAct(sku) {
@@ -13180,6 +13318,7 @@ function catAct(sku) {
 // Returns { ok, error }; a failure changes nothing.
 async function homeBuy(h) {
   if (!h || h.cur === 'unlock') return { ok: false, error: 'Earned, never sold' };
+  if (h.retired) return { ok: false, error: 'No longer sold' };
   if (Wallet.owned(h.sku)) return { ok: false, error: 'Already yours' };
   if (h.cur === 'gold') {
     if (homeGold() < h.price) return { ok: false, error: 'Not enough gold saved' };
@@ -13239,7 +13378,7 @@ function hpStart(sku) {
   });
   mesh.userData.homeId = HP_ID; scene.add(mesh);
   const anim = homeAnim(sku);
-  HE.pv = { sku, it, mesh, mats, tick: anim ? anim(mesh) : null, busy: false, ok: true, bx: 0, bz: 0,
+  HE.pv = { sku, it, mesh, mats, tick: anim ? anim(mesh) : null, busy: false, ok: true, bx: 0, bz: 0, dark: !!h.boss,
     buddy: p ? { pos: p.mesh.position.clone(), rot: p.mesh.rotation.y, blob: p.blob ? p.blob.position.clone() : null } : null };
   hpKeep(); HE.sel = HP_ID; HE.from = null;
   HE.bad = !heShow(it); heRings(); hePanel();
@@ -13247,11 +13386,12 @@ function hpStart(sku) {
 }
 // the preview stays in the edit list and the pickable models across rebuilds (refreshDecor replaces both)
 function hpKeep() { const P = HE.pv; if (!P) return; HE.L = (G.homeLayout || []).concat([P.it]); (G.homeMeshes = G.homeMeshes || {})[HP_ID] = P.mesh; }
-const HP_RED = new THREE.Color(0xff4f6a);
+const HP_RED = new THREE.Color(0xff4f6a), HP_SIL = new THREE.Color(0x2a2f4a);
 function hpTint(bad) {
+  const dark = HE.pv.dark;   // a boss trophy not earned yet previews as a dark silhouette, like its catalogue card
   for (const { m, col, em } of HE.pv.mats) {
-    if (col) { m.color.copy(col); if (bad) m.color.lerp(HP_RED, 0.55); }
-    if (em) m.emissive.copy(bad ? HP_RED : em).multiplyScalar(bad ? 0.35 : 1);
+    if (col) { m.color.copy(col); if (dark) m.color.lerp(HP_SIL, 0.9); if (bad) m.color.lerp(HP_RED, 0.55); }
+    if (em) m.emissive.copy(bad ? HP_RED : em).multiplyScalar(bad ? 0.35 : dark ? 0 : 1);
   }
 }
 // Schiffy stands just right of the item, facing the camera (only his model moves; he is put back by hpEnd)
@@ -13282,21 +13422,21 @@ function hpPanel() {
   const h = HOME_CAT_BY[P.sku], it = P.it, tap = TOUCH.on ? 'Tap' : 'Click';
   let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity, top = 0;
   for (const q of it.box || []) { x0 = Math.min(x0, q.x0); x1 = Math.max(x1, q.x1); z0 = Math.min(z0, q.z0); z1 = Math.max(z1, q.z1); top = Math.max(top, q.y1); }
-  const pic = catIconLazy(P.sku), img = $('#hePvImg'); img.hidden = !pic; if (pic) img.src = pic;
-  $('#hePvName').textContent = h.name;
+  const pic = catIconLazy(P.sku), img = $('#hePvImg'); img.hidden = !pic; if (pic) img.src = pic;  $('#hePvName').textContent = h.name;
   $('#hePvSize').textContent = it.box ? `${(x1 - x0).toFixed(1)} × ${(z1 - z0).toFixed(1)} m, ${(top - (it.y || 0)).toFixed(1)} m tall · Schiffy is 1.1 m` : '';
   const unlock = h.cur === 'unlock', short = catShort(h), noGems = h.cur === 'gems' && !Wallet.available();
   const bal = h.cur === 'gold' ? `You have <b>${homeGold().toLocaleString()}</b> gold saved` : h.cur === 'gems' ? (noGems ? `${CURRENCY.name}: coming soon` : `You have ${GEM_TAG}<b>${Wallet.balance().toLocaleString()}</b>${Wallet.tag() ? ` <small>(${Wallet.tag()})</small>` : ''}`) : '';
   let state;
   if (P.busy) state = `Paying...`;
-  else if (unlock) { const [a, b] = HOME_TASKS[h.task].prog(); state = `Earned, never sold: <b>${HOME_TASKS[h.task].text}</b> (${Math.min(a, b)} / ${b}).`; }
+  else if (h.boss) state = `Earned, never sold: <b>${HOME_TASKS[h.task].text}</b> (${h.where}).`;
+  else if (unlock) { const [a, b] = HOME_TASKS[h.task].prog(); state =`Earned, never sold: <b>${HOME_TASKS[h.task].text}</b> (${Math.min(a, b)} / ${b}).`; }
   else if (!P.ok) state = `<span class="he-bad">Doesn't fit here.</span> Move it off the isle's edge, the red keep-clear spots${homeFlag(it) === 'small' ? '' : ' and tabletop pieces'}.`;
   else if (short > 0) state = noGems ? `${CURRENCY.name} aren't on sale yet.` : `<span class="he-bad">${short.toLocaleString()} more ${h.cur === 'gold' ? 'gold' : CURRENCY.name} needed.</span>`;
   else state = `Fits here.`;
   $('#hePvState').innerHTML = `${unlock ? '' : `${catPrice(h)} · ${bal}<br>`}${state} <span class="he-pvhint">${tap} the isle or drag it to move it.</span>`;
   const buy = $('#hePvBuy');
   buy.hidden = unlock;
-  buy.innerHTML = P.busy ? 'Paying...' : `Buy & place · ${catPrice(h)}`;
+  buy.innerHTML = P.busy ? 'Paying...' : unlock ? '' : `Buy & place · ${catPrice(h)}`;   // (trophies have no price: no Buy)
   buy.disabled = P.busy || !P.ok || short > 0 || noGems || Wallet.owned(P.sku);
   $('#hePvCancel').disabled = P.busy; $('#heDone').disabled = P.busy;
 }
@@ -13351,7 +13491,8 @@ $('#hePvCancel').addEventListener('click', () => { if (HE.pv && !HE.pv.busy) { s
 //   weapon range (RANGE_RING + DUMMY_SPOTS, 78-range), east past Bijou's Boutique (BOUTIQUE, 84-shop) and the Trophy Hall
 //   (HALL_AT), both facing the street, straight onto the bridge to Schiffy's Home;
 // - the Leaderboard (BOARD_AT) on the north-east lawn, between the Nightmare pad and the Boutique, facing the plaza;
-// - gardens fill the corners (HUB_NATURE pairs, HUB_BEDS flowers); boutique decor spots are DECOR_SPOT (84-shop).
+// - gardens fill the corners (HUB_NATURE pairs, HUB_BEDS flowers). (Boutique decor no longer stands on the lawn: it moved
+//   to the home catalogue on 2026-10-17.)
 // Prompt circles never overlap (the first interactable in range wins in updateInteract).
 const PLAZA = { x: 0, z: HOME_BRIDGE.z, r: 4.4 };
 const ARRIVE = { x: PLAZA.x, z: PLAZA.z - 1.2 };          // just north of the paw inlay, so wide phone screens show little sky
@@ -13434,7 +13575,7 @@ function buildHub() {
   }
   // flowers only in the garden beds (HUB_BEDS), clear of paths, props and the picnic / hedge spots
   const flowers = new THREE.InstancedMesh(new THREE.SphereGeometry(0.13, 8, 6), (() => { const m = toonU(0xffffff); m.emissive.setHex(0xffffff); m.emissiveIntensity = 0.3; return m; })(), 170);
-  const fc = th.flowers.map(c => new THREE.Color(c)), keepOff = [DECOR_SPOT.picnic, ...DECOR_SPOT.topiary].map(([x, z]) => [x, z, 1.7]).concat([[BOARD_AT.x, BOARD_AT.z, 2.7]]); let fn = 0;
+  const fc = th.flowers.map(c => new THREE.Color(c)), keepOff = [[BOARD_AT.x, BOARD_AT.z, 2.7]]; let fn = 0;   // (the old picnic / topiary decor spots are flower beds again)
   for (const [bx0, bz0, bx1, bz1] of HUB_BEDS) for (let x = bx0; x <= bx1; x += 0.95) for (let z = bz0; z <= bz1; z += 0.95) {
     if (fn >= 170 || Math.random() < 0.6) continue;
     const fx = x + rand(-0.3, 0.3), fz = z + rand(-0.3, 0.3);
@@ -13517,7 +13658,7 @@ function buildHub() {
   }
   hall.position.set(hallX, 0, hallZ); shadows(hall); scene.add(hall);
   addInteractable({ x: hallX, z: doorZ, r: 1.9, mesh: hall,
-    prompt: () => ({ icon: PROMPT_ICONS.chest, verb: 'Collectibles', title: 'Trophy Hall', desc: 'Pets you raised (each gives a small bonus to every run), weapons you found, bosses you beat, and your Endless, Boss Rush and Daily records.', action: 'Look' }),
+    prompt: () => ({ icon: PROMPT_ICONS.chest, verb: 'Collectibles', title: 'Trophy Hall', desc: 'Pets you raised (each gives a small bonus to every run), weapons you found, bosses you beat (each earns a statue for your home), and your Endless, Boss Rush and Daily records.', action: 'Look' }),
     use: () => openCollectibles() });
   // how-to board and sound bell
   const board = new THREE.Group();
@@ -13703,7 +13844,7 @@ function openCollectibles(tab = 'pets') {
   } else {
     html = BIOMES.flatMap(b => b.bosses.concat(b.finalBoss)).map(id => {
       const n = SAVE.bosses[id] || 0, d = BOSSES[id];
-      return `<div class="cslot ${n ? '' : 'locked'}"><div class="cico" style="background:${n ? '#ff8fb1' : '#6b6880'}">${n ? '★' : '?'}</div><b>${n ? d.name : '???'}</b><span>${n ? `Defeated ${n}×` : d.final ? 'Level boss' : 'Sector boss'}</span></div>`;
+      return `<div class="cslot ${n ? '' : 'locked'}"><div class="cico" style="background:${n ? '#ff8fb1' : '#6b6880'}">${n ? '★' : '?'}</div><b>${n ? d.name : '???'}</b><span>${n ? `Defeated ${n}×` : d.final ? 'Level boss' : 'Sector boss'}</span><i class="pbonus">${n ? 'Home trophy earned' : 'Beat it to earn its home trophy'}</i></div>`;
     }).join('');
   }
   $('#collectGrid').innerHTML = html;
@@ -15298,6 +15439,7 @@ const Wallet = (() => {
     async spend(sku, price) {
       const it = COS_BY[sku];
       if (!it) return { ok: false, error: 'Unknown item' };
+      if (it.retired && !api.owned(sku)) return { ok: false, error: 'No longer sold' };
       if (price !== it.price) return { ok: false, error: 'Price changed, please try again' };
       if (api.owned(sku)) return { ok: false, error: 'Already yours' };
       if (!provider) return { ok: false, error: 'Coming soon' };
@@ -15380,20 +15522,21 @@ window.addEventListener('message', e => {
 // ---------- cosmetics: the catalogue and how each look hooks into the game ----------
 // Looks only. Nothing here may touch G.st, wStats(), damage, health, speed, drops, XP, prices, unlocks or run progress:
 // every hook below changes colours, meshes or particles and nothing else. Bought with the Wallet (82-wallet), shown in the
-// boutique (84-shop). Saved in SAVE.cosmetics (cosSave): owned[sku], equipped[slot] = sku, decor[sku] = shown?
+// boutique (84-shop). Saved in SAVE.cosmetics (cosSave): owned[sku], equipped[slot] = sku, decor[sku] = shown? (decor is only
+// read once now, by homeMigrateDecor in 75-hub: the old hub decorations are home catalogue items, but owned[] still holds them)
 // Hooks (all wrap existing functions at load, so other files need no edits except the bark colour in useAbility):
 //   makePlayer   -> cosHeroInit/cosHeroApply: fur tint/pattern materials, outfits + wearables skinned to the hero's own skeleton
 //   setGunLook   -> cosGunSkin: recolours the held weapon model
 //   spawnProj    -> shot colour (weapon skins) + trail flag;  updateBullets -> trail particles
 //   killFeel     -> knockout burst;  updatePlayer -> dash trail;  gainXP -> level-up burst;  useAbility -> cosColor('bark', ...)
-//   buildHub     -> the boutique stall and owned decorations (84-shop)
+//   buildHub     -> the boutique stall (84-shop)
 // Outfits (Cos_<id>) and wearables (Acc_<id>) come from costumes.glb (blender/build_costumes.py). Each SkinnedMesh there is
 // skinned to a copy of Schiffy's armature; cosSkinned() rebinds it to the live hero's bones by name (THREE.Skeleton of the
 // hero's bones in the costume's joint order + the costume's own boneInverses/bindMatrix), so it follows every animation.
 const COS_CATS = [['outfit', 'Outfits'], ['hat', 'Hats'], ['face', 'Face'], ['back', 'Back'], ['neck', 'Neck'], ['fur', 'Fur'],
-  ['weapon', 'Weapons'], ['trail', 'Trails'], ['fx', 'Effects'], ['decor', 'Decor']];
+  ['weapon', 'Weapons'], ['trail', 'Trails'], ['fx', 'Effects']];   // (the Decor tab moved to the home catalogue, 2026-10-17)
 const COS_SLOTS = { outfit: 'Outfit', fur: 'Fur', head: 'Hat', face: 'Face', back: 'Back', neck: 'Neckwear', gun: 'Weapon skin', trail: 'Shot trail',
-  ko: 'Knockout pop', dash: 'Dash trail', bark: 'Bark wave', lvl: 'Level-up', decor: 'Decoration' };
+  ko: 'Knockout pop', dash: 'Dash trail', bark: 'Bark wave', lvl: 'Level-up' };
 // slots worn on Schiffy (previewed on the turntable in the shop)
 const COS_WORN = ['outfit', 'head', 'face', 'back', 'neck'];
 // price tiers: 100 / 250 / 500 / 900; outfits 500-1200
@@ -15472,20 +15615,12 @@ const COSMETICS = [
   { sku: 'cos.bark.gold', cat: 'fx', slot: 'bark', name: 'Golden Bark', price: 250, col: 0xffd34d, desc: 'A shining gold Bark Wave.' },
   { sku: 'cos.lvl.fireworks', cat: 'fx', slot: 'lvl', name: 'Level-up Fireworks', price: 250, desc: 'Weapon level-ups go off like fireworks.' },
   { sku: 'cos.lvl.hearts', cat: 'fx', slot: 'lvl', name: 'Level-up Hearts', price: 250, desc: 'Weapon level-ups shower you in hearts.' },
-  // hub decorations (each can be shown or hidden; they stand at fixed spots, see DECOR_BUILD in 84-shop).
-  // home: true = a structure or building, which only stands on Schiffy's Home isle (HOME_BUILT / homeSpot, 75-hub)
-  { sku: 'cos.decor.banners', cat: 'decor', slot: 'decor', name: 'Paw Banners', price: 100, desc: 'Two waving banners beside the portals.' },
-  { sku: 'cos.decor.bunting', cat: 'decor', slot: 'decor', name: 'Party Bunting', price: 100, desc: 'Strings of bright flags around the boutique.' },
-  { sku: 'cos.decor.lanterns', cat: 'decor', slot: 'decor', name: 'Paper Lanterns', price: 250, desc: 'A glowing lantern garland over the portal path.' },
-  { sku: 'cos.decor.arch', cat: 'decor', slot: 'decor', name: 'Flower Arch', price: 250, home: true, desc: 'A blooming arch on Schiffy\'s Home isle.' },
-  { sku: 'cos.decor.picnic', cat: 'decor', slot: 'decor', name: 'Picnic Spot', price: 250, desc: 'A checked blanket, a basket and a parasol.' },
-  { sku: 'cos.decor.fountain', cat: 'decor', slot: 'decor', name: 'Bone Fountain', price: 500, home: true, desc: 'A two-tier splashing fountain on Schiffy\'s Home isle.' },
-  { sku: 'cos.decor.doghouse', cat: 'decor', slot: 'decor', name: 'Cosy Doghouse', price: 500, home: true, desc: 'Schiffy\'s own little house on the home isle, with a bed and a bowl.' },
-  { sku: 'cos.decor.topiary', cat: 'decor', slot: 'decor', name: 'Paw Topiaries', price: 500, desc: 'Hedges clipped into a paw, a bone and a ball.' },
-  { sku: 'cos.decor.statues', cat: 'decor', slot: 'decor', name: 'Boss Statues', price: 900, home: true, desc: 'Stone statues of bosses you have beaten, on Schiffy\'s Home isle.' },
+  // (the hub decorations, skus 'cos.decor.*', moved to the home catalogue on 2026-10-17: HOME_DECOR in 75-hub)
 ];
 const COS_BY = Object.fromEntries(COSMETICS.map(c => [c.sku, c]));
 for (const h of HOME_CAT) COS_BY[h.sku] = h;   // home catalogue items (75-hub): bought through the same Wallet, listed in the home catalogue only
+// what the boutique lists: everything on sale, plus retired items only for the players who own them
+const cosListed = c => !c.retired || Wallet.owned(c.sku);
 
 // ---------- the outfit/wearable models (costumes.glb) ----------
 // Parsed in the background at load; when it lands the current hero is re-dressed. Empty in -Lite builds.
@@ -15512,22 +15647,21 @@ function cosAvail(it) { return !it || !it.model || !!cosModel(it.model) || !!COS
 // ---------- equip state ----------
 // the item equipped in a slot, only if it is really owned
 function cosEq(slot) { const sku = cosSave().equipped[slot]; return sku && Wallet.owned(sku) && COS_BY[sku] && COS_BY[sku].slot === slot ? COS_BY[sku] : null; }
-function cosIsOn(sku) { const it = COS_BY[sku]; if (!it || !Wallet.owned(sku)) return false; return it.slot === 'decor' ? cosSave().decor[sku] !== false : cosSave().equipped[it.slot] === sku; }
+function cosIsOn(sku) { const it = COS_BY[sku]; if (!it || !it.slot || !Wallet.owned(sku)) return false; return cosSave().equipped[it.slot] === sku; }
 function cosEquip(sku) {
-  const it = COS_BY[sku]; if (!it || !Wallet.owned(sku)) return false;
-  if (it.slot === 'decor') cosSave().decor[sku] = true; else cosSave().equipped[it.slot] = sku;
+  const it = COS_BY[sku]; if (!it || !it.slot || !Wallet.owned(sku)) return false;
+  cosSave().equipped[it.slot] = sku;
   writeSave(); cosRefresh(it.slot); return true;
 }
 function cosUnequip(sku) {
-  const it = COS_BY[sku]; if (!it) return;
-  if (it.slot === 'decor') cosSave().decor[sku] = false; else if (cosSave().equipped[it.slot] === sku) delete cosSave().equipped[it.slot];
+  const it = COS_BY[sku]; if (!it || !it.slot) return;
+  if (cosSave().equipped[it.slot] === sku) delete cosSave().equipped[it.slot];
   writeSave(); cosRefresh(it.slot);
 }
 // re-apply whatever depends on a slot right away (equipping is free and instant)
 function cosRefresh(slot) {
   if (slot === 'fur' || COS_WORN.includes(slot)) cosHeroApply(G.player);
   else if (slot === 'gun') cosGunSkin();
-  else if (slot === 'decor') { if (typeof refreshDecor === 'function') refreshDecor(); }
 }
 const cosColor = (slot, def) => { const it = cosEq(slot); return it && it.col != null ? it.col : def; };
 // worn slots hidden by an outfit (e.g. the hoodie's hood replaces any hat)
@@ -15847,12 +15981,11 @@ function cosLevelFx(p, sku) {
     popRing(x, y, z, c, 0.9, 0.3);
   }
 }
-// ---------- Bijou's Boutique: the cosmetics shop in the hub, plus the hub decorations ----------
+// ---------- Bijou's Boutique: the cosmetics shop in the hub (looks only), plus the old decorations' models ----------
 // A toon kiosk east of the plaza opens #shopView (G.state = 'shop', frozen in frame() like the other overlays; Esc = CLOSERS.shop).
-// Tabs per COS_CATS (1-9, 0), All/Owned/Equipped filters, a card per COSMETICS entry (83-cosmetics): fixed price, Buy -> confirm ->
-// Wallet.spend (82-wallet), then
-// Equip / Take off (or Show / Hide for decorations). Buying equips the item straight away. No timers, no random rewards.
-// Decorations stand at fixed spots (DECOR_BUILD), rebuilt by refreshDecor() whenever one is bought or toggled.
+// Tabs per COS_CATS (1-9), All/Owned/Equipped filters, a card per COSMETICS entry (83-cosmetics): fixed price, Buy -> confirm ->
+// Wallet.spend (82-wallet), then Equip / Take off. Buying equips the item straight away. No timers, no random rewards.
+// The decorations it used to sell are home catalogue items now (HOME_DECOR, 75-hub); their models are DECOR_MODEL below.
 const BOUTIQUE = { x: 7.6, z: 5.2 };   // on the north side of the main street, west of the Trophy Hall (hub layout: 75-hub)
 const GEM_TAG = '<svg class="gemico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3h11l4.5 6-10 12L2 9z" fill="#ff7ad9" stroke="#26315c" stroke-width="2" stroke-linejoin="round"/><path d="M2 9h20M9 3 7 9l5 12 5-12-2-6" fill="none" stroke="#26315c" stroke-width="1.2" stroke-linejoin="round" opacity=".5"/><path d="M8.6 5.4 7.4 8" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>';
 // Tapping a card tries it on: a turntable of Schiffy (own small WebGL renderer, PV) wears it; the same renderer draws the worn items' icons.
@@ -15957,18 +16090,7 @@ function cosIconUrl(it) {
   } else if (slot === 'lvl') {
     if (k === 'hearts') { heart(56, 58, 26, '#ff7ab8'); for (const [x, y] of [[24, 28], [88, 30], [86, 86], [26, 86]]) heart(x, y, 8, '#ffc4de'); }
     else { star(56, 58, 26, '#ffe066'); for (const [x, y, c] of [[24, 28, '#ff5d7a'], [88, 30, '#5fb8ff'], [86, 86, '#7fe36a'], [26, 86, '#b88aff']]) star(x, y, 9, c); }
-  } else {
-    // hub decorations
-    if (k === 'fountain') { g.beginPath(); g.ellipse(56, 84, 40, 12, 0, 0, Math.PI * 2); fs('#d9d3c7'); g.beginPath(); g.rect(50, 48, 12, 34); fs('#d9d3c7'); g.beginPath(); g.ellipse(56, 50, 22, 7, 0, 0, Math.PI * 2); fs('#d9d3c7'); g.strokeStyle = '#5fb8ff'; g.lineWidth = 5; for (const s of [-1, 1]) { g.beginPath(); g.moveTo(56, 34); g.quadraticCurveTo(56 + s * 24, 14, 56 + s * 30, 66); g.stroke(); } g.strokeStyle = ink; g.lineWidth = 4; circ(56, 32, 7, '#fff4dc'); }
-    else if (k === 'doghouse') { poly([[22, 52], [56, 22], [90, 52]], '#e8475a'); g.beginPath(); g.rect(28, 52, 56, 38); fs('#f2c587'); g.beginPath(); g.moveTo(46, 90); g.lineTo(46, 70); g.arc(56, 70, 10, Math.PI, 0); g.lineTo(66, 90); fs(ink); }
-    else if (k === 'statues') { g.beginPath(); g.rect(30, 74, 52, 16); fs('#bdb6aa'); ell(56, 52, 20, 22, '#d9d3c7'); circ(48, 48, 3, ink, false); circ(64, 48, 3, ink, false); star(84, 26, 9, '#ffe066'); }
-    else if (k === 'lanterns') { g.beginPath(); g.moveTo(10, 30); g.quadraticCurveTo(56, 58, 102, 30); g.stroke(); [['#ff8f8f', 26, 46], ['#ffe066', 56, 54], ['#8fd3ff', 86, 46]].forEach(([c, x, y]) => ell(x, y + 10, 11, 13, c)); }
-    else if (k === 'arch') { g.lineWidth = 12; g.strokeStyle = '#4ea83c'; g.beginPath(); g.moveTo(26, 96); g.lineTo(26, 56); g.arc(56, 56, 30, Math.PI, 0); g.lineTo(86, 96); g.stroke(); g.lineWidth = 3; g.strokeStyle = ink; for (const [x, y, c] of [[26, 70, '#ff8fc0'], [34, 36, '#ffe066'], [56, 26, '#fff'], [78, 36, '#ff8fc0'], [86, 70, '#ffe066'], [86, 86, '#fff']]) circ(x, y, 7, c); }
-    else if (k === 'bunting') { g.beginPath(); g.moveTo(8, 30); g.quadraticCurveTo(56, 52, 104, 30); g.stroke(); const cols = ['#ff5d7a', '#ffe066', '#5fb8ff', '#7fe36a', '#b88aff']; for (let i = 0; i < 5; i++) { const t = (i + 0.5) / 5, x = 8 + t * 96, y = 30 + 22 * 4 * t * (1 - t) * 0.9; poly([[x - 8, y], [x + 8, y], [x, y + 22]], cols[i]); } }
-    else if (k === 'picnic') { poly([[14, 84], [98, 84], [84, 60], [28, 60]], '#ff8f8f'); g.strokeStyle = '#fff'; g.lineWidth = 3; for (const x of [40, 56, 72]) { g.beginPath(); g.moveTo(x - 6, 62); g.lineTo(x - 10, 82); g.stroke(); } g.strokeStyle = ink; g.lineWidth = 4; g.beginPath(); roundRectPath(g, 44, 50, 26, 18, 5); fs('#c98a5a'); g.beginPath(); g.arc(57, 50, 10, Math.PI, 0); g.stroke(); g.beginPath(); g.moveTo(86, 84); g.lineTo(86, 24); g.stroke(); g.beginPath(); g.moveTo(62, 30); g.quadraticCurveTo(86, 6, 110, 30); fs('#ffe066'); }
-    else if (k === 'topiary') { g.beginPath(); g.rect(24, 80, 18, 12); fs('#c98a5a'); g.beginPath(); g.rect(70, 80, 18, 12); fs('#c98a5a'); paw(33, 60, 15, '#5fbf4f'); circ(79, 60, 16, '#5fbf4f'); }
-    else { g.beginPath(); g.moveTo(34, 100); g.lineTo(34, 14); g.stroke(); poly([[36, 18], [86, 18], [86, 70], [61, 58], [36, 70]], '#ff6fb0'); g.lineWidth = 3; paw(61, 40, 11, '#fff'); }
-  }
+  }   // (the hub decorations moved to the home catalogue on 2026-10-17: their icons are 3D renders there, 75-hub catIcon)
   return (cosIconCache[it.sku] = cv.toDataURL());
 }
 
@@ -16245,6 +16367,7 @@ function shopFoot(it, pv) {
   if (own) return on
     ? `<span class="sh-own eq">${deco ? 'Shown' : 'Equipped'}</span><button class="sh-btn${sm}" type="button" ${A}="uneq">${deco ? 'Hide' : 'Take off'}</button>`
     : `<span class="sh-own">Owned</span><button class="sh-btn on${sm}" type="button" ${A}="eq">${deco ? 'Show' : 'Equip'}</button>`;
+  if (it.retired) return `<span class="sh-own na">No longer sold</span>`;   // never listed for non-owners (cosListed); a safety net
   const price = `<span class="sh-price">${GEM_TAG}${it.price}</span>`;
   if (!Wallet.available()) return price + `<button class="sh-btn${sm}" type="button" disabled>Coming soon</button>`;
   if (!Wallet.canAfford(it.price)) return price + `<button class="sh-btn short${sm}" type="button" disabled>Need ${it.price - Wallet.balance()} more</button>`;
@@ -16257,7 +16380,7 @@ function shopHideNote(it) {
 function shopItemHTML(it) {
   const on = cosIsOn(it.sku), slotName = COS_SLOTS[it.slot] || '', sel = SHOP.sel === it.sku;
   return `<div class="sh-item ${on ? 'on' : ''} ${sel ? 'sel' : ''} ${SHOP.flash === it.sku ? 'flash' : ''}" data-sku="${it.sku}" role="button" tabindex="0" aria-pressed="${sel}"><img class="sh-ico" alt="" src="${cosIcon(it)}">` +
-    `<div class="sh-txt"><b>${it.name}</b><span class="sh-slot">${slotName}</span><em>${it.desc}</em></div><div class="sh-foot">${shopFoot(it)}</div></div>`;
+    `<div class="sh-txt"><b>${it.name}</b><span class="sh-slot">${slotName}${it.retired ? ' · Retired' : ''}</span><em>${it.desc}</em></div><div class="sh-foot">${shopFoot(it)}</div></div>`;
 }
 // the side panel: turntable for worn looks, a big icon for the rest
 function shopPreviewHTML() {
@@ -16283,15 +16406,15 @@ function shopRender() {
   el.querySelector('#shRestore').hidden = !(Wallet.provider && Wallet.provider.restore);
   el.querySelector('#shClose').textContent = TOUCH.on ? 'Close' : 'Close · Esc';
   el.querySelector('#shTabs').innerHTML = COS_CATS.map(([k, name], i) => {
-    const all = COSMETICS.filter(c => c.cat === k), own = all.filter(c => Wallet.owned(c.sku)).length;
+    const all = COSMETICS.filter(c => c.cat === k && cosListed(c)), own = all.filter(c => Wallet.owned(c.sku)).length;
     return `<button type="button" role="tab" aria-selected="${k === SHOP.tab}" class="tab ${k === SHOP.tab ? 'on' : ''}" data-shtab="${k}" title="${TOUCH.on ? name : name + ' (' + ((i + 1) % 10) + ')'}">${name}<small>${own}/${all.length}</small></button>`;
   }).join('');
-  const inTab = COSMETICS.filter(c => c.cat === SHOP.tab);
+  const inTab = COSMETICS.filter(c => c.cat === SHOP.tab && cosListed(c));   // retired items only for their owners
   const list = inTab.filter(c => SHOP.filter === 'owned' ? Wallet.owned(c.sku) : SHOP.filter === 'equipped' ? cosIsOn(c.sku) : true);
   const nOwn = inTab.filter(c => Wallet.owned(c.sku)).length, nOn = inTab.filter(c => cosIsOn(c.sku)).length;
-  el.querySelector('#shFilters').innerHTML = [['all', `All ${inTab.length}`], ['owned', `Owned ${nOwn}`], ['equipped', (SHOP.tab === 'decor' ? 'Shown ' : 'Equipped ') + nOn]]
+  el.querySelector('#shFilters').innerHTML = [['all', `All ${inTab.length}`], ['owned', `Owned ${nOwn}`], ['equipped', 'Equipped ' + nOn]]
     .map(([k, n]) => `<button type="button" class="sh-chip ${SHOP.filter === k ? 'on' : ''}" data-shf="${k}" aria-pressed="${SHOP.filter === k}">${n}</button>`).join('') +
-    `<span class="sh-count">${COSMETICS.filter(c => Wallet.owned(c.sku)).length} / ${COSMETICS.length} collected</span>`;
+    `<span class="sh-count">${COSMETICS.filter(c => Wallet.owned(c.sku)).length} / ${COSMETICS.filter(cosListed).length} collected</span>`;
   const grid = el.querySelector('#shGrid'), keep = grid.scrollTop;
   grid.innerHTML = list.length ? list.map(shopItemHTML).join('') : `<div class="sh-empty">${SHOP.filter === 'owned' ? 'Nothing from this shelf yet.' : 'Nothing worn from this shelf.'}</div>`;
   grid.scrollTop = keep;
@@ -16329,7 +16452,7 @@ async function shopBuy() {
   cosEquip(it.sku);   // new things go straight on (equipping is free; take it off any time)
   sfx('item'); sfx('pickup');
   const hid = it.slot !== 'outfit' && cosHidden(cosEq('outfit')).has(it.slot);
-  toast(`${it.name} is yours!`, it.slot === 'decor' ? (it.home ? 'It stands on Schiffy\'s Home isle, over the east bridge. Move it from the Edit home board there.' : 'Look around the hub for it.') : hid ? 'Equipped. Your outfit covers it until you take the outfit off.' : 'Equipped. Change it any time at the boutique.', '#ff9fc8');
+  toast(`${it.name} is yours!`, hid ? 'Equipped. Your outfit covers it until you take the outfit off.' : 'Equipped. Change it any time at the boutique.', '#ff9fc8');
   shopRender();
 }
 function openShop(tab) {
@@ -16412,7 +16535,7 @@ function buildBoutique() {
   const U = g.userData;
   addInteractable({ x, z: z + 1.55, r: 1.7, mesh: g,
     prompt: () => ({ icon: `<svg viewBox="0 0 64 64" width="56" height="56"><path d="M18 8h28l12 16-26 32L6 24z" fill="#ff7ad9" stroke="#3a2420" stroke-width="3.5" stroke-linejoin="round"/><path d="M6 24h52M24 8l-6 16 14 32 14-32-6-16" fill="none" stroke="#3a2420" stroke-width="2.4" stroke-linejoin="round" opacity=".55"/></svg>`,
-      verb: 'Boutique', title: 'Bijou\'s Boutique', desc: `Outfits, hats, wearables, fur, weapon skins, effects and hub decorations, paid in ${CURRENCY.name}. Looks only: nothing here changes stats.${Wallet.provider && !Wallet.provider.real ? ` <b>Playtest gems, not real money.</b>` : ''}`, action: 'Browse' }),
+      verb: 'Boutique', title: 'Bijou\'s Boutique', desc: `Outfits, hats, wearables, fur, weapon skins and effects, paid in ${CURRENCY.name}. Looks only: nothing here changes stats.${Wallet.provider && !Wallet.provider.real ? ` <b>Playtest gems, not real money.</b>` : ''}`, action: 'Browse' }),
     use: () => openShop(),
     tick: dt => {
       U.gem.rotation.y += dt * 1.6; U.gem.position.y = 1.32 + Math.sin(G.time * 2.2) * 0.05;
@@ -16421,64 +16544,59 @@ function buildBoutique() {
     } });
 }
 
-// ---------- hub decorations ----------
-// fixed spots (DECOR_SPOT), chosen to keep the paths, the plaza, the weapon range, the shrine and every prompt clear;
-// structures (arch, fountain, doghouse, statues) stand on the home isle wherever the Home planner put them (homeSpot, 75-hub)
+// ---------- the boutique's old decorations, now home catalogue items ----------
+// Until 2026-10-17 the boutique sold hub decorations that stood at fixed spots. They are home catalogue items now (HOME_DECOR,
+// 75-hub; same skus 'cos.decor.*', so purchases carry over): placed, turned, stacked and previewed like any other home item.
+// DECOR_MODEL[sku](g, ticks) builds one round its own origin (front = +z, the ground at y 0) into the group g, and pushes any
+// moving part's tick(dt) to ticks. Shapes for collision are in HOME_PARTS (75-hub). homeModel calls decorModel; homeAnim runs
+// the ticks. Particles only during play (edit mode and the preview tick models while the world is frozen).
 const stoneMat = c => toon(mixColor(c, 0xd9d3c7, 0.82));
 const STATUE_MODEL = { grumbletoad: 'Boss_Toad', kilnmole: 'Boss_Mole', peafowl: 'Boss_Peafowl', kettle: 'Boss_Kettle', magmor: 'Boss_Magmor', blazefang: 'Boss_Blazefang', bristle: 'Boss_Bristle', mothershroom: 'Boss_Mother', moonmoth: 'Boss_Moth', pebblejaw: 'Boss_Pebble', stormlantern: 'Boss_Storm', hollowoak: 'Boss_Oak',
   tidecrab: 'Boss_Tide', pufferking: 'Boss_Puffer', sunray: 'Boss_Ray', coralhydra: 'Boss_Hydra', beacon: 'Boss_Beacon', gloomfin: 'Boss_Gloom',
   snowduke: 'Boss_Snowman', admiral: 'Boss_Admiral', tusker: 'Boss_Mammoth', auroraowl: 'Boss_Owl', rimehold: 'Boss_Golem', yetiking: 'Boss_Yeti' };
-// lawn decor spots (hub zones: 75-hub). Bunting posts stand at the street's north edge either side of the boutique, the
-// banners flank the portal row's ends, the lantern garland hangs over the avenue in front of the portals, the picnic is in
-// the north-east garden behind the Trophy Hall, and the three hedges line the street's south side toward the bridge
-const DECOR_SPOT = { bunting: [[BOUTIQUE.x - 2.7, 6.8], [BOUTIQUE.x + 2.7, 6.8]], picnic: [12.6, -3.2], topiary: [[9.8, 10.2], [13, 10.2], [16.2, 10.2]],
-  banners: [[-18.4, -11.4], [18.4, -11.4]], lanterns: { z: -6.6, x: 2.2 } };
-// a wooden post with a gold knob (used by banners, lanterns, bunting)
+// a wooden post with a gold knob (banners, lanterns, bunting)
 function decorPost(grp, x, z, h) {
   grp.add(outline(mesh(new THREE.CylinderGeometry(0.07, 0.09, h, 8), toon(0x8a5a3a), x, h / 2, z), 1.12));
   grp.add(outline(mesh(new THREE.SphereGeometry(0.12, 10, 8), accGold(), x, h + 0.05, z), 1.12));
 }
-const DECOR_BUILD = {
-  'cos.decor.banners'(grp, room, ticks) {
-    for (const [[x, z], ph] of DECOR_SPOT.banners.map((s, i) => [s, i * 1.7])) {   // just past the portal row's two ends
-      const b = new THREE.Group(); b.position.set(x, 0, z); grp.add(b);
+const DECOR_MODEL = {
+  // two swallowtail banners on tall poles, flying outward
+  'cos.decor.banners'(grp, ticks) {
+    for (const s of [-1, 1]) {
+      const b = new THREE.Group(); b.position.set(s * 1.0, 0, 0); b.rotation.y = s < 0 ? Math.PI : 0; grp.add(b);
       b.add(outline(mesh(new THREE.CylinderGeometry(0.07, 0.09, 3.7, 8), toon(0x8a5a3a), 0, 1.85, 0), 1.12));
       b.add(outline(mesh(new THREE.SphereGeometry(0.13, 10, 8), accGold(), 0, 3.75, 0), 1.12));
       const pivot = new THREE.Group(); pivot.position.y = 3.5; b.add(pivot);
       const flag = outline(mesh(new THREE.BoxGeometry(1.0, 1.5, 0.04), toon(0xff6fb0), 0.55, -0.75, 0), 1.04); pivot.add(flag);
-      for (const [dx, dy, r] of [[0, -0.12, 0.2], [-0.2, 0.16, 0.08], [-0.07, 0.25, 0.08], [0.07, 0.25, 0.08], [0.2, 0.16, 0.08]]) { const d = mesh(new THREE.CircleGeometry(r, 16), basic(0xfff4dc), dx, dy, 0.025); flag.add(d); }
-      for (const s of [-1, 1]) { const tail = mesh(new THREE.ConeGeometry(0.25, 0.4, 3), toon(0xffe066), 0.55 + s * 0.25, -1.66, 0); tail.rotation.z = Math.PI; tail.scale.z = 0.15; pivot.add(tail); }
-      room.colliders.push({ x, z, r: 0.25, h: 4, decor: true });
+      for (const [dx, dy, r] of [[0, -0.12, 0.2], [-0.2, 0.16, 0.08], [-0.07, 0.25, 0.08], [0.07, 0.25, 0.08], [0.2, 0.16, 0.08]]) for (const f of [1, -1]) { const d = mesh(new THREE.CircleGeometry(r, 16), basic(0xfff4dc), dx, dy, f * 0.025); if (f < 0) d.rotation.y = Math.PI; flag.add(d); }
+      for (const t of [-1, 1]) { const tail = mesh(new THREE.ConeGeometry(0.25, 0.4, 3), toon(0xffe066), 0.55 + t * 0.25, -1.66, 0); tail.rotation.z = Math.PI; tail.scale.z = 0.15; pivot.add(tail); }
+      const ph = s * 1.7;
       ticks.push(() => { pivot.rotation.y = Math.sin(G.time * 1.8 + ph) * 0.22; });
     }
   },
-  // two flag strings from the boutique's awning out to a post on each side
-  'cos.decor.bunting'(grp, room, ticks) {
-    const cols = [0xff5d7a, 0xffe066, 0x5fb8ff, 0x7fe36a, 0xb88aff, 0xff9fc8];
-    const ends = [[BOUTIQUE.x - 1.55, BOUTIQUE.z + 0.45], [BOUTIQUE.x + 1.55, BOUTIQUE.z + 0.45]];
-    DECOR_SPOT.bunting.forEach(([px, pz], i) => {
-      decorPost(grp, px, pz, 2.6); room.colliders.push({ x: px, z: pz, r: 0.2, h: 3, decor: true });
-      const [ex, ez] = ends[i], a = new THREE.Vector3(ex, 2.62, ez), b = new THREE.Vector3(px, 2.6, pz);
-      const mid = a.clone().lerp(b, 0.5); mid.y -= 0.55;
-      const curve = new THREE.QuadraticBezierCurve3(a, mid, b);
-      grp.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 16, 0.02, 4, false), toon(0x3a2420)));
-      const n = 7, dir = b.clone().sub(a).setY(0).normalize(), yaw = Math.atan2(-dir.z, dir.x);
-      for (let k = 0; k < n; k++) {
-        const pt = curve.getPoint((k + 0.5) / n), f = new THREE.Group(); f.position.copy(pt); f.rotation.y = yaw; grp.add(f);
-        const flag = outline(mesh(new THREE.ConeGeometry(0.16, 0.34, 3), toon(cols[(k + i * 3) % cols.length]), 0, -0.17, 0), 1.06);
-        flag.rotation.z = Math.PI; flag.scale.z = 0.18; f.add(flag);
-        ticks.push(() => { f.rotation.x = Math.sin(G.time * 2.2 + k * 0.9 + i) * 0.18; });
-      }
-    });
-  },
-  'cos.decor.lanterns'(grp, room, ticks) {
-    const { z, x: X } = DECOR_SPOT.lanterns, top = 3.0;
-    for (const s of [-1, 1]) {
-      grp.add(outline(mesh(new THREE.CylinderGeometry(0.07, 0.09, top + 0.15, 8), toon(0x8a5a3a), s * X, (top + 0.15) / 2, z), 1.12));
-      grp.add(outline(mesh(new THREE.SphereGeometry(0.11, 8, 6), accGold(), s * X, top + 0.2, z), 1.12));
-      room.colliders.push({ x: s * X, z, r: 0.2, h: 3.5, decor: true });
+  // a string of bright flags between two posts
+  'cos.decor.bunting'(grp, ticks) {
+    const cols = [0xff5d7a, 0xffe066, 0x5fb8ff, 0x7fe36a, 0xb88aff, 0xff9fc8], X = 1.6;
+    for (const s of [-1, 1]) decorPost(grp, s * X, 0, 2.6);
+    const a = new THREE.Vector3(-X, 2.6, 0), b = new THREE.Vector3(X, 2.6, 0), mid = a.clone().lerp(b, 0.5); mid.y -= 0.55;
+    const curve = new THREE.QuadraticBezierCurve3(a, mid, b);
+    grp.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 16, 0.02, 4, false), toon(0x3a2420)));
+    const n = 8;
+    for (let k = 0; k < n; k++) {
+      const pt = curve.getPoint((k + 0.5) / n), f = new THREE.Group(); f.position.copy(pt); grp.add(f);
+      const flag = outline(mesh(new THREE.ConeGeometry(0.16, 0.34, 3), toon(cols[k % cols.length]), 0, -0.17, 0), 1.06);
+      flag.rotation.z = Math.PI; flag.scale.z = 0.18; f.add(flag);
+      ticks.push(() => { f.rotation.x = Math.sin(G.time * 2.2 + k * 0.9) * 0.18; });
     }
-    const curve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(-X, top, z), new THREE.Vector3(0, top - 0.9, z), new THREE.Vector3(X, top, z));
+  },
+  // a glowing paper-lantern garland between two posts
+  'cos.decor.lanterns'(grp, ticks) {
+    const X = 2.2, top = 3.0;
+    for (const s of [-1, 1]) {
+      grp.add(outline(mesh(new THREE.CylinderGeometry(0.07, 0.09, top + 0.15, 8), toon(0x8a5a3a), s * X, (top + 0.15) / 2, 0), 1.12));
+      grp.add(outline(mesh(new THREE.SphereGeometry(0.11, 8, 6), accGold(), s * X, top + 0.2, 0), 1.12));
+    }
+    const curve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(-X, top, 0), new THREE.Vector3(0, top - 0.9, 0), new THREE.Vector3(X, top, 0));
     grp.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 20, 0.025, 5, false), toon(0x3a2420)));
     const cols = [0xff8f8f, 0xffe066, 0x8fd3ff, 0xc9a6ff, 0xff9fc8];
     cols.forEach((c, i) => {
@@ -16490,31 +16608,30 @@ const DECOR_BUILD = {
       ticks.push(() => { hang.rotation.z = Math.sin(G.time * 1.6 + i * 1.3) * 0.12; });
     });
   },
-  'cos.decor.arch'(grp, room) {
-    const [ax, z] = homeSpot('cos.decor.arch'), R = 1.55, green = toon(0x5fbf4f), arch = new THREE.Group(); arch.position.x = ax; grp.add(arch); grp = arch;
-    for (const s of [-1, 1]) { grp.add(outline(mesh(new THREE.CylinderGeometry(0.11, 0.13, 1.5, 8), green, s * R, 0.75, z), 1.1)); room.colliders.push({ x: ax + s * R, z, r: 0.25, h: 3.2, decor: true }); }
-    grp.add(outline(mesh(new THREE.TorusGeometry(R, 0.12, 8, 28, Math.PI), green, 0, 1.5, z), 1.08));
+  'cos.decor.arch'(grp) {
+    const R = 1.55, green = toon(0x5fbf4f);
+    for (const s of [-1, 1]) grp.add(outline(mesh(new THREE.CylinderGeometry(0.11, 0.13, 1.5, 8), green, s * R, 0.75, 0), 1.1));
+    grp.add(outline(mesh(new THREE.TorusGeometry(R, 0.12, 8, 28, Math.PI), green, 0, 1.5, 0), 1.08));
     const cols = [0xff8fc0, 0xffe066, 0xffffff, 0xff6f8f];
     for (let k = 0; k < 15; k++) {
       const t = k / 14, a = t * Math.PI, onArc = k > 2 && k < 12;
       const x = onArc ? Math.cos(a) * R : (k <= 2 ? R : -R), y = onArc ? 1.5 + Math.sin(a) * R : 0.3 + (k <= 2 ? k : 14 - k) * 0.45;
-      const f = new THREE.Group(); f.position.set(x + rand(-0.06, 0.06), y, z + 0.13); grp.add(f);
+      const f = new THREE.Group(); f.position.set(x + ((k * 37) % 7 - 3) * 0.02, y, 0.13); grp.add(f);
       const c = cols[k % cols.length];
       for (let q = 0; q < 5; q++) { const pa = q / 5 * Math.PI * 2, pt = mesh(new THREE.SphereGeometry(0.07, 8, 6), toon(c), Math.cos(pa) * 0.08, Math.sin(pa) * 0.08, 0); pt.scale.set(1, 1, 0.5); f.add(pt); }
       f.add(mesh(new THREE.SphereGeometry(0.05, 8, 6), toon(c === 0xffe066 ? 0xff8f3d : 0xffe066), 0, 0, 0.03));
     }
     // a few leaves clinging to the posts
-    for (let k = 0; k < 8; k++) { const s = k % 2 ? 1 : -1, lf = mesh(new THREE.SphereGeometry(0.09, 8, 5), toon(0x4ea83c), s * R + s * 0.1, 0.25 + k * 0.17, z - 0.05); lf.scale.set(1.3, 0.5, 0.8); lf.rotation.z = s * 0.6; grp.add(lf); }
+    for (let k = 0; k < 8; k++) { const s = k % 2 ? 1 : -1, lf = mesh(new THREE.SphereGeometry(0.09, 8, 5), toon(0x4ea83c), s * R + s * 0.1, 0.25 + k * 0.17, -0.05); lf.scale.set(1.3, 0.5, 0.8); lf.rotation.z = s * 0.6; grp.add(lf); }
   },
   // checked blanket, a basket with a bone, a parasol that turns slowly in the breeze
-  'cos.decor.picnic'(grp, room, ticks) {
-    const [x, z] = DECOR_SPOT.picnic, g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = -0.2; grp.add(g);
+  'cos.decor.picnic'(g, ticks) {
     const tex = canvasTex(64, 64, c => { for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) { c.fillStyle = (i + j) % 2 ? '#ff8f8f' : '#fff4dc'; c.fillRect(i * 8, j * 8, 8, 8); } });
     tex.magFilter = THREE.NearestFilter;
-    const blanket = mesh(new THREE.BoxGeometry(2.2, 0.04, 1.7), new THREE.MeshToonMaterial({ map: tex, gradientMap: toonGrad }), 0, 0.03, 0); g.add(blanket);
+    g.add(mesh(new THREE.BoxGeometry(2.2, 0.04, 1.7), new THREE.MeshToonMaterial({ map: tex, gradientMap: toonGrad }), 0, 0.03, 0));
     const basket = new THREE.Group(); basket.position.set(0.45, 0.05, -0.25); g.add(basket);
     basket.add(outline(mesh(new THREE.CylinderGeometry(0.3, 0.24, 0.32, 14), toon(0xc98a5a), 0, 0.16, 0), 1.06));
-    const handle = outline(mesh(new THREE.TorusGeometry(0.24, 0.03, 6, 16, Math.PI), toon(0x8a5a3a), 0, 0.32, 0), 1.12); basket.add(handle);
+    basket.add(outline(mesh(new THREE.TorusGeometry(0.24, 0.03, 6, 16, Math.PI), toon(0x8a5a3a), 0, 0.32, 0), 1.12));
     const bone = new THREE.Group(); bone.position.set(0.05, 0.36, 0.05); bone.rotation.z = 0.4; basket.add(bone);
     bone.add(mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.26, 6), toon(0xfff4dc), 0, 0, 0).rotateZ(Math.PI / 2));
     for (const sx of [-0.14, 0.14]) for (const sy of [-0.035, 0.035]) bone.add(mesh(new THREE.SphereGeometry(0.045, 8, 6), toon(0xfff4dc), sx, sy, 0));
@@ -16523,44 +16640,41 @@ const DECOR_BUILD = {
     const par = new THREE.Group(); par.position.set(-0.85, 0, -0.55); g.add(par);
     par.add(mesh(new THREE.CylinderGeometry(0.03, 0.03, 2.3, 6), toon(0xfff4dc), 0, 1.15, 0));
     const top = new THREE.Group(); top.position.y = 2.25; top.rotation.z = 0.12; par.add(top);
-    for (let k = 0; k < 8; k++) { const seg = outline(mesh(new THREE.ConeGeometry(1.1, 0.45, 3, 1, true), toon(k % 2 ? 0xffe066 : 0xff8fc0), 0, 0, 0), 1.03); seg.material.side = THREE.DoubleSide; seg.rotation.y = k / 8 * Math.PI * 2; seg.scale.set(0.5, 1, 1.0); top.add(seg); }
+    for (let k = 0; k < 8; k++) { const seg = outline(mesh(new THREE.ConeGeometry(1.1, 0.45, 3, 1, true), toonU(k % 2 ? 0xffe066 : 0xff8fc0), 0, 0, 0), 1.03); seg.material.side = THREE.DoubleSide; seg.rotation.y = k / 8 * Math.PI * 2; seg.scale.set(0.5, 1, 1.0); top.add(seg); }
     top.add(mesh(new THREE.SphereGeometry(0.06, 8, 6), accGold(), 0, 0.26, 0));
-    room.colliders.push({ x: x - 0.85, z: z - 0.55, r: 0.2, h: 2.4, decor: true }, { x: x + 0.45, z: z - 0.25, r: 0.32, h: 0.6, decor: true });
     ticks.push(dt => { top.rotation.y += dt * 0.25; });
   },
   // two tiers, a spinning bone on top, splashing water
-  'cos.decor.fountain'(grp, room, ticks) {
-    const [x, z] = homeSpot('cos.decor.fountain'), stone = toon(0xd9d3c7), stoneD = toon(0xbdb6aa), water = basic(0x8fdcff);
-    grp.add(outline(mesh(new THREE.CylinderGeometry(1.35, 1.45, 0.5, 28), stone, x, 0.25, z), 1.03));
-    for (let k = 0; k < 14; k++) { const a = k / 14 * Math.PI * 2; grp.add(mesh(new THREE.BoxGeometry(0.3, 0.12, 0.2), stoneD, x + Math.cos(a) * 1.4, 0.52, z + Math.sin(a) * 1.4).rotateY(-a)); }
-    grp.add(mesh(new THREE.CylinderGeometry(1.18, 1.18, 0.06, 28), water, x, 0.47, z));
-    grp.add(outline(mesh(new THREE.CylinderGeometry(0.18, 0.26, 1.0, 12), stoneD, x, 0.9, z), 1.08));
-    grp.add(outline(mesh(new THREE.CylinderGeometry(0.62, 0.3, 0.24, 20), stone, x, 1.45, z), 1.06));
-    grp.add(mesh(new THREE.CylinderGeometry(0.54, 0.54, 0.04, 20), water, x, 1.56, z));
-    grp.add(outline(mesh(new THREE.CylinderGeometry(0.1, 0.14, 0.4, 10), stoneD, x, 1.76, z), 1.08));
-    grp.add(outline(mesh(new THREE.CylinderGeometry(0.3, 0.14, 0.14, 16), stone, x, 2.0, z), 1.06));
-    grp.add(mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.03, 16), water, x, 2.07, z));
-    // a bone on top
-    const bone = new THREE.Group(); bone.position.set(x, 2.35, z); grp.add(bone);
+  'cos.decor.fountain'(grp, ticks) {
+    const stone = toon(0xd9d3c7), stoneD = toon(0xbdb6aa), water = basic(0x8fdcff);
+    grp.add(outline(mesh(new THREE.CylinderGeometry(1.35, 1.45, 0.5, 28), stone, 0, 0.25, 0), 1.03));
+    for (let k = 0; k < 14; k++) { const a = k / 14 * Math.PI * 2; grp.add(mesh(new THREE.BoxGeometry(0.3, 0.12, 0.2), stoneD, Math.cos(a) * 1.4, 0.52, Math.sin(a) * 1.4).rotateY(-a)); }
+    grp.add(mesh(new THREE.CylinderGeometry(1.18, 1.18, 0.06, 28), water, 0, 0.47, 0));
+    grp.add(outline(mesh(new THREE.CylinderGeometry(0.18, 0.26, 1.0, 12), stoneD, 0, 0.9, 0), 1.08));
+    grp.add(outline(mesh(new THREE.CylinderGeometry(0.62, 0.3, 0.24, 20), stone, 0, 1.45, 0), 1.06));
+    grp.add(mesh(new THREE.CylinderGeometry(0.54, 0.54, 0.04, 20), water, 0, 1.56, 0));
+    grp.add(outline(mesh(new THREE.CylinderGeometry(0.1, 0.14, 0.4, 10), stoneD, 0, 1.76, 0), 1.08));
+    grp.add(outline(mesh(new THREE.CylinderGeometry(0.3, 0.14, 0.14, 16), stone, 0, 2.0, 0), 1.06));
+    grp.add(mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.03, 16), water, 0, 2.07, 0));
+    const bone = new THREE.Group(); bone.position.set(0, 2.35, 0); grp.add(bone);
     bone.add(outline(mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.5, 8), toon(0xfff4dc), 0, 0, 0).rotateZ(Math.PI / 2), 1.12));
     for (const sx of [-0.27, 0.27]) for (const sy of [-0.07, 0.07]) bone.add(outline(mesh(new THREE.SphereGeometry(0.09, 8, 6), toon(0xfff4dc), sx, sy, 0), 1.12));
-    // little lily pads
-    for (const [dx, dz] of [[0.7, 0.3], [-0.5, 0.6], [0.2, -0.8]]) { grp.add(mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.02, 10), toon(0x6fcf5a), x + dx, 0.51, z + dz)); grp.add(mesh(new THREE.SphereGeometry(0.05, 6, 5), toon(0xff9fc8), x + dx + 0.05, 0.55, z + dz)); }
-    const ripple = mesh(new THREE.RingGeometry(0.85, 1, 28), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false }), x, 0.51, z); ripple.rotation.x = -Math.PI / 2; grp.add(ripple);
-    room.colliders.push({ x, z, r: 1.45, h: 2.5, decor: true });
+    for (const [dx, dz] of [[0.7, 0.3], [-0.5, 0.6], [0.2, -0.8]]) { grp.add(mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.02, 10), toon(0x6fcf5a), dx, 0.51, dz)); grp.add(mesh(new THREE.SphereGeometry(0.05, 6, 5), toon(0xff9fc8), dx + 0.05, 0.55, dz)); }
+    const ripple = mesh(new THREE.RingGeometry(0.85, 1, 28), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false }), 0, 0.51, 0); ripple.rotation.x = -Math.PI / 2; grp.add(ripple);
+    const P = new THREE.Vector3(), D = new THREE.Vector3(), Q = new THREE.Quaternion();
     ticks.push(dt => {
       bone.rotation.y += dt * 0.8; bone.position.y = 2.35 + Math.sin(G.time * 2) * 0.04;
       const k = (G.time * 0.6) % 1; ripple.scale.setScalar(0.3 + k * 0.85); ripple.material.opacity = 0.5 * (1 - k);
-      if (Math.random() < 0.6) {
-        // the spray follows the fountain however it stands (the home planner may turn, flip or raise its group)
-        const a = rand(0, Math.PI * 2), top = Math.random() < 0.4, p = grp.localToWorld(new THREE.Vector3(x + Math.cos(a) * (top ? 0.2 : 0.5), top ? 2.1 : 1.6, z + Math.sin(a) * (top ? 0.2 : 0.5)));
-        const dv = new THREE.Vector3(Math.cos(a) * 0.5, 1, Math.sin(a) * 0.5).applyQuaternion(grp.getWorldQuaternion(new THREE.Quaternion()));
-        emit(p.x, p.y, p.z, 1, 0xbfeaff, { dir: [dv.x, dv.y, dv.z], speed: 2.2, spread: 0.3, size: 0.22, life: 0.55, grav: 7, drag: 0.5, glow: false });
+      if (G.state === 'play' && Math.random() < 0.6) {
+        // the spray follows the fountain however it stands (turned, tilted, flipped or raised)
+        const a = rand(0, Math.PI * 2), hi = Math.random() < 0.4;
+        grp.localToWorld(P.set(Math.cos(a) * (hi ? 0.2 : 0.5), hi ? 2.1 : 1.6, Math.sin(a) * (hi ? 0.2 : 0.5)));
+        D.set(Math.cos(a) * 0.5, 1, Math.sin(a) * 0.5).applyQuaternion(grp.getWorldQuaternion(Q));
+        emit(P.x, P.y, P.z, 1, 0xbfeaff, { dir: [D.x, D.y, D.z], speed: 2.2, spread: 0.3, size: 0.22, life: 0.55, grav: 7, drag: 0.5, glow: false });
       }
     });
   },
-  'cos.decor.doghouse'(grp, room) {
-    const [x, z] = homeSpot('cos.decor.doghouse'), g = new THREE.Group(); g.position.set(x, 0, z); grp.add(g);
+  'cos.decor.doghouse'(g) {
     g.add(outline(mesh(new THREE.BoxGeometry(1.6, 1.2, 1.6), toon(0xf2c587), 0, 0.6, 0), 1.03));
     // plank lines and a stone footing
     for (let k = 1; k < 4; k++) g.add(mesh(new THREE.BoxGeometry(1.62, 0.03, 1.62), toon(0xd9a86a), 0, k * 0.3, 0));
@@ -16574,18 +16688,17 @@ const DECOR_BUILD = {
     // a cushion peeking out of the door
     const cush = outline(mesh(new THREE.SphereGeometry(0.34, 14, 8), toon(0x7fb8ff), 0, 0.2, 0.75), 1.05); cush.scale.set(1, 0.32, 0.6); g.add(cush);
     const plate = signPlane('SCHIFFY', 0.9, 0.2, '#c2417a'); plate.position.set(0, 1.03, 0.81); g.add(plate);
-    const bowl = outline(mesh(new THREE.CylinderGeometry(0.25, 0.2, 0.14, 14), toon(0x5fb8ff), 0.55, 0.07, 1.25), 1.08); g.add(bowl);
+    g.add(outline(mesh(new THREE.CylinderGeometry(0.25, 0.2, 0.14, 14), toon(0x5fb8ff), 0.55, 0.07, 1.25), 1.08));
     g.add(mesh(new THREE.CylinderGeometry(0.21, 0.21, 0.02, 14), toon(0xc98a5a), 0.55, 0.13, 1.25));
     const bone = new THREE.Group(); bone.position.set(-0.6, 0.06, 1.2); bone.rotation.y = 0.6; g.add(bone);
     bone.add(mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.3, 6), toon(0xfff4dc), 0, 0, 0).rotateZ(Math.PI / 2));
     for (const sx of [-0.16, 0.16]) for (const sz of [-0.04, 0.04]) bone.add(mesh(new THREE.SphereGeometry(0.05, 8, 6), toon(0xfff4dc), sx, 0, sz));
-    room.boxes.push({ x, z, w: 1.85, d: 1.85, h: 2.2, decor: true });
   },
-  // three clipped hedges in tubs along the south lawn: a paw, a bone and a ball
-  'cos.decor.topiary'(grp, room, ticks) {
+  // three clipped hedges in tubs: a paw, a bone and a ball
+  'cos.decor.topiary'(grp, ticks) {
     const leaf = toon(0x5fbf4f), leafD = toon(0x4ea83c), tub = toon(0xc98a5a), hedges = [];
-    DECOR_SPOT.topiary.forEach(([x, z], i) => {
-      const g = new THREE.Group(); g.position.set(x, 0, z); grp.add(g);
+    [-1.3, 0, 1.3].forEach((x, i) => {
+      const g = new THREE.Group(); g.position.set(x, 0, 0); grp.add(g);
       g.add(outline(mesh(new THREE.CylinderGeometry(0.42, 0.34, 0.5, 12), tub, 0, 0.25, 0), 1.05));
       g.add(mesh(new THREE.CylinderGeometry(0.44, 0.44, 0.08, 12), toon(0xb8323f), 0, 0.46, 0));
       g.add(mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.5, 6), toon(0x8a5a3a), 0, 0.72, 0));
@@ -16600,66 +16713,54 @@ const DECOR_BUILD = {
         top.add(outline(mesh(new THREE.SphereGeometry(0.48, 14, 10), leaf, 0, 0, 0), 1.05));
         for (let k = 0; k < 5; k++) { const a = k / 5 * Math.PI * 2; top.add(mesh(new THREE.SphereGeometry(0.07, 6, 5), toon(0xff8fc0), Math.cos(a) * 0.42, 0.18, Math.sin(a) * 0.42)); }
       }
-      room.colliders.push({ x, z, r: 0.45, h: 1.9, decor: true });
     });
     ticks.push(() => { hedges.forEach((h, i) => { h.rotation.y = Math.sin(G.time * 0.8 + i) * 0.08; }); });
   },
-  'cos.decor.statues'(grp, room) {
-    const [sx, sz] = homeSpot('cos.decor.statues'), spots = STATUE_ROW.map(cz => [sx, sz + cz]);
-    // the three bosses beaten most often get a statue
+  // retired (owners only): stone statues of the three bosses beaten most, along z (STATUE_ROW, 75-hub)
+  'cos.decor.statues'(grp) {
     const beaten = Object.keys(SAVE.bosses || {}).filter(id => SAVE.bosses[id] > 0 && STATUE_MODEL[id]).sort((a, b) => SAVE.bosses[b] - SAVE.bosses[a]);
-    spots.forEach(([x, z], i) => {
-      grp.add(outline(mesh(new THREE.CylinderGeometry(0.62, 0.7, 0.55, 8), toon(0xbdb6aa), x, 0.275, z), 1.05));
-      grp.add(mesh(new THREE.CylinderGeometry(0.66, 0.66, 0.06, 8), accGold(), x, 0.5, z));
-      room.colliders.push({ x, z, r: 0.72, h: 2.4, decor: true });
+    STATUE_ROW.forEach((z, i) => {
+      grp.add(outline(mesh(new THREE.CylinderGeometry(0.62, 0.7, 0.55, 8), toon(0xbdb6aa), 0, 0.275, z), 1.05));
+      grp.add(mesh(new THREE.CylinderGeometry(0.66, 0.66, 0.06, 8), accGold(), 0, 0.5, z));
       const id = beaten[i], model = id ? creatureModel(STATUE_MODEL[id], stoneMat) : null;
       if (model) {
         const box = new THREE.Box3().setFromObject(model), size = box.getSize(new THREE.Vector3());
         const k = Math.min(2.1 / Math.max(0.1, size.y), 1.7 / Math.max(0.1, size.x, size.z));
-        model.scale.setScalar(k); model.position.set(x, 0.55 - box.min.y * k, z); model.rotation.y = -0.25 + (i - 1) * 0.3; grp.add(model);
+        model.scale.setScalar(k); model.position.set(0, 0.55 - box.min.y * k, z); model.rotation.y = -0.25 + (i - 1) * 0.3; grp.add(model);
       } else {
         // an empty plinth holds a stone star until a boss is beaten (Lite builds have no boss models)
         const s = new THREE.Shape(); for (let q = 0; q < 10; q++) { const a = q / 10 * Math.PI * 2 + Math.PI / 2, r = q % 2 ? 0.2 : 0.45; q ? s.lineTo(Math.cos(a) * r, Math.sin(a) * r) : s.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
         const st = new THREE.ExtrudeGeometry(s, { depth: 0.16, bevelEnabled: true, bevelSize: 0.04, bevelThickness: 0.04, bevelSegments: 1 }); st.center();
-        grp.add(outline(mesh(st, toon(id ? 0xe0d9cc : 0xd9d3c7), x, 1.05, z), 1.06));
+        grp.add(outline(mesh(st, toon(id ? 0xe0d9cc : 0xd9d3c7), 0, 1.05, z), 1.06));
       }
     });
   },
 };
-function refreshDecor() {
-  const room = G.room;
-  if (!room || !room.hub || !G.roomGroup) return;
-  refreshHomeProps();   // the home layout first: the structures below stand where it puts them (75-hub)
-  if (G.hubDecor) removeObj(G.hubDecor);
-  room.colliders = room.colliders.filter(c => !c.decor); room.boxes = room.boxes.filter(b => !b.decor);
-  const grp = new THREE.Group(), ticks = [];
-  for (const it of COSMETICS) if (it.slot === 'decor' && cosIsOn(it.sku) && DECOR_BUILD[it.sku]) {
-    // a home structure gets its own group, so edit mode can pick it and slide it (75-hub); it is built at homeBase
-    let into = grp;
-    if (it.home) { into = new THREE.Group(); into.userData.homeId = it.sku; into.userData.homeBase = homeSpot(it.sku); grp.add(into); (G.homeMeshes = G.homeMeshes || {})[it.sku] = into; }
-    const c0 = room.colliders.length, b0 = room.boxes.length;
-    try { DECOR_BUILD[it.sku](into, room, ticks); } catch (e) { console.error('[decor] ' + it.sku, e); }
-    // a home structure: pose it (spot, angles, height) and collide with its turned boxes instead of the builder's flat ones
-    const hi = it.home && (G.homeLayout || []).find(i => i.id === it.sku);
-    if (hi) {
-      room.colliders.splice(c0); room.boxes.splice(b0);
-      homePose(into, into.userData.homeBase, hi, hi.y, hi.low); homeColliders(hi, room, 'decor');
-    }
-  }
-  shadows(grp, true, false);
-  G.roomGroup.add(grp); G.hubDecor = grp; G.decorTicks = ticks;
+// one decoration's model for the home catalogue (homeModel, 75-hub): userData.ticks = its moving parts (homeAnim runs them)
+function decorModel(sku) {
+  const g = new THREE.Group(), ticks = [];
+  try { DECOR_MODEL[sku](g, ticks); } catch (e) { console.error('[decor] ' + sku, e); }
+  g.userData.ticks = ticks;
+  return g;
 }
+// the home isle's props (refreshHomeProps, 75-hub); the old name is kept because buying, edit mode and the boutique call it
+function refreshDecor() { refreshHomeProps(); }
 buildHub = after(buildHub, () => {
-  G.hubDecor = null;
-  // back home: tell what the run saved for the home and grant any trophy just earned (75-hub home catalogue)
+  // back home: move any boutique decorations into the home catalogue (once), tell what the run saved for the home and grant
+  // any trophy just earned (75-hub home catalogue). The toasts queue one after another.
+  const moved = homeMigrateDecor();
   const gain = G.homeGain || 0; G.homeGain = 0;
   const fresh = homeCheckUnlocks();
   writeSave();
-  if (gain > 0) setTimeout(() => toast(`+${gain} gold saved for your home`, `Home savings: ${homeGold()} gold. Spend it at the Edit home board.`, '#ffd34d'), 1600);
-  if (fresh.length) setTimeout(() => toast(fresh.length > 1 ? `${fresh.length} new home trophies!` : 'New home trophy!', `${fresh.map(h => h.name).join(', ')}: in storage at the Edit home board`, '#c69bff'), gain > 0 ? 4200 : 1600);
+  let at = 1600;
+  const later = (t1, t2, col) => { setTimeout(() => toast(t1, t2, col), at); at += 2600; };
+  if (moved) later('Your boutique decorations moved to your Home catalogue', 'They are on your Home isle (or in its Storage tab): place, turn and stack them from the Edit home board', '#ff9fc8');
+  if (gain > 0) later(`+${gain} gold saved for your home`, `Home savings: ${homeGold()} gold. Spend it at the Edit home board.`, '#ffd34d');
+  const names = fresh.length > 3 ? `${fresh.slice(0, 2).map(h => h.name).join(', ')} and ${fresh.length - 2} more` : fresh.map(h => h.name).join(', ');
+  if (fresh.length) later(fresh.length > 1 ? `${fresh.length} new home trophies!` : 'New home trophy!', `${names}: in storage at the Edit home board`, '#c69bff');
   buildBoutique(); refreshDecor();
-  // decorations animate through an interactable that never prompts (r < 0)
-  addInteractable({ x: 0, z: 0, r: -1, prompt: () => null, use: () => {}, tick: dt => { for (const t of G.decorTicks || []) t(dt); for (const t of G.homeTicks || []) t(dt); } });
+  // home items animate through an interactable that never prompts (r < 0)
+  addInteractable({ x: 0, z: 0, r: -1, prompt: () => null, use: () => {}, tick: dt => { for (const t of G.homeTicks || []) t(dt); } });
 });
 // ---------- touch controls (phones first) ----------
 // Twin sticks: a floating move stick anywhere on the left of the screen, a floating aim stick on the right that fires while
@@ -17252,6 +17353,8 @@ function update(dt) {
     if (G.doneT > 0 && G.state === 'play') { G.doneT -= dt; if (G.doneT <= 0) levelComplete(); }
     // run start: list the collected pets' bonuses once the level toast has had its moment (set in startStory)
     if (G.petToastT > 0) { G.petToastT -= dt; if (G.petToastT <= 0) toast('Pet bonuses', petBonusSummary(), '#ff9fb8'); }
+    // a boss's home trophy just unlocked (bossTrophyEarned, 75-hub): told after the "defeated!" toast
+    if (G.trophyToastT > 0) { G.trophyToastT -= dt; if (G.trophyToastT <= 0) bossTrophyToast(); }
     // first run: the controls guide (set in startStory, 81-controls)
     if (G.ctlRunT > 0) { G.ctlRunT -= dt; if (G.ctlRunT <= 0 && G.state === 'play') controlsRunStart(); }
     // Endless: a new loop's extra pressure (set in continueStory, knobs in ENDLESS, 15-state)
