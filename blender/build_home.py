@@ -55,6 +55,8 @@ def xf(at=(0, 0, 0), rot=(0, 0, 0), scale=(1, 1, 1)):
     r = Euler([math.radians(a) for a in rot], 'XYZ').to_matrix().to_4x4()
     return Matrix.Translation(Vector(at)) @ r @ Matrix.Diagonal(Vector((*scale, 1)))
 
+LEAN = [False]   # True while building an item from home_more.py: lighter default segment counts (keeps home.glb small)
+
 class Part:
     """one mesh object: primitives are added into a single bmesh with per-face material slots."""
     def __init__(self, name, pivot=(0, 0, 0)):
@@ -70,25 +72,28 @@ class Part:
         self.bm.from_mesh(me); bpy.data.meshes.remove(me)
         return self
 
-    def box(self, size, at, m, rot=(0, 0, 0), bevel=0.035):
+    def box(self, size, at, m, rot=(0, 0, 0), bevel=0.035, seg=None):
         t = bmesh.new(); bmesh.ops.create_cube(t, size=1.0)
         bmesh.ops.scale(t, vec=Vector(size), verts=t.verts)
-        if bevel > 0: bmesh.ops.bevel(t, geom=list(t.edges), offset=min(bevel, min(size) * 0.3), segments=2, affect='EDGES', profile=0.5)
+        if bevel > 0: bmesh.ops.bevel(t, geom=list(t.edges), offset=min(bevel, min(size) * 0.3), segments=seg or (1 if LEAN[0] else 2), affect='EDGES', profile=0.5)
         return self._merge(t, m, xf(at, rot), False)
 
-    def cyl(self, r, h, at, m, n=14, r2=None, rot=(0, 0, 0), smooth=True, scale=(1, 1, 1)):
+    def cyl(self, r, h, at, m, n=None, r2=None, rot=(0, 0, 0), smooth=True, scale=(1, 1, 1)):
         """cylinder (or cone / frustum with r2) along y, centred on at."""
+        n = n or (10 if LEAN[0] else 14)
         t = bmesh.new()
         bmesh.ops.create_cone(t, cap_ends=True, cap_tris=False, segments=n, radius1=r, radius2=r if r2 is None else r2, depth=h)
         bmesh.ops.rotate(t, verts=t.verts, cent=(0, 0, 0), matrix=Matrix.Rotation(math.radians(-90), 4, 'X'))   # z axis -> y axis
         return self._merge(t, m, xf(at, rot, scale), smooth)
 
-    def sph(self, r, at, m, scale=(1, 1, 1), seg=14, ring=9, rot=(0, 0, 0), smooth=True):
+    def sph(self, r, at, m, scale=(1, 1, 1), seg=None, ring=None, rot=(0, 0, 0), smooth=True):
+        seg = seg or (10 if LEAN[0] else 14); ring = ring or (7 if LEAN[0] else 9)
         t = bmesh.new(); bmesh.ops.create_uvsphere(t, u_segments=seg, v_segments=ring, radius=r)
         return self._merge(t, m, xf(at, rot, scale), smooth)
 
-    def tor(self, R, r, at, m, rot=(0, 0, 0), seg=24, sides=8, arc=1.0, scale=(1, 1, 1)):
+    def tor(self, R, r, at, m, rot=(0, 0, 0), seg=None, sides=None, arc=1.0, scale=(1, 1, 1)):
         """torus in the xz plane (around y), optionally only part of the ring (arc 0..1)."""
+        seg = seg or (16 if LEAN[0] else 24); sides = sides or (6 if LEAN[0] else 8)
         t = bmesh.new(); verts = []
         n = max(3, int(seg * arc)); closed = arc >= 0.999
         cnt = n if closed else n + 1
@@ -789,10 +794,17 @@ def _(B, P):
         F.box((0.28, h, 0.035), (x + 0.12, 4.1 - 0.3, zz), M('teal') if i % 2 == 0 else mat('HTealL', 0x46d6d0), rot=(0, -14 * math.cos(i * 1.1), 0), bevel=0.01)
     F.paw(0.11, (0.45, 3.8, 0.06), M('white'), depth=0.012)
 
+# ---------------------------------------------------------------- the v3.1 expansion (96 more models + colour variants)
+# home_more.py shares this file's globals (Part, M, mat, item, plinth ...) and adds item2 (lean items) and VARIANTS.
+exec(compile(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'home_more.py'), encoding='utf-8').read(), 'home_more.py', 'exec'))
+
 # ---------------------------------------------------------------- build + export
+ONLY = set(filter(None, os.environ.get('HOME_ONLY', '').split(',')))   # HOME_ONLY=sofa,rug: build just those (iterating)
 def build():
     roots = []
     for iid, fn in ITEMS.items():
+        if ONLY and iid not in ONLY: continue
+        LEAN[0] = iid in LEAN_IDS
         root = bpy.data.objects.new('Home_' + iid, None)
         bpy.context.scene.collection.objects.link(root)
         body, moving = Part('Home_%s_body' % iid), []
@@ -809,5 +821,10 @@ os.makedirs(OUT, exist_ok=True)
 bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, 'home.glb'), export_format='GLB', export_yup=True, export_apply=True,
                           export_materials='EXPORT', export_normals=True, export_animations=False)
 json.dump(PARTS, open(os.path.join(OUT, 'home_parts.json'), 'w'), indent=0)
+# colour variants (same mesh, materials recoloured by name in game): {variant id: {model, tint: {material: '#rrggbb'}}}
+json.dump(VARIANTS, open(os.path.join(OUT, 'home_variants.json'), 'w'), indent=0)
 tri = sum(len(o.data.polygons) for o in bpy.data.objects if o.type == 'MESH')
 print('items', len(ITEMS), 'faces', tri, 'glb', os.path.getsize(os.path.join(OUT, 'home.glb')))
+if os.environ.get('HOME_STATS'):   # vertex count per item, heaviest first (size budget)
+    vc = sorted(((sum(len(c.data.vertices) for c in r.children_recursive if c.type == 'MESH'), r.name) for r in roots), reverse=True)
+    print('STATS', ' '.join('%s=%d' % (n[5:], v) for v, n in vc))
