@@ -928,6 +928,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
       <button class="smallbtn" id="hubReport" type="button" title="Report a bug (F2)">Report bug · F2</button>
       <button class="smallbtn" id="hubLog" type="button" title="Past runs and issues">Logbook</button>
       <button class="smallbtn ctlbtn" id="hubControls" type="button" title="Keys and buttons">Controls</button>
+      <button class="smallbtn" id="hubMenu" type="button" title="Sound, screen shake, flashes and more (Esc)">Menu · Esc</button>
     </div>
     <!-- quick controls strip for new arrivals (81-controls); fades once Schiffy has walked around a bit -->
     <div id="hubHint" aria-hidden="true" hidden></div>
@@ -13925,12 +13926,25 @@ function buildHub() {
   for (const [dx, dz] of [[-0.95, -0.75], [-0.35, -1.25], [0.35, -1.25], [0.95, -0.75]]) grp.add(mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.05, 16), pawMat, P.x + dx, 0.07, P.z + dz));
   // stone paths, two tiles wide: the avenue north to the portals, the promenade along them, the street west to the weapon
   // range and east past the services to the Home bridge (HUB_PATHS); paw prints lead up the avenue
-  const tiles = [];
+  // Each path is trimmed to where it really runs (from the plaza's rim when it leaves the plaza, up to the weapon range's floor
+  // when it ends on it) and the tiles are spread evenly between those ends, tucked a little under both. Before 2026-10-18 the
+  // tiles were stepped from the plaza's centre and the ones inside the discs dropped, which left a strip of grass (up to a tile
+  // wide) between the plaza and the avenue / west street, and between the street and the range.
+  const tiles = [], TILE = 0.82, TUCK = 0.12;
+  const discHit = (x0, z0, ux, uz, cx, cz, r) => {   // along-distances where the path's centre line crosses a disc's rim
+    const fx = x0 - cx, fz = z0 - cz, b = fx * ux + fz * uz, c = fx * fx + fz * fz - r * r, d = b * b - c;
+    return d < 0 ? null : [-b - Math.sqrt(d), -b + Math.sqrt(d)];
+  };
   for (const [x0, z0, x1, z1] of HUB_PATHS) {
-    const along = Math.abs(x1 - x0) > Math.abs(z1 - z0), len = along ? Math.abs(x1 - x0) : Math.abs(z1 - z0), n = Math.max(1, Math.round(len / 0.92));
+    const along = Math.abs(x1 - x0) > Math.abs(z1 - z0), len = Math.hypot(x1 - x0, z1 - z0), ux = (x1 - x0) / len, uz = (z1 - z0) / len;
+    let a0 = 0, a1 = len;
+    const pz = discHit(x0, z0, ux, uz, P.x, P.z, P.r);
+    if (pz && pz[0] < 0 && pz[1] > 0) a0 = pz[1] - TUCK;                      // starts inside the plaza: begin at its rim
+    const rf = discHit(x0, z0, ux, uz, RANGE_RING.x, RANGE_RING.z, RANGE_RING.r + 0.9);
+    if (rf && rf[0] > a0 && rf[0] < a1) a1 = rf[0] + TUCK;                    // runs onto the range floor: stop at its edge
+    const span = a1 - a0, n = Math.max(1, Math.ceil((span - TILE) / 0.92));
     for (let k = 0; k <= n; k++) for (const s of [-0.46, 0.46]) {
-      const t = k / n, x = lerp(x0, x1, t) + (along ? 0 : s), z = lerp(z0, z1, t) + (along ? s : 0);
-      if (Math.hypot(x - P.x, z - P.z) < P.r + 0.2 || Math.hypot(x - RANGE_RING.x, z - RANGE_RING.z) < RANGE_RING.r + 0.95) continue;
+      const a = a0 + TILE / 2 + (span - TILE) * (k / n), x = x0 + ux * a + (along ? 0 : s), z = z0 + uz * a + (along ? s : 0);
       tiles.push([x, z]);
     }
   }
@@ -18226,10 +18240,16 @@ function resetActors() {
   clearBeams(); clearPetMesh(); G.pet = null;
   if (G.puppy && G.puppy.mesh) removeObj(G.puppy.mesh); G.puppy = null;
 }
+// In a run: the pause menu. In the hub (2026-10-18): the same menu as an options menu (Esc or the hub bar's Menu button):
+// sound, shake, flashes, controls, bug report and logbook; the run-only parts (run summary, Stuck?, Abandon run) are hidden.
 function togglePause() {
-  if (G.state === 'play' && G.mode === 'story') {
-    G.state = 'pause'; mouse.down = false; hideBeams();
-    $('#pauseTitle').textContent = sectorLabel(); $('#pauseItems').innerHTML = itemListHTML();
+  const hub = G.mode === 'hub';
+  if (G.state === 'play' && (G.mode === 'story' || hub)) {
+    G.state = 'pause'; mouse.down = false; hideBeams(); keys.clear();
+    $('#pause .logo .a').textContent = hub ? 'Menu' : 'Paused';
+    $('#pause .card').hidden = hub; $('#unstickBtn').hidden = hub; $('#quitBtn').hidden = hub;
+    if (!hub) { $('#pauseTitle').textContent = sectorLabel(); $('#pauseItems').innerHTML = itemListHTML(); }
+    $('#resumeBtn').firstChild.textContent = hub ? 'Back to the hub ' : 'Resume ';
     $('#pause').hidden = false; $('#resumeBtn').focus();
   } else if (G.state === 'pause') { G.state = 'play'; $('#pause').hidden = true; }
 }
@@ -18279,6 +18299,7 @@ $('#againBtn').addEventListener('click', () => {
 $('#titleBtn').addEventListener('click', goHome);
 $('#resumeBtn').addEventListener('click', togglePause);
 $('#pauseBtn').addEventListener('click', togglePause);
+$('#hubMenu').addEventListener('click', () => { if (G.mode === 'hub' && G.state === 'play') togglePause(); });
 $('#mapBtn').addEventListener('click', toggleMap);
 $('#minimap').addEventListener('click', toggleMap);
 $('#miniHide').addEventListener('click', toggleMinimap);
