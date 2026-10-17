@@ -1320,6 +1320,9 @@ const OB = {
   lava: { h: 0.05, half: 1.0, enemyOnly: true }, flood: { h: 0.05, half: 1.0, enemyOnly: true }, vent: { h: 1.3, half: 0.8 },
 };
 const OPP = { N: 'S', S: 'N', E: 'W', W: 'E' };
+// isle types you fight on (tidier floor in 25-world / 26-biomeisle, flowers bloom once cleared in 69-ambience)
+const FIGHT_ISLE = ['combat', 'challenge', 'boss', 'final', 'miniboss'];
+const FIGHT_FLOOR = { tufts: 0.6, flowers: 0.45, rings: 0.5 };   // floor-decor density on them (1 = a calm isle's)
 const cellX = i => -HALF + CELL / 2 + i * CELL;
 const cellOf = v => Math.floor((v + HALF) / CELL);
 // ================================================================
@@ -1337,29 +1340,34 @@ const DIFFICULTY = {
 
 // ---------- biomes ----------
 // Each Story level is one biome: its own palette, terrain props, monsters, elites, bosses, hazards and pets.
+// Colour pass (2026-10-18, after Thomas Brush's colour-harmony + blur test): each world has one dominant colour and a
+// complementary accent. Meadow: cool teal floor (a step darker, so mid-bright creatures stand off it) + warm peach/pink/gold
+// flowers. Reef: deeper gold sand (the pale sand washed everything out in a grey/blur check) + teal/aqua accents. Peaks: cool
+// blue/white + warm peach/pink. Volcano: warm mauve + orange lava against cool slate rocks and teal ember-pebbles.
+// Before/after sheets: review/art/.
 const MEADOW_BASE = {
-  top: 0x1c2142, horizon: 0x6b4f7c, bottom: 0x241d3d, sun: 0xffe6b0, grass: 0x557f6c, grass2: 0x4a725f, leaf: 0x83b79d, dirt: 0x7d5c6c,
+  top: 0x1c2142, horizon: 0x6b4f7c, bottom: 0x241d3d, sun: 0xffe6b0, grass: 0x4a7464, grass2: 0x3f6656, leaf: 0x83b79d, dirt: 0x7d5c6c,
   rock: 0x726e9e, wood: 0x9d7c6b, bark: 0x6b504b, path: 0xffd27a, stone: 0xddd8ee, post: 0x2a2442, rope: 0xd3c8e4, accent: 0xffc65a,
-  light: 0xcfc6ff, hemi: 0x8e8ac4, flowers: [0xffe08a, 0xc9b6ff, 0xffffff, 0x9fe0ff], hemiI: 0.68, sunI: 0.66, glow: true, sunDir: [-0.4, 0.2, -1],
+  light: 0xcfc6ff, hemi: 0x8e8ac4, flowers: [0xffe08a, 0xffb8a0, 0xffffff, 0xff9fc8], hemiI: 0.68, sunI: 0.66, glow: true, sunDir: [-0.4, 0.2, -1],
 };
 const REEF_BASE = {
-  top: 0x7a6fc6, horizon: 0xffb27a, bottom: 0xf09a90, sun: 0xffd890, grass: 0xe8c592, grass2: 0xdab27e, leaf: 0x8fd98a, dirt: 0xe0895c,
+  top: 0x7a6fc6, horizon: 0xffb27a, bottom: 0xf09a90, sun: 0xffd890, grass: 0xdcb27c, grass2: 0xcda06a, leaf: 0x8fd98a, dirt: 0xe0895c,
   rock: 0xd99a9a, wood: 0xc98552, bark: 0x9e6a45, path: 0x3fc9be, stone: 0xfff2dc, post: 0x7a4a3a, rope: 0xffe6c2, accent: 0xff7a5c,
-  light: 0xffe0bc, hemi: 0xffd6b0, flowers: [0xff8f8f, 0xffd36b, 0x7fe0d6, 0xffffff], hemiI: 0.62, sunI: 0.72, glow: false, sunDir: [-0.5, 0.16, -1],
+  light: 0xffe0bc, hemi: 0xffd6b0, flowers: [0x7fe0d6, 0x5fc8e8, 0xffffff, 0xff8f8f], hemiI: 0.62, sunI: 0.72, glow: false, sunDir: [-0.5, 0.16, -1],
 };
 // snow and ice are extra keys used by the peaks dressing (themeColor falls back to th[key])
 const PEAKS_BASE = {
   top: 0x2f3c86, horizon: 0xc9b8ff, bottom: 0x5d6ab8, sun: 0xfff0d8, grass: 0xeef4ff, grass2: 0xd3def4, leaf: 0x4f8f86, dirt: 0x8a96c4,
   rock: 0x7f8fb8, wood: 0xa07a6a, bark: 0x6a4f4f, path: 0x9fe8ff, stone: 0xf2f6ff, post: 0x2e3466, rope: 0xe6ecff, accent: 0xff7a8f,
-  light: 0xeef2ff, hemi: 0xb8c4ff, flowers: [0x9fe8ff, 0xffffff, 0xc9b6ff, 0xff9fb8], hemiI: 0.74, sunI: 0.6, glow: true, sunDir: [-0.35, 0.22, -1],
+  light: 0xeef2ff, hemi: 0xb8c4ff, flowers: [0x9fe8ff, 0xffffff, 0xffc9a0, 0xff9fb8], hemiI: 0.74, sunI: 0.6, glow: true, sunDir: [-0.35, 0.22, -1],
   snow: 0xf4f8ff, ice: 0xb4e8ff,
 };
 // lava, lavaHot, crust, obsidian, ash, ember are extra keys used by the volcano dressing (themeColor falls back to th[key]).
 // The floor is a mid-tone warm ash mauve (not obsidian black), so the dark shot backer still reads and lava is the only bright orange.
 const VOLCANO_BASE = {
   top: 0x2a1838, horizon: 0xff9a6b, bottom: 0x6b3550, sun: 0xffd2a0, grass: 0x7d6a76, grass2: 0x6f5d69, leaf: 0xff8f6b, dirt: 0x5a4450,
-  rock: 0x4e4458, wood: 0x8a5f4f, bark: 0x3e2f36, path: 0xffb347, stone: 0xd9c9c4, post: 0x2a1c2a, rope: 0xffd9b0, accent: 0xff5a1f,
-  light: 0xffd8c0, hemi: 0xc8909c, flowers: [0xffb347, 0xff5a7a, 0xffe08a, 0xc77dff], hemiI: 0.66, sunI: 0.7, glow: true, sunDir: [-0.45, 0.2, -1],
+  rock: 0x47506a, wood: 0x8a5f4f, bark: 0x3e2f36, path: 0xffb347, stone: 0xd9c9c4, post: 0x2a1c2a, rope: 0xffd9b0, accent: 0xff5a1f,
+  light: 0xffd8c0, hemi: 0xc8909c, flowers: [0xffb347, 0xffe08a, 0x6fe0d0, 0xff5a7a], hemiI: 0.66, sunI: 0.7, glow: true, sunDir: [-0.45, 0.2, -1],
   lava: 0xff6a1f, lavaHot: 0xffc94d, crust: 0x3a2e38, obsidian: 0x2b2238, ash: 0xb8aab0, ember: 0xffa03d,
 };
 const BIOMES = [
@@ -1877,6 +1885,8 @@ function thump(vol = 0.2) {
   o.connect(g); g.connect(bus()); o.start(t); o.stop(t + 0.32);
   tone('triangle', 1800, 160, 0.03, 0.03);
 }
+let lastLayer = 0; const LAYER_GAP = 0.05;
+const layerOk = now => { if (now - lastLayer < LAYER_GAP) return false; lastLayer = now; return true; };
 // shots and hits get a random pitch so rapid fire never sounds like one sample on repeat
 const SFX_VARY = { shoot: 0.08, hit: 0.1, kill: 0.07, scatter: 0.07, swish: 0.06, boing: 0.08, lob: 0.06, swipe: 0.08, squeak: 0.1, eshoot: 0.06, splat: 0.08, crack: 0.08, bubble: 0.08, flame: 0.1, boom: 0.06 };
 function sfx(k) {
@@ -1887,14 +1897,20 @@ function sfx(k) {
 }
 function sfxRaw(k, now) {
   switch (k) {
-    case 'shoot': if (now - lastShoot < 0.06) return; lastShoot = now; tone('triangle', 700, 380, 0.07, 0.05); break;
-    case 'hit': tone('square', 420, 200, 0.05, 0.025); break;
-    case 'kill': tone('triangle', 660, 120, 0.2, 0.07); tone('sine', 990, 1320, 0.08, 0.04, 0.05); break;
+    // the common combat sounds carry a quiet low body and a high tick around their mid tone (2026-10-18, after Thomas Brush's
+    // 'fast and full' rule: hit every frequency band). Rapid hits only get the extra layers every LAYER_GAP s, so a Flame Puffer
+    // stream doesn't stack dozens of oscillators.
+    case 'shoot': if (now - lastShoot < 0.06) return; lastShoot = now; tone('triangle', 700, 380, 0.07, 0.05); tone('sine', 180, 90, 0.06, 0.028); tone('triangle', 2600, 1600, 0.02, 0.012); break;
+    case 'hit': tone('square', 420, 200, 0.05, 0.025); if (layerOk(now)) { tone('sine', 150, 70, 0.06, 0.03); tone('triangle', 3000, 2000, 0.018, 0.014); } break;
+    case 'kill': tone('triangle', 660, 120, 0.2, 0.07); tone('sine', 990, 1320, 0.08, 0.04, 0.05); thump(0.07); tone('triangle', 2400, 3200, 0.05, 0.018, 0.02); break;
+    // menus: every button answers at once (pointerdown, see uiSound); 'go' for Play and entering a run
+    case 'ui': tone('triangle', 1250, 1650, 0.035, 0.03); tone('sine', 2500, 2500, 0.02, 0.009); break;
+    case 'go': [523, 784, 1046].forEach((f, i) => tone('triangle', f, f * 1.01, 0.12, 0.05, i * 0.045)); thump(0.07); break;
     case 'jump': tone('sine', 380, 760, 0.14, 0.07); break;
     case 'jump2': tone('sine', 560, 1100, 0.14, 0.07); break;
     case 'dash': noise(0.12, 0.06); tone('sine', 900, 300, 0.12, 0.04); break;
     case 'hurt': tone('sawtooth', 260, 70, 0.3, 0.08); noise(0.15, 0.08); break;
-    case 'pickup': tone('sine', 1046, 1568, 0.08, 0.05); break;
+    case 'pickup': tone('sine', 1046, 1568, 0.08, 0.05); tone('sine', 2600, 3400, 0.05, 0.014); tone('sine', 260, 330, 0.06, 0.02); break;
     case 'heart': tone('sine', 523, 1046, 0.2, 0.07); break;
     case 'item': [523, 659, 784, 1046, 1318].forEach((f, i) => tone('triangle', f, f, 0.15, 0.06, i * 0.06)); break;
     case 'clear': [784, 988, 1175].forEach((f, i) => tone('sine', f, f, 0.18, 0.06, i * 0.09)); break;
@@ -1905,18 +1921,18 @@ function sfxRaw(k, now) {
     case 'zap': noise(0.25, 0.12); tone('square', 900, 90, 0.2, 0.05); break;
     case 'deny': tone('square', 180, 140, 0.15, 0.05); break;
     case 'shield': tone('sine', 1300, 400, 0.25, 0.07); break;
-    case 'boing': tone('sine', 200, 520, 0.18, 0.05); break;
-    case 'scatter': noise(0.12, 0.08); tone('square', 300, 120, 0.12, 0.04); break;
-    case 'swish': tone('sine', 900, 400, 0.18, 0.035); break;
-    case 'lob': tone('sine', 520, 260, 0.2, 0.05); break;
-    case 'swipe': noise(0.08, 0.07); tone('triangle', 700, 300, 0.09, 0.04); break;
+    case 'boing': tone('sine', 200, 520, 0.18, 0.05); tone('triangle', 2200, 2900, 0.03, 0.012); break;
+    case 'scatter': noise(0.12, 0.08); tone('square', 300, 120, 0.12, 0.04); thump(0.06); tone('triangle', 2800, 1500, 0.025, 0.014); break;
+    case 'swish': tone('sine', 900, 400, 0.18, 0.035); tone('sine', 160, 90, 0.14, 0.025); break;
+    case 'lob': tone('sine', 520, 260, 0.2, 0.05); thump(0.05); break;
+    case 'swipe': noise(0.08, 0.07); tone('triangle', 700, 300, 0.09, 0.04); tone('sine', 170, 80, 0.08, 0.03); break;
     case 'flame': noise(0.1, 0.035); break;
     case 'squeak': tone('square', 1400, 1900, 0.06, 0.025); break;
     case 'beam': tone('sawtooth', 220, 240, 0.08, 0.015); break;
     case 'levelup': [659, 784, 988, 1318].forEach((f, i) => tone('square', f, f, 0.1, 0.035, i * 0.05)); break;
     case 'bark': tone('sawtooth', 340, 140, 0.16, 0.09); tone('square', 520, 200, 0.12, 0.05, 0.12); noise(0.2, 0.08); break;
     case 'fall': tone('sine', 600, 80, 0.6, 0.06); break;
-    case 'bubble': tone('sine', 300, 700, 0.12, 0.035); break;
+    case 'bubble': tone('sine', 300, 700, 0.12, 0.035); tone('sine', 140, 90, 0.08, 0.03); tone('triangle', 2400, 3000, 0.025, 0.012, 0.05); break;
     case 'splat': noise(0.2, 0.08); tone('sine', 160, 60, 0.2, 0.06); break;
     case 'curse': tone('sawtooth', 220, 110, 0.5, 0.06); tone('sine', 330, 160, 0.5, 0.05, 0.1); break;
     case 'secret': [523, 698, 880, 1175, 1568].forEach((f, i) => tone('sine', f, f, 0.2, 0.05, i * 0.08)); break;
@@ -2855,11 +2871,13 @@ function buildMotes(th, hub) {
     for (let i = 0; i < 90; i++) G.motes.push({ snow: true, cx: rand(-HALF - 3, HALF + 3), cz: rand(-HALF - 3, HALF + 3), top: rand(6, 9), fall: rand(0.6, 1.0), ax: rand(0.3, 0.8), az: rand(0.3, 0.8), ph: rand(0, 50), sp: rand(0.5, 1.1), size: rand(0.25, 0.4) });
     return;
   }
-  const firefly = th.biome !== 'reef', n = hub ? 110 : 60, ex = hub ? HUB_X : HALF, ez = hub ? HUB_Z : HALF;
+  // fight isles: fewer motes, kept above shot height (they used to drift at 0.4-2.6 up, right where shots fly, and glowed like them)
+  const fightM = !hub && G.room && FIGHT_ISLE.includes(G.room.type);
+  const firefly = th.biome !== 'reef', n = hub ? 110 : fightM ? 34 : 60, ex = hub ? HUB_X : HALF, ez = hub ? HUB_Z : HALF;
   const cols = (firefly ? [0xc8ff4a, 0xffe45a, 0x7fe8ff, 0xffb84a] : [0xfff1c8, 0xffd38a, 0xffb8c8, 0xffffff]).map(c => new THREE.Color(c));
   G.motes = [];
   for (let i = 0; i < n; i++) G.motes.push({
-    cx: rand(-ex, ex), cz: rand(-ez, ez), y0: firefly ? rand(0.4, 2.6) : rand(0.6, 4.5), ax: rand(0.6, 2.2), az: rand(0.6, 2.2),
+    cx: rand(-ex, ex), cz: rand(-ez, ez), y0: fightM ? rand(2.2, 3.8) : firefly ? rand(0.4, 2.6) : rand(0.6, 4.5), ax: rand(0.6, 2.2), az: rand(0.6, 2.2),
     sp: rand(0.15, 0.45), ph: rand(0, 6.3), tw: firefly ? rand(0.8, 2.2) : rand(1.5, 3), c: pick(cols), size: firefly ? rand(0.7, 1.05) : rand(0.38, 0.6), rise: firefly ? 0 : rand(0.08, 0.2),
   });
 }
@@ -3016,7 +3034,10 @@ function buildIsland(room) {
   // (the peaks get a few teal sprigs poking out of the snow and fewer frost flowers)
   // (the volcano: sparse dry ash tufts, and its "flowers" are glowing ember pebbles)
   const peaks = th.biome === 'peaks', volc = th.biome === 'volcano';
-  const TN = Math.round((peaks ? 45 : volc ? 50 : 150) * ISLE_K * ISLE_K), FN = Math.round((peaks ? 28 : volc ? 22 : 46) * ISLE_K * ISLE_K);
+  // fight isles get a tidier floor (2026-10-18, Thomas Brush's "clean scene" rule: enemies and shots read better on a calm
+  // floor); they earn flowers back when cleared (bloomIsle, 69-ambience). Calm isles keep the full lawn.
+  const fightFloor = FIGHT_ISLE.includes(room.type), KT = fightFloor ? FIGHT_FLOOR.tufts : 1, KF = fightFloor ? FIGHT_FLOOR.flowers : 1;
+  const TN = Math.round((peaks ? 45 : volc ? 50 : 150) * ISLE_K * ISLE_K * KT), FN = Math.round((peaks ? 28 : volc ? 22 : 46) * ISLE_K * ISLE_K * KF);
   const tufts = new THREE.InstancedMesh(tuftGeo, toon(reef ? th.leaf : peaks ? mixColor(th.leaf, 0xffffff, 0.2) : volc ? mixColor(th.grass, 0x3a2e38, 0.3) : th.grass2), TN);
   const flowers = new THREE.InstancedMesh(petalGeo, (() => { const m = toonU(0xffffff); if (th.glow) { m.emissive.setHex(0xffffff); m.emissiveIntensity = 0.35; } return m; })(), FN);
   const centres = new THREE.InstancedMesh(centreGeo, toon(reef ? 0xfff2dc : peaks ? 0xe6fcff : 0xffc93c), FN);
@@ -4196,7 +4217,7 @@ function dressMeadow(grp, room, th, dm) {
     grp.add(g);
   }
   // little mushroom rings and flower beds on the lawn
-  for (const [x, z] of freeSpots(room, Math.round(3 * ISLE_K * ISLE_K), 0.8)) {
+  for (const [x, z] of freeSpots(room, Math.round(3 * (FIGHT_ISLE.includes(room.type) ? FIGHT_FLOOR.rings : 1) * ISLE_K * ISLE_K), 0.8)) {   // fewer on fight isles (tidy floor)
     const n = randi(5, 7), cap = toon(pick([0xff8f8f, 0xffe08a, 0xc9a6ff]));
     for (let k = 0; k < n; k++) {
       const a = k / n * Math.PI * 2, r = 0.55;
@@ -10893,9 +10914,10 @@ setInterval(() => { try { ambTick(); } catch (e) { /* never let ambience break t
 // When a fight isle is cleared (and whenever you come back to one), little flowers pop up across its open floor: a quiet "you
 // made this place nicer" beat. Pure looks, no colliders. The flowers live in G.roomGroup, so they go when the isle is rebuilt.
 // Each isle's flowers come from a seed of its map cell, so a revisited isle has the same flowers. Colours per world.
-const BLOOM_TYPES = ['combat', 'challenge', 'boss', 'miniboss', 'final'];
-const BLOOM_COLS = { meadow: [0xff9fc8, 0xfff1a8, 0xc9a6ff, 0xffffff], reef: [0xffb38a, 0xff8fb1, 0x8ff0dc, 0xfff1a8],
-  peaks: [0xffffff, 0xbfe8ff, 0xd6c8ff, 0xe6fcff], volcano: [0xffa13d, 0xffd36a, 0xff6a4a, 0xfff1a8] };
+const BLOOM_TYPES = FIGHT_ISLE;
+// each world's complementary accents (the colour pass, 05-data): warm on cool Meadow/Peaks, teal on the gold Reef and lava Volcano
+const BLOOM_COLS = { meadow: [0xff9fc8, 0xfff1a8, 0xffb8a0, 0xffffff], reef: [0x7fe0d6, 0x8fdcff, 0xffffff, 0xff9fb1],
+  peaks: [0xffffff, 0xbfe8ff, 0xffc9a0, 0xff9fb8], volcano: [0xffa13d, 0xffd36a, 0x6fe0d0, 0xfff1a8] };
 const BLOOM_N = 14;   // clumps per isle
 const bloomGeo = { stem: new THREE.CylinderGeometry(0.025, 0.03, 0.32, 5).translate(0, 0.16, 0), petal: new THREE.SphereGeometry(0.075, 8, 6), core: new THREE.SphereGeometry(0.06, 8, 6) };
 Object.values(bloomGeo).forEach(g => SHARED.add(g));
@@ -11567,6 +11589,7 @@ function camTarget() {
 // (half the isle's growth) to keep far-side threats on screen; the hub keeps its own framing
 const ISLE_ZOOM = 1 + (ISLE_K - 1) * 0.5;
 function snapCamera() { const [x, z] = camTarget(); G.cam.set(x, 0, z); }
+const FOG_NEAR_K = 1.7, FOG_FAR_K = 5.2;   // x the camera distance (~25 at zoom 1: fog 42 -> 130; far isles at 65-120 sink 25-90%)
 // rdt = real frame time (trauma decays in real time, even through hitstop/slow-mo)
 function updateCamera(dt, rdt = dt) {
   if (G.scope) { scopeCamera(); return; }   // eyepiece view (76-lookout)
@@ -11576,6 +11599,10 @@ function updateCamera(dt, rdt = dt) {
   const pos = new THREE.Vector3(cx, camH * zm, cz + camD * zm), look = new THREE.Vector3(cx, 0, cz + 0.5);
   if (G.intro) introCamera(pos, look);   // boss entrance close-up (72-bossintro)
   camera.position.copy(pos); camera.lookAt(look);
+  // depth haze (2026-10-18, Thomas Brush's "fog = depth"): the fog starts just past the isle you're on and scales with the
+  // zoom, so the play area stays crisp while far isles, cloud banks and the top of a wide view sink into the horizon colour.
+  // (It used to start at 60 and reach full at 220, which barely touched anything.) The lookout and home editor set their own.
+  if (G.state !== 'homeEdit') { const cd = Math.hypot(camH, camD) * zm; scene.fog.near = cd * FOG_NEAR_K; scene.fog.far = cd * FOG_FAR_K; }
   applyShake(rdt);   // trauma shake on top of the aim pose (68-juice)
   sun.position.set(G.cam.x - 10, 26, G.cam.z + 12); sun.target.position.set(G.cam.x, 0, G.cam.z);
 }
@@ -14047,7 +14074,7 @@ function setDifficulty(id) {
 // The starting weapon is the one held from the hub's weapon range (78-range), else startId (Try again keeps the last
 // run's), else the Zap Blaster. It always starts fresh at Lv 1 (or the kit level), never the range's Lv 5 test copy.
 function startStory(level, run = 'story', startId) {
-  initAudio();
+  initAudio(); sfx('go');   // an instant "here we go" as the run starts (90-flow uiSound covers menu buttons)
   const held = G.mode === 'hub' && G.weapon && WEAPONS[G.weapon.id] ? G.weapon.id : null;
   // the Daily Challenge always starts with the day's weapon (77-modes)
   const plan = run === 'daily' ? dailyPlan(dailyDay()) : null;
@@ -18297,6 +18324,17 @@ document.addEventListener('click', e => {
   const t = e.target.closest('[data-ctab]'); if (t) openCollectibles(t.dataset.ctab);
 });
 window.addEventListener('resize', () => { if (G.state === 'map') drawBigMap(); });
+// Instant UI sound (2026-10-18): every button, tab, card and chip clicks the moment it's pressed (pointerdown, before the click
+// lands), or on Enter/Space for keyboard (click with detail 0). Before this most menu buttons were silent. The touch controls
+// (#touchUI) and anything marked data-nosfx stay quiet; buttons whose action plays its own sound just get the click under it.
+const UI_SFX_SEL = 'button, .tab, .sh-item, .sh-chip, [role="button"], [data-card], [data-swap], [data-ctab], [data-ltab], [data-shtab]';
+function uiSound(e) {
+  const b = e.target.closest && e.target.closest(UI_SFX_SEL);
+  if (!b || b.disabled || b.closest('#touchUI, [data-nosfx]')) return;
+  initAudio(); sfx('ui');
+}
+document.addEventListener('pointerdown', e => { if (e.button === 0 || e.pointerType !== 'mouse') uiSound(e); }, true);
+document.addEventListener('click', e => { if (e.detail === 0) uiSound(e); }, true);
 
 // ---------- loop ----------
 let last = performance.now();
