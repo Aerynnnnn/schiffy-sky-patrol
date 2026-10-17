@@ -510,6 +510,11 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 .lv-levels i::after { content: ""; position: absolute; right: -4px; top: -5px; border: 7px solid transparent; border-left: 9px solid var(--sun); border-right: 0; }
 .lv-levels b { font: 700 18px var(--round); color: var(--navy); background: var(--sun); border: 3px solid var(--navy); border-radius: 999px; padding: 0 12px; }
 #cardSub { margin: 6px 0 10px; font: 600 15px var(--round); color: var(--cream); opacity: .9; animation: lvRise .4s ease-out .22s both; }
+#cardKeep { margin: 14px auto 0; display: flex; align-items: center; gap: 8px; animation: lvRise .4s ease-out .5s both; }
+#cardKeep kbd { font: 700 12px var(--body); background: var(--cream); color: var(--navy); border: 2px solid var(--navy); border-radius: 6px; padding: 0 6px; }
+#cardKeep.rec { background: var(--sun); box-shadow: 0 4px 0 var(--navy), 0 0 0 4px rgba(255, 211, 77, .45); }
+.touch #cardKeep kbd { display: none; }
+@media (prefers-reduced-motion: reduce) { #cardKeep { animation: none; } }
 .cardrow { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; width: 100%; }
 .upcard { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; cursor: pointer; background: var(--cream); color: var(--navy);
   border: 4px solid var(--navy); border-radius: 22px; padding: 18px 16px 16px; box-shadow: 0 7px 0 var(--navy); font-family: var(--round); overflow: hidden;
@@ -1068,6 +1073,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
       <p class="lv-levels"><span id="cardFrom">Lv 1</span><i aria-hidden="true"></i><b id="cardTo">Lv 2</b></p>
       <p id="cardSub">Pick an upgrade</p>
       <div class="cardrow" id="cardRow"></div>
+      <button class="bigbtn" id="cardKeep" type="button"><kbd>4</kbd> Keep my build <small id="cardKeepWhat">+1 bone</small></button>
     </div>
   </div>
 
@@ -1995,7 +2001,7 @@ window.addEventListener('keydown', e => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code)) e.preventDefault();
   initAudio();
   if (e.repeat) { keys.add(e.code); return; }
-  if (G.state === 'card') { const n = { Digit1: 0, Digit2: 1, Digit3: 2 }[e.code]; if (n !== undefined) { const b = $('#cardRow').children[n]; if (b) pickCard(b.dataset.card); } return; }
+  if (G.state === 'card') { if (e.code === 'Digit4') { keepBuild(); return; } const n = { Digit1: 0, Digit2: 1, Digit3: 2 }[e.code]; if (n !== undefined) { const b = $('#cardRow').children[n]; if (b) pickCard(b.dataset.card); } return; }
   if (e.code === 'Tab') { if (G.state === 'play' || G.state === 'inv') toggleInv(); return; }
   pressedSet.add(e.code); keys.add(e.code);
   if (e.code === 'KeyM') toggleMap();
@@ -15599,6 +15605,11 @@ function openCards() {
       `<div class="ico">${affixIcon(t)}</div><b>${AFFIXES[t].name}</b><em class="lvline">${have ? `Lv ${have} → <b>Lv ${have + 1}${have + 1 >= AFF_MAX ? ' MAX' : ''}</b>` : full ? 'Lv 1 · replaces one' : 'Lv 1'}</em>` +
       `<span>${affixText(t, w.id)}</span><div class="pips" title="Lv ${have}">${pips}</div></button>`;
   }).join('');
+  // Keep my build (2026-10-18): skip the pick for a bone (or gold at full bones), so a full weapon is never forced to swap.
+  // When every upgrade it holds is maxed, only new ones (= swaps) can be offered, so the button is highlighted as the pick.
+  const allMax = full && Object.keys(w.aff).every(t => affMaxed(t, w)), kb = $('#cardKeep');
+  kb.classList.toggle('rec', allMax);
+  $('#cardKeepWhat').textContent = (G.player.hp < G.player.maxHp ? '+1 bone' : `+${MAXED_GOLD} gold`) + (allMax ? ' · all your upgrades are maxed' : full ? ' · no swap' : '');
   const v = $('#cardView'); v.hidden = false;
   // restart the entrance animations when a second level-up follows straight on
   v.classList.remove('lvscreen'); void v.offsetWidth; v.classList.add('lvscreen');
@@ -15621,6 +15632,22 @@ function pickCard(tag) {
     else { $('#cardView').hidden = true; G.state = 'play'; G.cardPicking = false; }
   }, reduce ? 0 : 380);
 }
+// skip this level's upgrade: +1 bone if hurt, else MAXED_GOLD gold (the same reward as XP past the weapon cap, 35-weapons)
+function keepBuild() {
+  if (G.cardPicking || G.state !== 'card') return;
+  G.cardPicking = true;
+  $('#cardRow').querySelectorAll('.upcard').forEach(c => c.classList.add('dismiss'));
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  setTimeout(() => {
+    const p = G.player;
+    if (p.hp < p.maxHp) { p.hp++; sfx('heart'); toast('Build kept', '+1 bone', '#fff4dc'); }
+    else { G.crystals += MAXED_GOLD; sfx('pickup'); toast('Build kept', `+${MAXED_GOLD} gold`, '#ffd34d'); }
+    G.pendingCards--; updateHUD(true); updateWeaponHUD();
+    if (G.pendingCards > 0) openCards();
+    else { $('#cardView').hidden = true; G.state = 'play'; G.cardPicking = false; }
+  }, reduce ? 0 : 300);
+}
+$('#cardKeep').addEventListener('click', keepBuild);
 // ---------- slot swap prompt ----------
 // Opens over the level-up cards (kind 'weapon') or over play (kind 'gadget'). G.state = 'swap' pauses the game like the other
 // overlays; Esc / P (CLOSERS.swap) or the Cancel button go back without changing anything. onPick(old) runs after the
