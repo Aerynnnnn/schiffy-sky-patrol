@@ -1142,7 +1142,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
   <!-- Home catalogue (75-hub): gold / Paw Gems / unlock items for the home isle, and storage -->
   <div id="catView" class="screen mapscreen" hidden>
     <div class="mapcard catcard">
-      <div class="maphead"><div><span class="verb">Schiffy's Home</span><h2>Home catalogue</h2></div><div class="cat-bal"><span class="pill" id="catGold"></span><span class="pill" id="catGems"></span><button class="smallbtn" id="catClose" type="button">Close · Esc</button></div></div>
+      <div class="maphead"><div><span class="verb">Schiffy's Playground</span><h2>Playground catalogue</h2></div><div class="cat-bal"><span class="pill" id="catGold"></span><span class="pill" id="catGems"></span><button class="smallbtn" id="catClose" type="button">Close · Esc</button></div></div>
       <div class="tabs cat-tabs" id="catTabs"></div>
       <div class="cat-filters"><input type="search" id="catSearch" class="cat-search" placeholder="Search: sofa, lamp, pond..." aria-label="Search the catalogue" autocomplete="off"><span id="catChips" class="cat-chips"></span><span id="catCount" class="cat-count"></span></div>
       <p class="cat-note" id="catNote"></p>
@@ -1158,7 +1158,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
       <div class="he-pvtext"><span class="verb">Preview</span><b id="hePvName"></b><small id="hePvSize"></small><p id="hePvState"></p></div>
       <div class="he-pvbtns"><button class="smallbtn he-buy" id="hePvBuy" type="button">Buy &amp; place</button><button class="smallbtn" id="hePvCancel" type="button">Cancel · Esc</button></div>
     </div>
-    <div class="he-top"><span class="verb">Schiffy's Home</span><p id="heInfo"></p></div>
+    <div class="he-top"><span class="verb">Schiffy's Playground</span><p id="heInfo"></p></div>
     <!-- the jump pad is too far from the lookout to bounce Schiffy up (75-hub heWarn / hePadFix) -->
     <div class="he-warn" id="heWarn" hidden><span>The jump pad can't reach the lookout from here, so Schiffy can't bounce up to the telescope.</span><button class="smallbtn" id="hePadFix" type="button">Move the pad beside it</button></div>
     <div class="he-pose" id="hePose" hidden>
@@ -12762,7 +12762,7 @@ const HOME_MORE = [
   ['t_bone', 'trophy', 'unlock', 'bank5k', 'Golden Bone', 'A gold bone on a plinth, for a well-filled piggy bank.'],
   ['t_captain', 'trophy', 'unlock', 'runs100', 'Sky Captain Statue', 'A pup in a captain\'s hat with a brass spyglass.'],
   ['t_shields', 'trophy', 'unlock', 'bosses', 'Boss Shields', 'Crests for beating every boss.'],
-  ['t_rosette', 'trophy', 'unlock', 'home20', 'Homemaker\'s Rosette', 'A blue ribbon for a well-furnished home.'],
+  ['t_rosette', 'trophy', 'unlock', 'home20', 'Homemaker\'s Rosette', 'A blue ribbon for a well-furnished playground.'],
   ['t_wyrmhound', 'trophy', 'unlock', 'level4', 'Blazefang Plush', 'A huggable Blazefang on a velvet pouf, felt flame and all.'],
 ];
 for (const [id, sec, cur, p, name, desc, f] of HOME_MORE) HOME_CAT.push(Object.assign({ id, sec, cur, name, desc }, cur === 'unlock' ? { task: p } : { price: p }, f ? { f } : {}));
@@ -12825,11 +12825,11 @@ const HOME_TASKS = {
   weapons: { text: 'Find all ' + WEAPON_KEYS.length + ' weapons', prog: () => [Object.values(SAVE.weapons || {}).filter(w => w.seen).length, WEAPON_KEYS.length] },
   runs50: { text: 'Set out on 50 runs', prog: () => [SAVE.runs || 0, 50] },
   // v3.1 trophies
-  bank5k: { text: 'Save 5,000 gold for the home in all', prog: () => [homeGoldAll(), 5000] },
+  bank5k: { text: 'Save 5,000 gold for the playground in all', prog: () => [homeGoldAll(), 5000] },
   runs100: { text: 'Set out on 100 runs', prog: () => [SAVE.runs || 0, 100] },
   // (trophies already granted stay owned: a save that had all 18 keeps its Boss Shields and now reads 18/24)
   bosses: { get text() { return `Beat every one of the ${RUSH.length} bosses`; }, prog: () => [RUSH.filter(r => (SAVE.bosses || {})[r.id] > 0).length, RUSH.length] },
-  home20: { text: 'Own 20 things for the home (bought or earned)', prog: () => [HOME_CAT.filter(h => h.cur !== 'unlock' && Wallet.owned(h.sku)).length, 20] },
+  home20: { text: 'Own 20 things for the playground (bought or earned)', prog: () => [HOME_CAT.filter(h => h.cur !== 'unlock' && Wallet.owned(h.sku)).length, 20] },
 };
 for (const h of HOME_CAT) if (h.boss) HOME_TASKS[h.task] = { text: `Defeat ${(BOSSES[h.boss] || {}).name || h.boss} to unlock`, where: h.where, prog: () => [(SAVE.bosses || {})[h.boss] > 0 ? 1 : 0, 1] };
 // a boss just went down (onBossDead, 70-rooms): its trophy unlocks at once (first defeat only) and a toast follows once the
@@ -12842,7 +12842,7 @@ function bossTrophyEarned(id) {
 }
 function bossTrophyToast() {
   const list = (G.trophyToasts || []).splice(0); if (!list.length) return;
-  toast(list.length > 1 ? `${list.length} trophies unlocked` : `${list[0].name} unlocked`, 'Place it on your Home isle from the Edit home board', '#c69bff');
+  toast(list.length > 1 ? `${list.length} trophies unlocked` : `${list[0].name} unlocked`, 'Place it in your Playground from the blueprint table', '#c69bff');
 }
 // how a boss statue sits on its plinth: model scale k and offsets (centred, feet on the plinth), its size after scaling, the
 // plinth top. Measured once per boss from the model; builds without boss models (-Lite) get a star (bossTrophyModel).
@@ -12942,7 +12942,7 @@ function homeMigrateDecor() {
     it.y = r.b; it.box = r.box; it.low = r.low; placed.push(it);
     S.items[h.sku] = Object.assign({}, v, { dx: it.dx, dz: it.dz, out: true });
   }
-  try { logEvent('home', `boutique decorations moved to the home catalogue: ${mine.map(h => h.name).join(', ')}`); } catch (e) {}
+  try { logEvent('home', `boutique decorations moved to the playground catalogue: ${mine.map(h => h.name).join(', ')}`); } catch (e) {}
   writeSave(); return true;
 }
 const STATUE_ROW = [-2.2, 0, 2.2];   // the retired Boss Statues' three plinths along z (DECOR_MODEL, 84-shop)
@@ -13139,20 +13139,68 @@ function buildHome(grp, room, th, dm) {
     const lamp = makeLamp(th), lz = bz + sz * (bw + 0.8); lamp.position.set(lx, 0, lz); aimLamp(lamp, 0, -sz); grp.add(lamp);
     room.colliders.push({ x: lx, z: lz, r: 0.35, h: 3 });
   }
-  const sign = textSprite("Schiffy's Home", '#ffd34d', 0.6); sign.position.set(x0 + 1.6, 3.6, bz); grp.add(sign);
-  // the Edit home notice board: rearrange the isle in place (startHomeEdit)
-  const board = new THREE.Group(), bx = X + PLANNER_AT.dx, bzz = Z + PLANNER_AT.dz;
-  for (const sx of [-1, 1]) board.add(outline(mesh(new THREE.CylinderGeometry(0.1, 0.12, 2.2, 6), toon(th.wood), sx * 1.1, 1.1, 0), 1.12));
-  board.add(outline(mesh(new THREE.BoxGeometry(2.6, 1.6, 0.15), toon(0xfff4dc), 0, 1.6, 0.05), 1.05));
-  const bt = signPlane('Edit home', 2.3, 0.75); bt.position.set(0, 1.62, 0.13); board.add(bt);
+  const sign = textSprite("Schiffy's Playground", '#ffd34d', 0.6); sign.position.set(x0 + 1.6, 3.6, bz); grp.add(sign);
+  // the planning table (2026-10-18, was an "Edit home" notice board): a wooden table with the playground's blueprint spread
+  // on top, a rolled-up spare, a pencil and a ruler; walk up and press E to rearrange the isle in place (startHomeEdit)
+  const board = makePlanTable(th), bx = X + PLANNER_AT.dx, bzz = Z + PLANNER_AT.dz;
   board.position.set(bx, 0, bzz); grp.add(board); room.colliders.push({ x: bx, z: bzz, r: 1.0, h: 3 });
+  const tl = textSprite('Edit playground', '#bfe4ff', 0.42); tl.position.set(bx, 2.25, bzz); grp.add(tl);
   addInteractable({ x: bx, z: bzz + 1.4, r: 1.8, mesh: board,
-    prompt: () => ({ icon: '', verb: 'Edit home', title: "Arrange Schiffy's Home", desc: 'Shop the home catalogue (gold, Paw Gems and trophies), place things from storage, then drag, stack, turn and hover them. Trees, bushes and rocks can be cleared.', action: 'Edit' }),
+    prompt: () => ({ icon: '', verb: 'Blueprint table', title: "Arrange Schiffy's Playground", desc: 'Shop the playground catalogue (gold, Paw Gems and trophies), place things from storage, then drag, stack, turn and hover them. Trees, bushes and rocks can be cleared.', action: 'Edit' }),
     use: () => startHomeEdit() });
   // the plateau lookout and its jump pad are home fixtures (HOME_FIXED), built where the layout puts them by
   // refreshHomeProps (homeFixture); this only sets up the telescope's prompt and where it stands (76-lookout)
   buildLookout(grp, room);
   return under;
+}
+// The blueprint, drawn once: blue paper with a fine grid, the playground's outline (bridge, lookout plateau, trees, the pet
+// bed) in white ink, a title block and a paw stamp. Readable from the 55-degree hub camera, so the lines are bold.
+let planTex = null;
+function planTexture() {
+  if (planTex) return planTex;
+  planTex = canvasTex(512, 320, (x, w, h) => {
+    x.fillStyle = '#2f6fd0'; x.fillRect(0, 0, w, h);
+    x.strokeStyle = 'rgba(255,255,255,.18)'; x.lineWidth = 1;
+    for (let i = 16; i < w; i += 16) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i, h); x.stroke(); }
+    for (let i = 16; i < h; i += 16) { x.beginPath(); x.moveTo(0, i); x.lineTo(w, i); x.stroke(); }
+    x.strokeStyle = '#fff'; x.fillStyle = '#fff'; x.lineWidth = 4; x.lineJoin = 'round'; x.lineCap = 'round';
+    x.strokeRect(10, 10, w - 20, h - 20);
+    roundRectPath(x, 70, 70, 370, 200, 26); x.stroke();                                         // the isle
+    x.beginPath(); x.moveTo(20, 170); x.lineTo(70, 170); x.moveTo(20, 194); x.lineTo(70, 194); x.stroke();   // the bridge
+    for (let i = 24; i < 70; i += 12) { x.beginPath(); x.moveTo(i, 170); x.lineTo(i, 194); x.stroke(); }
+    x.beginPath(); x.ellipse(360, 120, 48, 32, 0, 0, Math.PI * 2); x.stroke();                  // the lookout plateau
+    x.beginPath(); x.moveTo(360, 92); x.lineTo(392, 76); x.stroke(); x.beginPath(); x.arc(396, 74, 6, 0, Math.PI * 2); x.stroke();   // its telescope
+    for (const [cx, cy, r] of [[120, 110, 16], [150, 230, 13], [270, 240, 15], [215, 100, 12]]) { x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.stroke(); x.beginPath(); x.moveTo(cx - r * 0.5, cy); x.lineTo(cx + r * 0.5, cy); x.stroke(); }
+    x.setLineDash([8, 8]); x.beginPath(); x.moveTo(70, 182); x.quadraticCurveTo(220, 182, 300, 150); x.stroke(); x.setLineDash([]);   // a path plan
+    const paw = (cx, cy, s) => { x.beginPath(); x.ellipse(cx, cy + s * 0.3, s * 0.55, s * 0.45, 0, 0, Math.PI * 2); x.fill(); for (const [dx, dy] of [[-0.6, -0.35], [-0.2, -0.7], [0.2, -0.7], [0.6, -0.35]]) { x.beginPath(); x.arc(cx + dx * s, cy + dy * s, s * 0.2, 0, Math.PI * 2); x.fill(); } };
+    paw(210, 190, 22);
+    x.strokeRect(w - 186, h - 74, 166, 54); x.font = '700 22px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText("SCHIFFY'S", w - 103, h - 58); x.fillText('PLAYGROUND', w - 103, h - 34);
+  });
+  SHARED.add(planTex);
+  return planTex;
+}
+function makePlanTable(th) {
+  const g = new THREE.Group(), wood = toon(th.wood), dark = toon(new THREE.Color(th.wood).multiplyScalar(0.72).getHex());
+  const TW = 2.5, TD = 1.4, TH = 0.95;
+  g.add(outline(mesh(new THREE.BoxGeometry(TW, 0.12, TD), wood, 0, TH, 0), 1.04));                    // table top
+  g.add(mesh(new THREE.BoxGeometry(TW - 0.3, 0.14, TD - 0.3), dark, 0, TH - 0.12, 0));               // apron under the top
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(outline(mesh(new THREE.BoxGeometry(0.14, TH - 0.06, 0.14), dark, sx * (TW / 2 - 0.2), (TH - 0.06) / 2, sz * (TD / 2 - 0.2)), 1.1));
+  g.add(mesh(new THREE.BoxGeometry(TW - 0.5, 0.08, 0.08), dark, 0, 0.28, TD / 2 - 0.2), mesh(new THREE.BoxGeometry(TW - 0.5, 0.08, 0.08), dark, 0, 0.28, -TD / 2 + 0.2));   // stretchers
+  // the blueprint: a sheet lying on the top, turned a little, its corners lifting (a gentle curl), pinned at one corner
+  const sheetGeo = new THREE.PlaneGeometry(1.95, 1.2, 8, 4), pos = sheetGeo.attributes.position;
+  for (let i = 0; i < pos.count; i++) { const u = Math.abs(pos.getX(i)) / 0.975, v = Math.abs(pos.getY(i)) / 0.6; pos.setZ(i, Math.pow(Math.max(u, v), 4) * 0.035 + Math.pow(u * v, 3) * 0.03); }
+  sheetGeo.computeVertexNormals();
+  const sheet = mesh(sheetGeo, new THREE.MeshBasicMaterial({ map: planTexture() }), -0.05, TH + 0.065, 0.02);
+  sheet.rotation.set(-Math.PI / 2, 0, 0.07); g.add(sheet);
+  g.add(mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.02, 10), toon(0xff5d7a), -0.95, TH + 0.08, -0.5));   // a push pin
+  // a rolled-up spare blueprint, a yellow pencil and a ruler
+  const roll = outline(mesh(new THREE.CylinderGeometry(0.09, 0.09, 1.1, 14), toon(0x4f8fe0), 0.6, TH + 0.15, -0.52), 1.08); roll.rotation.set(0, 0.25, Math.PI / 2); g.add(roll);
+  for (const s of [-1, 1]) { const end = mesh(new THREE.CircleGeometry(0.085, 14), toon(0xdfeaff), 0.6 + s * 0.54 * Math.cos(0.25), TH + 0.15, -0.52 - s * 0.54 * Math.sin(0.25)); end.rotation.y = Math.PI / 2 - 0.25 + (s < 0 ? Math.PI : 0); g.add(end); }
+  const pencil = mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.55, 6), toon(0xffd34d), 0.78, TH + 0.09, 0.42); pencil.rotation.set(0, -0.6, Math.PI / 2); g.add(pencil);
+  const tip = mesh(new THREE.ConeGeometry(0.025, 0.08, 6), toon(0xf2d0a8), 0.78 + 0.31 * Math.cos(0.6), TH + 0.09, 0.42 + 0.31 * Math.sin(0.6)); tip.rotation.set(0, -0.6, -Math.PI / 2); g.add(tip);
+  const ruler = mesh(new THREE.BoxGeometry(0.7, 0.02, 0.09), toon(0xfff4dc), -0.55, TH + 0.075, 0.5); ruler.rotation.y = 0.15; g.add(ruler);
+  return g;
 }
 // a catalogue item's model (a stand-in box of its shape in builds without the Blender models)
 function homeModel(sku) {
@@ -13352,7 +13400,7 @@ function endHomeEdit() {
   G.state = 'play'; G.zoom = HE.zoom; HE.zt = null; HE.cx = null; mouse.down = false; keys.clear();
   $('#homeEditBar').hidden = true; $('#hubHud').hidden = false;
   heFreePlayer();
-  if (!homePadReach(G.homeLayout || HE.L)) toast("The jump pad can't reach the lookout", 'Move it closer at the Edit home board to bounce up to the telescope', '#ffb84a');
+  if (!homePadReach(G.homeLayout || HE.L)) toast("The jump pad can't reach the lookout", 'Move it closer at the blueprint table to bounce up to the telescope', '#ffb84a');
 }
 window.addEventListener('resize', () => { if (G.state === 'homeEdit') heFrame(); });
 // Esc: leaves the preview (back to the catalogue, nothing charged), else closes the catalogue, else ends edit mode
@@ -13701,7 +13749,7 @@ async function homeBuy(h) {
     SAVE.homeGold = homeGold() - h.price;
     if (!Wallet.grant(h.sku, { price: h.price, via: 'gold' })) { SAVE.homeGold += h.price; writeSave(); return { ok: false, error: 'Already yours' }; }
     writeSave();
-    try { logEvent('shop', `bought ${h.name} (${h.sku}) for ${h.price} home gold`); } catch (e) {}
+    try { logEvent('shop', `bought ${h.name} (${h.sku}) for ${h.price} playground gold`); } catch (e) {}
     return { ok: true };
   }
   return Wallet.spend(h.sku, h.price);
@@ -14047,7 +14095,7 @@ function buildHub() {
   }
   hall.position.set(hallX, 0, hallZ); shadows(hall); scene.add(hall);
   addInteractable({ x: hallX, z: doorZ, r: 1.9, mesh: hall,
-    prompt: () => ({ icon: PROMPT_ICONS.chest, verb: 'Collectibles', title: 'Trophy Hall', desc: 'Pets you raised (each gives a small bonus to every run), weapons you found, bosses you beat (each earns a statue for your home), and your Endless, Boss Rush and Daily records.', action: 'Look' }),
+    prompt: () => ({ icon: PROMPT_ICONS.chest, verb: 'Collectibles', title: 'Trophy Hall', desc: 'Pets you raised (each gives a small bonus to every run), weapons you found, bosses you beat (each earns a trophy for your playground), and your Endless, Boss Rush and Daily records.', action: 'Look' }),
     use: () => openCollectibles() });
   // how-to board and sound bell
   const board = new THREE.Group();
@@ -14234,7 +14282,7 @@ function openCollectibles(tab = 'pets') {
   } else {
     html = BIOMES.flatMap(b => b.bosses.concat(b.finalBoss)).map(id => {
       const n = SAVE.bosses[id] || 0, d = BOSSES[id];
-      return `<div class="cslot ${n ? '' : 'locked'}"><div class="cico" style="background:${n ? '#ff8fb1' : '#6b6880'}">${n ? '★' : '?'}</div><b>${n ? d.name : '???'}</b><span>${n ? `Defeated ${n}×` : d.final ? 'Level boss' : 'Sector boss'}</span><i class="pbonus">${n ? 'Home trophy earned' : 'Beat it to earn its home trophy'}</i></div>`;
+      return `<div class="cslot ${n ? '' : 'locked'}"><div class="cico" style="background:${n ? '#ff8fb1' : '#6b6880'}">${n ? '★' : '?'}</div><b>${n ? d.name : '???'}</b><span>${n ? `Defeated ${n}×` : d.final ? 'Level boss' : 'Sector boss'}</span><i class="pbonus">${n ? 'Playground trophy earned' : 'Beat it to earn its playground trophy'}</i></div>`;
     }).join('');
   }
   $('#collectGrid').innerHTML = html;
@@ -17430,10 +17478,10 @@ buildHub = after(buildHub, () => {
   writeSave();
   let at = 1600;
   const later = (t1, t2, col) => { setTimeout(() => toast(t1, t2, col), at); at += 2600; };
-  if (moved) later('Your boutique decorations moved to your Home catalogue', 'They are on your Home isle (or in its Storage tab): place, turn and stack them from the Edit home board', '#ff9fc8');
-  if (gain > 0) later(`+${gain} gold saved for your home`, `Home savings: ${homeGold()} gold. Spend it at the Edit home board.`, '#ffd34d');
+  if (moved) later('Your boutique decorations moved to your Playground catalogue', 'They are in your Playground (or its Storage tab): place, turn and stack them from the blueprint table', '#ff9fc8');
+  if (gain > 0) later(`+${gain} gold saved for your playground`, `Playground savings: ${homeGold()} gold. Spend it at the blueprint table.`, '#ffd34d');
   const names = fresh.length > 3 ? `${fresh.slice(0, 2).map(h => h.name).join(', ')} and ${fresh.length - 2} more` : fresh.map(h => h.name).join(', ');
-  if (fresh.length) later(fresh.length > 1 ? `${fresh.length} new home trophies!` : 'New home trophy!', `${names}: in storage at the Edit home board`, '#c69bff');
+  if (fresh.length) later(fresh.length > 1 ? `${fresh.length} new playground trophies!` : 'New playground trophy!', `${names}: in storage at the blueprint table`, '#c69bff');
   buildBoutique(); refreshDecor();
   // home items animate through an interactable that never prompts (r < 0)
   addInteractable({ x: 0, z: 0, r: -1, prompt: () => null, use: () => {}, tick: dt => { for (const t of G.homeTicks || []) t(dt); } });
@@ -17968,8 +18016,8 @@ function hpetBuild() {
   addInteractable({ x: bx, z: bz - 1.1, r: 1.2,
     prompt: () => {
       const n = homePetsOut().length, have = hpetHave().length;
-      return { icon: PROMPT_ICONS.puppy, verb: "Schiffy's Home", title: 'Pet bed',
-        desc: have ? `${n} of ${HOME_PET_MAX} pets out at home. Choose who comes out to play.` : 'Finish a level with a pet following you to collect it. Collected pets can live here.', action: 'Choose pets' };
+      return { icon: PROMPT_ICONS.puppy, verb: "Schiffy's Playground", title: 'Pet bed',
+        desc: have ? `${n} of ${HOME_PET_MAX} pets out in the playground. Choose who comes out to play.` : 'Finish a level with a pet following you to collect it. Collected pets can live here.', action: 'Choose pets' };
     },
     use: () => openHomePets() });
   // petting: follows whichever pet is nearest Schiffy (only offered when one is in reach)
@@ -18173,10 +18221,10 @@ function hpetPanelEl() {
   document.head.appendChild(css);
   el = document.createElement('div'); el.id = 'hpetView'; el.className = 'screen mapscreen'; el.hidden = true;
   el.innerHTML = `<div class="mapcard hpetcard" role="dialog" aria-modal="true" aria-labelledby="hpetTitle">
-  <div class="maphead"><div><span class="verb">Schiffy's Home</span><h2 id="hpetTitle">Pets at home</h2></div><button class="smallbtn" id="hpetClose" type="button">Close · Esc</button></div>
+  <div class="maphead"><div><span class="verb">Schiffy's Playground</span><h2 id="hpetTitle">Playground pets</h2></div><button class="smallbtn" id="hpetClose" type="button">Close · Esc</button></div>
   <div class="hpet-sub"><span class="hpet-count" id="hpetCount"></span><span class="hpet-msg" id="hpetMsg" aria-live="polite"></span></div>
   <div class="hpet-grid" id="hpetGrid"></div>
-  <p class="hpet-note">Up to ${HOME_PET_MAX} of your collected pets can run around the home isle. Walk up to one and press ${ctl('E', 'Use')} to give it a pat.</p>
+  <p class="hpet-note">Up to ${HOME_PET_MAX} of your collected pets can run around the playground. Walk up to one and press ${ctl('E', 'Use')} to give it a pat.</p>
 </div>`;
   ($('#ldbView') ? $('#ldbView').parentNode : document.body).appendChild(el);
   el.addEventListener('click', e => {
@@ -18188,19 +18236,19 @@ function hpetPanelEl() {
 }
 function hpetRender(msg, full) {
   const out = homePetsOut(), have = hpetHave();
-  $('#hpetCount').textContent = `${out.length} / ${HOME_PET_MAX} at home`;
-  const m = $('#hpetMsg'); m.textContent = msg || (Array.isArray(homeSave().pets) ? '' : have.length ? 'Your newest pets come home on their own until you choose.' : ''); m.className = 'hpet-msg' + (full ? ' full' : '');
+  $('#hpetCount').textContent = `${out.length} / ${HOME_PET_MAX} out playing`;
+  const m = $('#hpetMsg'); m.textContent = msg || (Array.isArray(homeSave().pets) ? '' : have.length ? 'Your newest pets come out to play on their own until you choose.' : ''); m.className = 'hpet-msg' + (full ? ' full' : '');
   $('#hpetGrid').innerHTML = have.length ? have.map(id => {
     const d = PETS[id], r = SAVE.pets[id], st = hpetStage(id), on = out.includes(id), pic = petPortrait(id, st);
     return `<div class="hpet-c ${on ? 'on' : ''}" data-card="${id}">${pic ? `<img alt="" src="${pic}">` : ''}<b>${d.name}</b><span>${PET_STAGES[st]} · raised ${r.count || 1}×</span><i>${petBonusText(id)}</i>` +
-      `<button type="button" class="smallbtn" data-hpet="${id}" aria-pressed="${on}">${on ? 'At home ✓' : 'Bring home'}</button></div>`;
+      `<button type="button" class="smallbtn" data-hpet="${id}" aria-pressed="${on}">${on ? 'Playing ✓' : 'Bring out'}</button></div>`;
   }).join('') : `<div class="hpet-empty"><b>No pets yet</b><span>Pick up an egg in a run, keep it safe while it hatches, and finish the level with it to collect it. Collected pets can live here.</span></div>`;
 }
 function homePetToggle(id) {
   if (!SAVE.pets[id]) return;
   const cur = homePetsOut();
   if (!cur.includes(id) && cur.length >= HOME_PET_MAX) {
-    sfx('deny'); hpetRender(`Home is full: ${HOME_PET_MAX} pets at most. Send one back first.`, true);
+    sfx('deny'); hpetRender(`The playground is full: ${HOME_PET_MAX} pets at most. Send one back first.`, true);
     const c = $(`#hpetGrid [data-card="${id}"]`); if (c) { c.classList.remove('shake'); void c.offsetWidth; c.classList.add('shake'); }
     return;
   }
