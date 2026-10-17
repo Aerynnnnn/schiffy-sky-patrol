@@ -47,6 +47,12 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #ffc8a6; col
 #hearts .full .f > * { fill: #fff0d2; }
 #hearts .empty .f > * { fill: #b9a99a; }
 #hearts .empty { opacity: .55; }
+#hearts.last { animation: lastBox 1.1s ease-in-out infinite; }
+#hearts.last .full { animation: lastBone 1.1s ease-in-out infinite; transform-origin: 50% 60%; }
+#hearts.last .full .f > * { fill: #ffc2c8; }
+@keyframes lastBone { 0%, 100% { transform: rotate(0) scale(1); } 12% { transform: rotate(-9deg) scale(1.14); } 24% { transform: rotate(7deg) scale(1.1); } 36% { transform: rotate(-4deg) scale(1.04); } 48% { transform: rotate(0) scale(1); } }
+@keyframes lastBox { 0%, 100% { box-shadow: 0 4px 0 var(--navy); } 15% { box-shadow: 0 4px 0 var(--navy), 0 0 0 4px rgba(255, 79, 106, .55); } }
+@media (prefers-reduced-motion: reduce) { #hearts.last .full { animation: none; } }
 #hearts .pip { width: 16px; height: 16px; border-radius: 50%; background: var(--sky); border: 3px solid var(--navy); margin-left: 3px; }
 .gold { width: 26px; height: 16px; flex: none; background: var(--navy); clip-path: polygon(18% 0, 82% 0, 100% 100%, 0 100%); position: relative; }
 .gold::after { content: ""; position: absolute; inset: 3px; background: linear-gradient(#ffe58a 0 35%, #ffc22e 35%); clip-path: polygon(18% 0, 82% 0, 100% 100%, 0 100%); }
@@ -2214,7 +2220,10 @@ const endlessL = () => G.run === 'endless' && G.mode === 'story' ? Math.max(0, G
 const endlessWaveCap = base => Math.min(Math.max(base, ENDLESS.waveCapMax), base + ENDLESS.waveCapAdd * endlessL());
 const endlessCdMul = () => { const L = endlessL(); return L ? Math.max(ENDLESS.cdMin, Math.pow(ENDLESS.cdMul, L)) : 1; };
 const endlessDoubleHit = () => { const L = endlessL(); return L >= ENDLESS.dblFrom ? Math.min(ENDLESS.dblMax, ENDLESS.dblChance + ENDLESS.dblAdd * (L - ENDLESS.dblFrom)) : 0; };
-const shotMul = () => (1 + 0.04 * (G.sector - 1) + 0.1 * (effLevel() - 1)) * DIFF().shot * (G.st ? G.st.eShot : 1) * (1 + ENDLESS.shotSpeed * endlessL());
+// Soft cap (2026-10-18): the level/loop part of enemy shot speed was uncapped, so deep Endless (Depth ~20) fired shots ~4x their
+// base speed, faster than Schiffy can react. Past SHOT_SOFT it only grows at a quarter of the rate (Depth 20 now ~2.4x before difficulty).
+const SHOT_SOFT = 1.9;
+const shotMul = () => { const raw = (1 + 0.04 * (G.sector - 1) + 0.1 * (effLevel() - 1)) * (1 + ENDLESS.shotSpeed * endlessL()); return (raw > SHOT_SOFT ? SHOT_SOFT + (raw - SHOT_SOFT) * 0.25 : raw) * DIFF().shot * (G.st ? G.st.eShot : 1); };
 const eliteChance = () => Math.min(Math.min(ENDLESS.eliteCapMax, 0.55 + ENDLESS.eliteCapAdd * endlessL()), (0.06 + 0.03 * (G.sector - 1) + 0.07 * (effLevel() - 1)) * DIFF().elite * (G.st ? G.st.eliteMul : 1));
 const hazardsOn = () => effLevel() > 1 || G.sector >= DIFF().hazardSector;
 const levelScale = () => 1 + 0.5 * (effLevel() - 1); // grenades / bark wave scale with the level so they stay useful
@@ -6129,6 +6138,13 @@ function steer(b, t, rate, dt) {
   const sp = Math.hypot(b.vx, b.vz), cur = Math.atan2(b.vz, b.vx), want = Math.atan2(t.z - b.z, t.x - b.x);
   const na = cur + clamp(angDiff(cur, want), -rate * dt, rate * dt); b.vx = Math.cos(na) * sp; b.vz = Math.sin(na) * sp;
 }
+// Swept hits (2026-10-18): a shot is tested along the whole path it moved this frame, not just where it ended up. A fast slug
+// (Velocity upgrades, ~45 units/s) on a slow frame moves further than a small enemy is wide and could skip straight past it.
+function segDist(ax, az, bx, bz, px, pz) {
+  const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz;
+  const t = l2 > 1e-9 ? clamp(((px - ax) * dx + (pz - az) * dz) / l2, 0, 1) : 0;
+  return Math.hypot(ax + dx * t - px, az + dz * t - pz);
+}
 function updateBullets(dt) {
   const p = G.player;
   for (let i = G.bullets.length - 1; i >= 0; i--) {
@@ -6191,7 +6207,7 @@ function updateBullets(dt) {
     let dead = false;
     for (const e of G.enemies) {
       if (e.spawnT > 0 || b.hit.has(e)) continue;
-      if (Math.hypot(b.x - e.x, b.z - e.z) < e.r + b.r && b.y > e.y - 0.4 && b.y < e.y + e.h + 0.3) {
+      if (segDist(ox, oz, b.x, b.z, e.x, e.z) < e.r + b.r && b.y > e.y - 0.4 && b.y < e.y + e.h + 0.3) {
         b.hit.add(e);
         if (b.kind === 'bubble') { dead = true; break; }   // a bubble pops on contact; bubblePop (via killBullet) does the damage
         const crit = b.s && rollCrit(b.s), dmg = b.dmg * (crit ? 3 : 1);
@@ -7851,7 +7867,14 @@ function animEnemy(e, dt) {
       break;
     }
     case 'fly': case 'float': {
-      if (!P.noLean) { rx += P.lean * A.fwd; rz -= P.lean * A.lat; }
+      // springy tilt (2026-10-18, after Emis's drones): the tilt chases its lean target on an under-damped spring, so a flyer
+      // that stops, turns or gets knocked back overshoots and wobbles back level instead of snapping
+      if (!P.noLean) {
+        const s = Math.min(dt, 0.05), K = 60, D = 5;
+        A.tvx = (A.tvx || 0) + ((P.lean * A.fwd - (A.tx || 0)) * K - (A.tvx || 0) * D) * s; A.tx = clamp((A.tx || 0) + A.tvx * s, -0.7, 0.7);
+        A.tvz = (A.tvz || 0) + ((-P.lean * A.lat - (A.tz || 0)) * K - (A.tvz || 0) * D) * s; A.tz = clamp((A.tz || 0) + A.tvz * s, -0.7, 0.7);
+        rx += A.tx; rz += A.tz;
+      }
       break;
     }
     case 'roll': rx += P.lean * A.fwd; break;
@@ -10761,6 +10784,156 @@ function clearDecals() {
   for (const d of DEC.list) { DEC.mesh.setMatrixAt(d.i, ZERO_M); DEC.fade.array[d.i] = 0; }
   DEC.list.length = 0; DEC.next = 0; DEC.mesh.instanceMatrix.needsUpdate = true; DEC.fade.needsUpdate = true;
 }
+// ---------- isle life: ambience beds + cleared isles blooming (2026-10-18, ideas from Emis's "weak points" devlog) ----------
+// AMBIENCE. Procedural Web Audio beds under the sound effects, no samples (looping noise buffers + short oscillators):
+//   wind   everywhere; it swells as Schiffy nears an isle's edge (the open sky), measured by probing outward each tick
+//   gusts  a second, brighter wind that fades in and out on its own timer (Frostcap Peaks: stronger, plus a soft whistle)
+//   world  Moonlit Meadows: cricket trills · Golden Reef: surf that swells and breaks, panned toward the nearest edge ·
+//          Frostcap Peaks: the gusts · Ember Volcano: a low rumble and lava blorps · hub: the odd bird whistle
+// It follows the sound switch (`muted`), fades to half on menus and out on a hidden tab, and is ticked by its own 10 Hz
+// timer (setInterval), so a frozen game frame or a hidden preview pane can't strand it at full volume.
+// AMB.probe (tests only) sends it to an analyser instead of the speakers, so levels can be measured without being heard.
+// master trim for the whole ambience. Measured 2026-10-18 (RMS through an analyser): about -47 dB mid-isle and -38 dB at an edge,
+// against sound-effect peaks around -23 dB, so it sits well under the action. Each bed below is set relative to the others.
+const AMB_VOL = 2;
+const AMB = { g: null, n: null, t: 0, edge: 0, pan: 0, gust: 0, gustT: 4, gustV: 0, blorpT: 1, chirpT: 2, probe: null, built: false };
+function ambBuild() {
+  const a = actx, out = a.createGain(); out.gain.value = 0;
+  out.connect(AMB.probe || bus());
+  // 4 s of brown noise, detrended so the loop seam doesn't click
+  const len = a.sampleRate * 4, buf = a.createBuffer(1, len, a.sampleRate), d = buf.getChannelData(0);
+  let v = 0; for (let i = 0; i < len; i++) { v = (v + 0.02 * (Math.random() * 2 - 1)) / 1.02; d[i] = v * 3.5; }
+  const drift = d[len - 1] - d[0]; for (let i = 0; i < len; i++) d[i] -= drift * i / (len - 1);
+  const bed = (type, f, q, dest = out) => {
+    const s = a.createBufferSource(), fl = a.createBiquadFilter(), g = a.createGain();
+    s.buffer = buf; s.loop = true; fl.type = type; fl.frequency.value = f; fl.Q.value = q; g.gain.value = 0;
+    s.connect(fl); fl.connect(g); g.connect(dest); s.start(0, Math.random() * 4); return { fl, g };
+  };
+  const pan = a.createStereoPanner ? a.createStereoPanner() : null; if (pan) pan.connect(out);
+  const whistle = a.createOscillator(), wg = a.createGain(); whistle.type = 'sine'; whistle.frequency.value = 900; wg.gain.value = 0; whistle.connect(wg); wg.connect(out); whistle.start();
+  AMB.n = { wind: bed('bandpass', 500, 0.6), gust: bed('bandpass', 950, 1.1), surf: bed('lowpass', 650, 0.6, pan || out), rumble: bed('lowpass', 110, 0.8), pan, whistle, wg };
+  AMB.g = out; AMB.built = true;
+}
+const ambSet = (param, v, tc = 0.35) => param.setTargetAtTime(v, actx.currentTime, tc);
+// is (x, z) off the walkable isle (open sky)? Same test the shots use, so bridges and the hub's home isle count as ground.
+function ambOff(x, z) {
+  if (!G.room) return false;
+  if (G.room.hub) return !inHubArea(x, z, 0);
+  return (Math.abs(x) > HALF + 0.2 || Math.abs(z) > HALF + 0.2) && !onBridge(x, z, 0);
+}
+// 0 (middle of the isle) .. 1 (at the edge), plus which side the nearest drop is on (-1 left .. 1 right, for the surf pan)
+function ambEdge(p) {
+  for (const r of [0.8, 1.6, 2.6, 3.8, 5.2]) {
+    let sx = 0, n = 0;
+    for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; if (ambOff(p.x + Math.cos(a) * r, p.z + Math.sin(a) * r)) { sx += Math.cos(a); n++; } }
+    if (n) return [1 - r / 6, clamp(sx / n, -1, 1)];
+  }
+  return [0, 0];
+}
+// one-shot ambient voices, routed through the ambience gain so they fade with it
+function ambVoice(type, f0, f1, dur, vol, at = 0, panV = 0) {
+  const a = actx, t = a.currentTime + at, o = a.createOscillator(), g = a.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + Math.min(0.02, dur * 0.3)); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  let last = g;
+  if (panV && a.createStereoPanner) { const pn = a.createStereoPanner(); pn.pan.value = panV; g.connect(pn); last = pn; }
+  o.connect(g); last.connect(AMB.g); o.start(t); o.stop(t + dur + 0.05);
+}
+function ambTick() {
+  if (!actx || actx.state !== 'running') return;
+  if (!AMB.built) { try { ambBuild(); } catch (e) { console.warn('[ambience] off', e); AMB.built = true; AMB.g = null; } }
+  if (!AMB.g) return;
+  const dt = 0.1; AMB.t += dt;
+  const p = G.player, live = !!(p && G.room) && G.state !== 'title';
+  const on = (!muted || AMB.probe) && !document.hidden && live;
+  ambSet(AMB.g.gain, on ? AMB_VOL * (G.state === 'play' ? 1 : 0.5) : 0, on ? 0.6 : 0.25);
+  if (!on) return;
+  const world = G.mode === 'hub' || (G.room && G.room.hub) ? 'hub' : biome().id, N = AMB.n, t = AMB.t;
+  const [edge, side] = ambEdge(p); AMB.edge += (edge - AMB.edge) * 0.3; AMB.pan += (side - AMB.pan) * 0.3;
+  const e = AMB.edge, peaks = world === 'peaks';
+  // wind: always a little, much more at the edge; its colour wanders slowly
+  ambSet(N.wind.g.gain, (0.016 + 0.05 * Math.pow(e, 1.4)) * (peaks ? 1.35 : world === 'reef' ? 0.7 : 1));
+  ambSet(N.wind.fl.frequency, 420 + 180 * Math.sin(t * 0.13) + 110 * Math.sin(t * 0.41) + 200 * e, 0.8);
+  // gusts: swell for ~1.5 s, die away over ~2.5 s, then wait
+  AMB.gustT -= dt;
+  if (AMB.gustT <= 0) { AMB.gust = 1; AMB.gustT = (peaks ? 3.5 : 7) + rand(0, peaks ? 4 : 8); AMB.gustV = rand(0.6, 1); }
+  const gTarget = AMB.gust > 0 ? AMB.gustV * (peaks ? 0.05 : 0.026) * (0.5 + 0.5 * e) : 0;
+  if (AMB.gust > 0) AMB.gust -= dt / 4;
+  ambSet(N.gust.g.gain, AMB.gust > 0.6 ? gTarget : AMB.gust > 0 ? gTarget * 0.4 : 0, AMB.gust > 0.6 ? 0.6 : 0.9);
+  ambSet(N.gust.fl.frequency, 800 + 300 * AMB.gustV + (peaks ? 250 : 0), 1);
+  ambSet(N.wg.gain, peaks && AMB.gust > 0.4 ? 0.004 * AMB.gustV : 0, 0.7);
+  ambSet(N.whistle.frequency, 760 + 260 * Math.sin(t * 0.9) * AMB.gustV, 0.5);
+  // Golden Reef surf: a 7 s swell that breaks, louder and panned toward the nearest shore
+  const sw = Math.pow(Math.max(0, Math.sin(t * Math.PI * 2 / 7)), 2);
+  ambSet(N.surf.g.gain, world === 'reef' ? (0.05 + 0.15 * e) * (0.3 + 0.7 * sw) : 0, 0.5);
+  ambSet(N.surf.fl.frequency, 380 + 700 * sw, 0.5);
+  if (N.pan) ambSet(N.pan.pan, world === 'reef' ? AMB.pan * 0.7 : 0, 0.4);
+  // Ember Volcano: low rumble + lava blorps
+  ambSet(N.rumble.g.gain, world === 'volcano' ? 0.035 * (0.8 + 0.2 * Math.sin(t * 0.7)) : 0, 0.8);
+  AMB.blorpT -= dt; AMB.chirpT -= dt;
+  if (world === 'volcano' && AMB.blorpT <= 0) {
+    AMB.blorpT = rand(0.5, 2); const f = rand(110, 170), pv = rand(-0.6, 0.6);
+    ambVoice('sine', f, f * 0.45, rand(0.14, 0.22), 0.05, 0, pv);
+    if (Math.random() < 0.4) ambVoice('sine', f * 1.3, f * 0.6, 0.12, 0.03, 0.09, pv);
+  }
+  // Moonlit Meadows: cricket trills (3-4 quick pulses), from one side or the other
+  if (world === 'meadow' && AMB.chirpT <= 0) {
+    AMB.chirpT = rand(0.8, 2.4); const f = rand(3900, 4600), pv = rand(-0.8, 0.8), n = randi(3, 4);
+    for (let i = 0; i < n; i++) ambVoice('sine', f, f * 0.97, 0.03, 0.006, i * 0.065, pv);
+  }
+  // the hub: now and then a two-note bird whistle
+  if (world === 'hub' && AMB.chirpT <= 0) {
+    AMB.chirpT = rand(3, 7); const f = rand(1900, 2600), pv = rand(-0.7, 0.7);
+    ambVoice('sine', f, f * 1.25, 0.12, 0.006, 0, pv); ambVoice('sine', f * 1.2, f * 0.9, 0.16, 0.005, 0.16, pv);
+  }
+}
+setInterval(() => { try { ambTick(); } catch (e) { /* never let ambience break the game */ } }, 100);
+
+// ---------- cleared isles bloom ----------
+// When a fight isle is cleared (and whenever you come back to one), little flowers pop up across its open floor: a quiet "you
+// made this place nicer" beat. Pure looks, no colliders. The flowers live in G.roomGroup, so they go when the isle is rebuilt.
+// Each isle's flowers come from a seed of its map cell, so a revisited isle has the same flowers. Colours per world.
+const BLOOM_TYPES = ['combat', 'challenge', 'boss', 'miniboss', 'final'];
+const BLOOM_COLS = { meadow: [0xff9fc8, 0xfff1a8, 0xc9a6ff, 0xffffff], reef: [0xffb38a, 0xff8fb1, 0x8ff0dc, 0xfff1a8],
+  peaks: [0xffffff, 0xbfe8ff, 0xd6c8ff, 0xe6fcff], volcano: [0xffa13d, 0xffd36a, 0xff6a4a, 0xfff1a8] };
+const BLOOM_N = 14;   // clumps per isle
+const bloomGeo = { stem: new THREE.CylinderGeometry(0.025, 0.03, 0.32, 5).translate(0, 0.16, 0), petal: new THREE.SphereGeometry(0.075, 8, 6), core: new THREE.SphereGeometry(0.06, 8, 6) };
+Object.values(bloomGeo).forEach(g => SHARED.add(g));
+const bloomMats = {}; const bloomMat = c => { if (!bloomMats[c]) { bloomMats[c] = toon(c); SHARED.add(bloomMats[c]); } return bloomMats[c]; };
+function bloomIsle(animate) {
+  const room = G.room; if (!room || room.hub || !BLOOM_TYPES.includes(room.type) || !G.roomGroup || room.bloomed === G.roomGroup) return;
+  room.bloomed = G.roomGroup;
+  const cols = BLOOM_COLS[biome().id] || BLOOM_COLS.meadow;
+  let s = hashStr([G.level, G.sector, room.gx, room.gy].join('|')) >>> 0;
+  const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+  const spots = [];
+  for (let tries = 0; spots.length < BLOOM_N && tries < 200; tries++) {
+    const x = (rnd() * 2 - 1) * (HALF - 1.2), z = (rnd() * 2 - 1) * (HALF - 1.2);
+    if (overlapCell(x, z, 0.35, 0) || (typeof lavaNear === 'function' && lavaNear(x, z, 0.6)) || spots.some(q => Math.hypot(q[0] - x, q[1] - z) < 1.1)) continue;
+    const ci = Math.floor((x + HALF) / CELL), cj = Math.floor((z + HALF) / CELL);
+    const ob = room.obs && room.obs[cj] && room.obs[cj][ci]; if (ob) continue;   // any obstacle cell, gap or lava
+    spots.push([x, z]);
+  }
+  // each spot is a little clump of 1-3 flowers (single tiny flowers vanished among the floor's own flower decals)
+  const plants = [];
+  for (const [x, z] of spots) { const n = 1 + Math.floor(rnd() * 3), col = cols[Math.floor(rnd() * cols.length)]; for (let k = 0; k < n; k++) plants.push([x + (k ? rnd() * 0.7 - 0.35 : 0), z + (k ? rnd() * 0.7 - 0.35 : 0), k ? cols[Math.floor(rnd() * cols.length)] : col, k ? 0.7 : 1]); }
+  plants.forEach(([x, z, col, big], i) => {
+    const f = new THREE.Group();
+    f.add(mesh(bloomGeo.stem, bloomMat(0x5fae6a)));
+    for (let k = 0; k < 5; k++) { const a = k / 5 * Math.PI * 2; f.add(mesh(bloomGeo.petal, bloomMat(col), Math.cos(a) * 0.08, 0.34, Math.sin(a) * 0.08)); }
+    f.add(mesh(bloomGeo.core, bloomMat(col === 0xfff1a8 ? 0xff9a3d : 0xffd34d), 0, 0.36, 0));
+    f.position.set(x, 0, z); f.rotation.set(rnd() * 0.3 - 0.15, rnd() * 6.3, rnd() * 0.3 - 0.15);
+    const sc = (1.8 + rnd() * 0.7) * big; G.roomGroup.add(f);
+    if (!animate) { f.scale.setScalar(sc); return; }
+    // pop up in a ripple from the middle outward, with a little overshoot and a twinkle
+    const delay = 0.15 + Math.min(1, Math.hypot(x, z) / HALF) * 0.9, dur = delay + 0.4; f.scale.setScalar(0.001); let tw = false;
+    G.fx.push({ t: dur, fn: (dt, fx) => {
+      const k = clamp((dur - fx.t - delay) / 0.35, 0, 1);
+      f.scale.setScalar(Math.max(0.001, sc * (k < 1 ? Math.sin(k * Math.PI * 0.75) / Math.sin(Math.PI * 0.75) : 1)));
+      if (k > 0 && !tw) { tw = true; if (i % 3 === 0) FX.twinkle(x, 0.5, z, col, 3); }
+    }, cleanup: () => f.scale.setScalar(sc) });
+  });
+}
 // ---------- rooms ----------
 function clearRoomEntities() {
   eventsLeave();   // 71-events: ends a running Gold Rush, drops pending event callbacks
@@ -10872,6 +11045,7 @@ function enterRoom(room, via) {
   // Daily: what an isle holds and its first wave follow the day's seed, rolled once on the first visit (77-modes)
   if (dailyOn() && !room.dailyRolled) { room.dailyRolled = true; dailyRoll(['isle', G.level, G.sector, room.gx, room.gy], () => setupRoomType(room)); }
   else setupRoomType(room);
+  if (room.cleared) bloomIsle(false);   // a fight isle you cleared earlier keeps its flowers (69-ambience; only fight isles bloom)
   G.transit = 0.3;
   snapCamera();
   const fade = $('#fade'); fade.style.transition = 'none'; fade.style.opacity = '0.9';
@@ -11074,12 +11248,14 @@ function checkRoomClear(dt = 1 / 60) {
   }
   if (G.st.piggy) { const interest = Math.min(6 * G.st.piggy, Math.floor(G.crystals * 0.1 * G.st.piggy)); if (interest > 0) { G.crystals += interest; popText('+' + interest + ' interest', G.player.x, G.player.y + 3.2, G.player.z, '#ffb3d1'); } }
   popText('Isle clear!', G.player.x, G.player.y + 2.6, G.player.z, '#ffd34d');
+  bloomIsle(true);   // flowers pop up across the cleared isle (69-ambience)
   petIsleCleared();
   if (G.runStats) G.runStats.isles++;
   updateHUD(true);
 }
 function onBossDead(b) {
   const r = G.room; r.cleared = true;
+  try { bloomIsle(true); } catch (e) {}
   // nothing the boss started can still hurt you once it's down:
   // leftover minions vanish quietly (no volatile blasts, no splitter spawns, no loot), every shot in the air pops,
   // hazard zones clear, and a short grace window covers anything resolving this same frame
@@ -15010,6 +15186,8 @@ function updateHUD(force) {
   for (let i = 0; i < p.maxHp; i++) h += heartSvg(i < p.hp ? 'full' : 'empty');
   for (let i = 0; i < p.shield; i++) h += '<span class="pip"></span>';
   $('#hearts').innerHTML = h; $('#hearts').setAttribute('aria-label', `${p.hp} of ${p.maxHp} bones`);
+  // one bone left: it wobbles and pulses red (CSS #hearts.last), like Emis's sloshing low-health orb
+  $('#hearts').classList.toggle('last', p.hp === 1 && p.maxHp > 1);
   $('#crystals').textContent = G.crystals; $('#kills').textContent = G.kills; $('#keys').textContent = G.keys; $('#bombs').textContent = G.bombs;
   $('#sector').textContent = sectorLabel();
   updateUpPill();
