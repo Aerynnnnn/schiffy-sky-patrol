@@ -12829,7 +12829,7 @@ const HOME_TASKS = {
   runs100: { text: 'Set out on 100 runs', prog: () => [SAVE.runs || 0, 100] },
   // (trophies already granted stay owned: a save that had all 18 keeps its Boss Shields and now reads 18/24)
   bosses: { get text() { return `Beat every one of the ${RUSH.length} bosses`; }, prog: () => [RUSH.filter(r => (SAVE.bosses || {})[r.id] > 0).length, RUSH.length] },
-  home20: { text: 'Own 20 things for the playground (bought or earned)', prog: () => [HOME_CAT.filter(h => h.cur !== 'unlock' && Wallet.owned(h.sku)).length, 20] },
+  home20: { text: 'Own 20 things for the playground (bought or earned)', prog: () => [HOME_CAT.filter(h => h.cur !== 'unlock').reduce((n, h) => n + homeIds(h.sku).length, 0), 20] },   // copies count
 };
 for (const h of HOME_CAT) if (h.boss) HOME_TASKS[h.task] = { text: `Defeat ${(BOSSES[h.boss] || {}).name || h.boss} to unlock`, where: h.where, prog: () => [(SAVE.bosses || {})[h.boss] > 0 ? 1 : 0, 1] };
 // a boss just went down (onBossDead, 70-rooms): its trophy unlocks at once (first defeat only) and a toast follows once the
@@ -12916,14 +12916,28 @@ function homeCheckUnlocks() {
   for (const h of HOME_CAT) if (h.cur === 'unlock' && !Wallet.owned(h.sku)) { const [a, b] = HOME_TASKS[h.task].prog(); if (a >= b) { Wallet.grant(h.sku, { via: 'unlock' }); fresh.push(h); } }
   return fresh;
 }
-// on the isle (true) or in storage: SAVE.home.items[sku].out
-const homeIsOut = sku => !!HOME_CAT_BY[sku] && Wallet.owned(sku) && !!(homeSave().items[sku] && homeSave().items[sku].out);
-function homeSetOut(sku, on) {
-  if (HOME_CAT_BY[sku]) { const it = homeSave().items; it[sku] = Object.assign({}, it[sku], { out: !!on }); }
+// ---- copies (2026-10-18): buy the same catalogue item again to fill the isle with them ----
+// The first one bought is its sku; every further copy is its own owned entry 'sku#2', 'sku#3' ... (Wallet.owned, same save
+// block, so a platform wallet sees each copy as a purchase) and its own layout id with its own spot (SAVE.home.items[id]).
+// A copy's kind is still the sku: model, size, stacking and animation come from the item. Gold and gem items can be bought
+// again (homeRepeat); earned trophies, boss statues, the old boutique decorations and retired items stay one of a kind.
+const HOME_COPY_MAX = 25;   // per item, the first one included
+const homeSkuOf = id => String(id).split('#')[0];
+const homeRepeat = h => !!h && (h.cur === 'gold' || h.cur === 'gems') && !h.retired && !h.decor && !h.boss;
+function homeIds(sku) {
+  if (!Wallet.owned(sku)) return [];
+  const out = [sku]; for (let k = 2; k <= HOME_COPY_MAX; k++) if (Wallet.owned(sku + '#' + k)) out.push(sku + '#' + k);
+  return out;
+}
+const homeNextCopy = sku => { if (!Wallet.owned(sku)) return sku; for (let k = 2; k <= HOME_COPY_MAX; k++) if (!Wallet.owned(sku + '#' + k)) return sku + '#' + k; return null; };
+// on the isle (true) or in storage: SAVE.home.items[id].out (id = a sku or one of its copies)
+const homeIsOut = id => !!HOME_CAT_BY[homeSkuOf(id)] && Wallet.owned(id) && !!(homeSave().items[id] && homeSave().items[id].out);
+function homeSetOut(id, on) {
+  if (HOME_CAT_BY[homeSkuOf(id)]) { const it = homeSave().items; it[id] = Object.assign({}, it[id], { out: !!on }); }
   writeSave();
 }
-// everything you own for the isle that is in storage right now
-const homeStored = () => HOME_CAT.filter(h => Wallet.owned(h.sku) && !homeIsOut(h.sku)).map(h => h.sku);
+// everything you own for the isle that is in storage right now (ids, copies included)
+const homeStored = () => HOME_CAT.flatMap(h => homeIds(h.sku).filter(id => !homeIsOut(id)));
 // once per save (SAVE.home.decorMoved): the boutique's old decorations become home items. Owned ones stay owned (same skus);
 // the ones a save showed (cosSave().decor[sku] !== false, the old default) go out onto the isle at their saved spot, else
 // their HOME_DECOR_SPOT, else the nearest free spot, else they wait in storage. Returns true if the save owned any.
@@ -13022,7 +13036,7 @@ function homeLayout() {
   const saved = homeSave().items, list = [];
   const make = (id, kind, extra, def, defRot) => { const v = saved[id]; return { id, kind, ...extra, dx: v ? v.dx : def.dx, dz: v ? v.dz : def.dz, rot: v && v.rot != null ? v.rot : defRot, pitch: v && v.pitch || 0, roll: v && v.roll || 0, lift: v && v.lift || 0, y: v && v.y || 0, off: !!(v && v.off), saved: !!v }; };
   for (const n of HOME_NATURE) list.push(make(n.id, n.kind, { v: n.v, nature: true, name: HOME_NAMES[n.kind] }, n, (+n.id.slice(1) * 137) % 360));
-  for (const h of HOME_CAT) if (homeIsOut(h.sku)) list.push(make(h.sku, h.sku, { nature: false, cat: true, name: h.name }, { dx: 0, dz: 0 }, 0));
+  for (const h of HOME_CAT) for (const id of homeIds(h.sku)) if (homeIsOut(id)) list.push(make(id, h.sku, { nature: false, cat: true, name: h.name }, { dx: 0, dz: 0 }, 0));
   // the lookout and the jump pad: always out, flat on the grass, the lookout squared to a quarter turn
   for (const id in HOME_FIXED) {
     const f = HOME_FIXED[id], it = make(id, id, { nature: false, fixed: true, name: f.name }, f, 0);
@@ -13312,10 +13326,10 @@ function refreshHomeProps() {
   G.homeMeshes = {};   // id -> model, for picking and dragging in edit mode (the boutique structures are added by refreshDecor)
   G.homeTicks = [];
   for (const it of on) if (it.nature || it.cat) {
-    const o = it.cat ? homeModel(it.id) : makeObstacle(it.kind, th, it.v);
+    const o = it.cat ? homeModel(it.kind) : makeObstacle(it.kind, th, it.v);
     homePose(o, null, it, it.y, it.low); o.userData.homeId = it.id; G.homeMeshes[it.id] = o; grp.add(o);
     homeColliders(it, room, 'homeProp');
-    const anim = it.cat && homeAnim(it.id); if (anim) G.homeTicks.push(anim(o));
+    const anim = it.cat && homeAnim(it.kind); if (anim) G.homeTicks.push(anim(o));
   }
   G.padMeshes = (G.padMeshes || []).filter(p => !p.home);
   for (const it of on) if (it.fixed) {
@@ -13613,16 +13627,20 @@ $('#heStore').addEventListener('click', () => {
   refreshDecor(); HE.L = G.homeLayout; heRings(); hePanel();
   toast(`${it.name} put away`, 'Place it again from the catalogue\'s Storage tab', '#ffd34d');
 });
-function homePlaceFromStorage(sku) {
-  const saved = homeSave().items[sku], name = (HOME_CAT_BY[sku] || COS_BY[sku]).name;
-  const it = { id: sku, kind: sku, nature: false, cat: !!HOME_CAT_BY[sku], name, dx: saved ? saved.dx : 0, dz: saved ? saved.dz : 0, rot: saved && saved.rot || 0, pitch: saved && saved.pitch || 0, roll: saved && saved.roll || 0, lift: saved && saved.lift || 0 };
+// x = an item's sku (places the first of its copies that is in storage) or one copy's id
+function homePlaceFromStorage(x) {
+  const sku = homeSkuOf(x), id = x !== sku ? x : homeIds(sku).find(i => !homeIsOut(i)); if (!id) return false;
+  const saved = homeSave().items[id], name = (HOME_CAT_BY[sku] || COS_BY[sku]).name;
+  // a copy that has never stood anywhere starts beside one already out (homeFree finds the nearest free spot to it)
+  const near = !saved && (G.homeLayout || []).find(i => i.kind === sku && !i.off);
+  const it = { id, kind: sku, nature: false, cat: !!HOME_CAT_BY[sku], name, dx: saved ? saved.dx : near ? near.dx : 0, dz: saved ? saved.dz : near ? near.dz : 0, rot: saved ? saved.rot || 0 : near ? near.rot || 0 : 0, pitch: saved && saved.pitch || 0, roll: saved && saved.roll || 0, lift: saved && saved.lift || 0 };
   const others = HE.L.filter(i => !i.off);
   const r = homePlace(it, others);
-  if (!r.ok || r.b > it.lift + 0.01) { if (!saved) { it.dx = 0; it.dz = 0; } const f = homeFree(it, others); if (!f) { sfx('deny'); toast('No room on the isle', 'Put something away or clear a tree first', '#ff8f8f'); return false; } [it.dx, it.dz] = f; }
+  if (!r.ok || r.b > it.lift + 0.01) { if (!saved && !near) { it.dx = 0; it.dz = 0; } const f = homeFree(it, others); if (!f) { sfx('deny'); toast('No room on the isle', 'Put something away or clear a tree first', '#ff8f8f'); return false; } [it.dx, it.dz] = f; }
   const v = { dx: it.dx, dz: it.dz }; for (const k of ['rot', 'pitch', 'roll', 'lift']) if (it[k]) v[k] = it[k];
   if (it.cat) v.out = true;
-  homeSave().items[sku] = v; homeSetOut(sku, true);
-  refreshDecor(); HE.L = G.homeLayout; HE.sel = sku; HE.bad = false; heRings(); hePanel();
+  homeSave().items[id] = v; homeSetOut(id, true);
+  refreshDecor(); HE.L = G.homeLayout; HE.sel = id; HE.bad = false; heRings(); hePanel();
   sfx('item'); return true;
 }
 // ---- the home catalogue (opened from Edit home's bar; v3.1: sections, filters, search, preview before buying) ----
@@ -13687,7 +13705,7 @@ function openCatalogue(sec) {
 function closeCatalogue() { $('#catView').hidden = true; hePanel(); }
 const catListed = h => !h.retired || Wallet.owned(h.sku);   // retired items (no longer sold) show only to their owners
 function catList() {
-  if (CAT.sec === 'storage') return homeStored();
+  if (CAT.sec === 'storage') return [...new Set(homeStored().map(homeSkuOf))];   // one card per item, its copies counted on it
   const q = CAT.q.trim().toLowerCase(), secName = Object.fromEntries(HOME_SECS);
   return HOME_CAT.filter(h => catListed(h) && (CAT.sec === 'all' || h.sec === CAT.sec) && (CAT.cur === 'all' || h.cur === CAT.cur)
     && (CAT.own === 'all' || (CAT.own === 'own') === Wallet.owned(h.sku))
@@ -13718,10 +13736,16 @@ function catRenderGrid() {
   $('#catCount').textContent = CAT.sec === 'storage' ? '' : `${list.length} item${list.length === 1 ? '' : 's'}`;
 }
 function catCard(sku) {
-  const h = HOME_CAT_BY[sku], it = h || COS_BY[sku], own = Wallet.owned(sku), out = own && homeIsOut(sku);
+  const h = HOME_CAT_BY[sku], it = h || COS_BY[sku], own = Wallet.owned(sku);
   const pic = h ? catIconLazy(sku) : '';
   let foot;
-  if (own) foot = out ? `<span class="cat-state">On the isle</span>` : `<button type="button" class="smallbtn cat-go" data-place="${sku}">Place</button><span class="cat-state">In storage</span>`;
+  if (own) {
+    // owned: how many and where, Place for one in storage, and Buy another for items that can be bought again
+    const ids = homeIds(sku), nOut = ids.filter(homeIsOut).length, nIn = ids.length - nOut, more = homeRepeat(h) && homeNextCopy(sku);
+    const where = ids.length > 1 ? `<b>${ids.length}</b> owned · ${nOut} out${nIn ? ` · ${nIn} stored` : ''}` : nOut ? 'On the isle' : 'In storage';
+    foot = (nIn ? `<button type="button" class="smallbtn cat-go" data-place="${sku}">Place${nIn > 1 ? ' one' : ''}</button>` : '') +
+      (more ? `<button type="button" class="smallbtn cat-pv${nIn ? '' : ' cat-go'}" data-pv="${sku}" title="Preview one more on the isle, then buy it">Buy another · ${catPrice(h)}</button>` : '') + `<span class="cat-state">${where}</span>`;
+  }
   else if (h.boss) foot = `<span class="cat-task">${HOME_TASKS[h.task].text}</span><span class="cat-state">${h.where}</span><button type="button" class="smallbtn cat-pv" data-pv="${sku}">Preview</button>`;
   else if (h.cur === 'unlock') {
     const [a, b] = HOME_TASKS[h.task].prog(), p = Math.min(1, a / b);
@@ -13735,24 +13759,26 @@ function catCard(sku) {
 }
 // a catalogue item's main action: place it if it is in storage, else preview it
 function catAct(sku) {
-  if (Wallet.owned(sku)) { if (!homeIsOut(sku) && homePlaceFromStorage(sku)) closeCatalogue(); return; }
+  if (Wallet.owned(sku)) { if (homeIds(sku).some(i => !homeIsOut(i))) { if (homePlaceFromStorage(sku)) closeCatalogue(); } else if (homeRepeat(HOME_CAT_BY[sku]) && homeNextCopy(sku)) hpStart(sku); return; }
   hpStart(sku);
 }
 // buying, for the preview's Buy & place: gold from the home savings, gems through the Wallet (granted only on its { ok }).
-// Returns { ok, error }; a failure changes nothing.
+// Returns { ok, error, id } (id = what was bought: the sku the first time, then 'sku#2', 'sku#3' ...); a failure changes nothing.
 async function homeBuy(h) {
   if (!h || h.cur === 'unlock') return { ok: false, error: 'Earned, never sold' };
   if (h.retired) return { ok: false, error: 'No longer sold' };
-  if (Wallet.owned(h.sku)) return { ok: false, error: 'Already yours' };
+  const id = Wallet.owned(h.sku) ? (homeRepeat(h) ? homeNextCopy(h.sku) : null) : h.sku;
+  if (!id) return { ok: false, error: Wallet.owned(h.sku) && homeRepeat(h) ? `You have the most of these (${HOME_COPY_MAX})` : 'Already yours' };
   if (h.cur === 'gold') {
     if (homeGold() < h.price) return { ok: false, error: 'Not enough gold saved' };
     SAVE.homeGold = homeGold() - h.price;
-    if (!Wallet.grant(h.sku, { price: h.price, via: 'gold' })) { SAVE.homeGold += h.price; writeSave(); return { ok: false, error: 'Already yours' }; }
+    if (!Wallet.grant(id, { price: h.price, via: 'gold' })) { SAVE.homeGold += h.price; writeSave(); return { ok: false, error: 'Already yours' }; }
     writeSave();
-    try { logEvent('shop', `bought ${h.name} (${h.sku}) for ${h.price} playground gold`); } catch (e) {}
-    return { ok: true };
+    try { logEvent('shop', `bought ${h.name} (${id}) for ${h.price} playground gold`); } catch (e) {}
+    return { ok: true, id };
   }
-  return Wallet.spend(h.sku, h.price);
+  const r = await Wallet.spend(id, h.price);   // a copy's id prices as its item (82-wallet)
+  return r && r.ok ? { ok: true, id } : r;
 }
 $('#catView').addEventListener('click', e => {
   const t = e.target.closest('[data-cattab]'); if (t) { CAT.sec = t.dataset.cattab; catRender(); $('#catGrid').scrollTop = 0; return; }
@@ -13784,7 +13810,7 @@ $('#heCat').addEventListener('click', () => openCatalogue());
 // The preview is never saved: heCommit skips ghosts and hpKeep re-adds it after any rebuild.
 const HP_ID = '__preview';
 function hpStart(sku) {
-  const h = HOME_CAT_BY[sku]; if (!h || G.state !== 'homeEdit' || HE.pv || Wallet.owned(sku)) return;
+  const h = HOME_CAT_BY[sku]; if (!h || G.state !== 'homeEdit' || HE.pv || (Wallet.owned(sku) && !(homeRepeat(h) && homeNextCopy(sku)))) return;
   if (HE.drag) heDrop();
   if (HE.from) heSettle(true);
   CAT.scroll = $('#catGrid').scrollTop; $('#catView').hidden = true;
@@ -13860,8 +13886,9 @@ function hpPanel() {
   $('#hePvState').innerHTML = `${unlock ? '' : `${catPrice(h)} · ${bal}<br>`}${state} <span class="he-pvhint">${tap} the isle or drag it to move it.</span>`;
   const buy = $('#hePvBuy');
   buy.hidden = unlock;
-  buy.innerHTML = P.busy ? 'Paying...' : unlock ? '' : `Buy & place · ${catPrice(h)}`;   // (trophies have no price: no Buy)
-  buy.disabled = P.busy || !P.ok || short > 0 || noGems || Wallet.owned(P.sku);
+  const again = Wallet.owned(P.sku), canBuy = !again || (homeRepeat(h) && !!homeNextCopy(P.sku));
+  buy.innerHTML = P.busy ? 'Paying...' : unlock ? '' : `Buy ${again ? 'another ' : ''}& place · ${catPrice(h)}`;   // (trophies have no price: no Buy)
+  buy.disabled = P.busy || !P.ok || short > 0 || noGems || !canBuy;
   $('#hePvCancel').disabled = P.busy; $('#heDone').disabled = P.busy;
 }
 // in the preview a press on the item drags it; a press anywhere else on the isle moves it there first (handy on touch)
@@ -13876,7 +13903,8 @@ function hpPointer(e) {
 async function hpBuy() {
   const P = HE.pv; if (!P || P.busy) return;
   const h = HOME_CAT_BY[P.sku]; if (!h || h.cur === 'unlock') return;
-  if (Wallet.owned(h.sku)) { hpEnd(false); return; }
+  if (Wallet.owned(h.sku) && !(homeRepeat(h) && homeNextCopy(h.sku))) { hpEnd(false); return; }
+  const again = Wallet.owned(h.sku);
   HE.bad = !heShow(P.it); heRings();
   if (HE.bad) { sfx('deny'); toast('Doesn\'t fit there', 'Move it until its frame turns gold', '#ff8f8f'); return; }
   P.busy = true; hpPanel();
@@ -13888,10 +13916,13 @@ async function hpBuy() {
   const it = P.it, v = { dx: it.dx, dz: it.dz, out: true };
   for (const k of ['rot', 'pitch', 'roll', 'lift']) if (it[k]) v[k] = it[k];
   if (it.y) v.y = +it.y.toFixed(2);
-  homeSave().items[h.sku] = v; writeSave();
+  const id = r.id || h.sku;
+  homeSave().items[id] = v; writeSave();
   if (HE.pv === P) hpEnd(false);
-  refreshDecor(); HE.L = G.homeLayout; HE.sel = h.sku; HE.bad = false; heRings(); hePanel();
-  sfx('item'); toast(`${h.name} is yours!`, 'Placed where you previewed it. Drag it about any time.', '#ffd34d');
+  refreshDecor(); HE.L = G.homeLayout; HE.sel = id; HE.bad = false; heRings(); hePanel();
+  sfx('item');
+  if (again) toast(`Another ${h.name}!`, `You have ${homeIds(h.sku).length} now. Placed where you previewed it.`, '#ffd34d');
+  else toast(`${h.name} is yours!`, 'Placed where you previewed it. Drag it about any time.', '#ffd34d');
 }
 // leave the preview: the copy goes, Schiffy steps back, nothing is charged; reopen = back to the catalogue where you were
 function hpEnd(reopen) {
@@ -15879,7 +15910,8 @@ const Wallet = (() => {
     },
     // one spend at a time; the item is granted only on a clean { ok: true } from the provider
     async spend(sku, price) {
-      const it = COS_BY[sku];
+      // a playground copy 'home.x#2' is its own owned entry but prices as its item 'home.x' (75-hub homeBuy)
+      const it = COS_BY[sku] || (String(sku).includes('#') && HOME_CAT_BY[String(sku).split('#')[0]]) || null;
       if (!it) return { ok: false, error: 'Unknown item' };
       if (it.retired && !api.owned(sku)) return { ok: false, error: 'No longer sold' };
       if (price !== it.price) return { ok: false, error: 'Price changed, please try again' };
