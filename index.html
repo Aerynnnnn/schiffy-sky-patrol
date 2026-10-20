@@ -13409,12 +13409,15 @@ function refreshHomeProps() {
     else G.padMeshes.push({ m: o, x: HOME.x + it.dx, z: HOME.z + it.dz, t: 0, home: true });   // the pad has no collider: you step onto it
   }
   const fc = th.flowers.map(c => new THREE.Color(c)), flowers = new THREE.InstancedMesh(new THREE.SphereGeometry(0.13, 8, 6), (() => { const m = toonU(0xffffff); m.emissive.setHex(0xffffff); m.emissiveIntensity = 0.3; return m; })(), 110);
-  let fn = 0;
+  // the flowers come from a fixed seed (2026-10-18): every edit rebuilds the isle, and with Math.random they all jumped to new
+  // spots after each drag or turn. Now the same candidate spots come back every time; only those under something are skipped.
+  let fn = 0, fs = 20261018;
+  const frand = (a, b) => { fs = (fs * 1664525 + 1013904223) >>> 0; return a + (b - a) * fs / 4294967296; };
   for (let k = 0; k < 700 && fn < 110; k++) {
-    const dx = rand(-HOME.hx + 0.6, HOME.hx - 0.6), dz = rand(-HOME.hz + 0.6, HOME.hz - 0.6);
+    const dx = frand(-HOME.hx + 0.6, HOME.hx - 0.6), dz = frand(-HOME.hz + 0.6, HOME.hz - 0.6), fcol = fc[Math.floor(frand(0, fc.length))];
     if ((dx < -6 && Math.abs(dz) < 2) || HOME_KEEP.some(k => Math.abs(dx - k.x) < k.hx + 0.3 && Math.abs(dz - k.z) < k.hz + 0.3)
       || on.some(i => i.box && i.box.some(q => q.y0 < 0.6 && dx > q.x0 - 0.3 && dx < q.x1 + 0.3 && dz > q.z0 - 0.3 && dz < q.z1 + 0.3))) continue;   // off the bridge path, the keep-clear spots and whatever stands on the grass
-    dm.position.set(HOME.x + dx, 0.12, HOME.z + dz); dm.scale.set(1, 0.55, 1); dm.updateMatrix(); flowers.setMatrixAt(fn, dm.matrix); flowers.setColorAt(fn++, pick(fc));
+    dm.position.set(HOME.x + dx, 0.12, HOME.z + dz); dm.scale.set(1, 0.55, 1); dm.updateMatrix(); flowers.setMatrixAt(fn, dm.matrix); flowers.setColorAt(fn++, fcol);
   }
   flowers.count = fn; grp.add(flowers);
   shadows(grp, true, false); flowers.castShadow = false;
