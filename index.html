@@ -1014,6 +1014,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
       <button class="bigbtn primary" id="resumeBtn" type="button">Resume <small>Esc</small></button>
       <button class="bigbtn" id="ctlPauseBtn" type="button">Controls <small>Keys and buttons</small></button>
       <button class="bigbtn" id="muteBtn" type="button">Sound <small id="muteLbl">On</small></button>
+      <button class="bigbtn" id="musicBtn" type="button">Music <small id="musicLbl">Normal</small></button>
       <button class="bigbtn" id="shakeBtn" type="button">Screen shake <small id="shakeLbl">Full</small></button>
       <button class="bigbtn" id="flashBtn" type="button">Flashes <small id="flashLbl">On</small></button>
       <button class="bigbtn" id="unstickBtn" type="button">Stuck? <small>Free me + copy report</small></button>
@@ -10676,6 +10677,323 @@ const weaponPortrait = id => modelPortrait('w:' + id, () => {
   const g = new THREE.Group(); m.rotation.x = 1.15; g.add(m); return g;   // the boomerang lies flat, so tip it toward the camera
 }, { rotY: -0.25, tilt: 0.15, dist: 1.55 });
 function clearPetMesh() { if (G.pet && G.pet.mesh) { removeObj(G.pet.mesh); G.pet.mesh = null; } }
+// ---------- music (2026-10-21): an original procedural chiptune score, no samples ----------
+// Vibe brief from the user: the feel of a cozy-then-frantic SNES/chiptune RPG score (pulse and triangle leads, bell and music-
+// box colours, swung town themes, driving minor boss fights). Every tune here is composed by the generator below from its own
+// seed (melody = motif + sequence over a stock progression), so none of it copies or imitates any existing piece.
+//   hub                  'hub'               cozy, swung, bells + walking bass
+//   each level           'level:<biome id>'  MUSIC_BIOME[id]
+//   each boss fight      'boss:<boss id>'    MUSIC_BOSS[id] (rivals use their boss's track); final bosses get a harmony line
+// Unknown ids (a new level or boss) fall back to a tune generated from the id itself (musFallback), so they always have music;
+// add an entry to MUSIC_BIOME / MUSIC_BOSS to hand-pick its character.
+// Playback: a small look-ahead scheduler on its own 10 Hz timer (like the ambience), one gain per track for crossfades, one
+// master gain (MUS_VOL x the menu's Music setting). Follows the Sound switch (`muted`); holds its place on the pause menu,
+// softer behind the other overlays, silent on a hidden tab. Straight to the speakers, not through the sfx compressor, so a
+// blast never pumps the music. MUS.probe (tests only) sends it to an analyser instead, like AMB.probe.
+
+// Spec fields: bpm, root (tonic as a MIDI note in the bass octave, 40-51), mode (MUS_SCALES), feel ('calm' | 'lively' | 'boss':
+// melody rhythm bank), lead / alt (lead voice, alternate loops use alt), arp (voice or null) + arpRate (steps per note, 1 = 16ths),
+// bass (MUS_BASS style) + bassV (voice), drums (MUS_DRUMS), pad, harmony (second lead a third below in later sections), swing.
+const MUSIC_HUB = { bpm: 92, root: 43, mode: 'major', feel: 'calm', lead: 'bell', alt: 'pulse25', arp: 'pluck', arpRate: 2, bass: 'walk', drums: 'calm', pad: true, swing: 0.16 };
+const MUSIC_BIOME = {
+  meadow:  { bpm: 100, root: 50, mode: 'dorian', feel: 'calm',   lead: 'pulse25', alt: 'bell',    arp: 'bell',    arpRate: 2, bass: 'half', drums: 'calm',   pad: true, swing: 0.1 },
+  reef:    { bpm: 118, root: 45, mode: 'mixo',   feel: 'lively', lead: 'pulse12', alt: 'tri',     arp: 'pluck',   arpRate: 2, bass: 'syn',  drums: 'groove', swing: 0.14 },
+  peaks:   { bpm: 96,  root: 48, mode: 'lydian', feel: 'calm',   lead: 'bell',    alt: 'pulse25', arp: 'bell',    arpRate: 1, bass: 'half', drums: 'calm',   pad: true },
+  volcano: { bpm: 128, root: 40, mode: 'harm',   feel: 'lively', lead: 'square',  alt: 'pulse25', arp: 'pulse12', arpRate: 1, bass: 'root8', drums: 'drive' },
+};
+// boss fights: each level's five bosses climb in tempo/heat; the finale adds a harmony line and a pad
+const MUSIC_BOSS = {
+  bristle:      { bpm: 148, root: 45, mode: 'minor',  lead: 'pulse25', arp: 'pulse12', arpRate: 2, bass: 'gallop', drums: 'drive' },
+  mothershroom: { bpm: 140, root: 50, mode: 'dorian', lead: 'square',  arp: 'pluck',   arpRate: 2, bass: 'syn',    drums: 'break' },
+  moonmoth:     { bpm: 152, root: 47, mode: 'harm',   lead: 'bell',    alt: 'pulse25', arp: 'pulse12', arpRate: 1, bass: 'root8', drums: 'groove' },
+  pebblejaw:    { bpm: 136, root: 40, mode: 'phryg',  lead: 'square',  arp: null,      bass: 'root8',  drums: 'stomp' },
+  stormlantern: { bpm: 160, root: 43, mode: 'minor',  lead: 'pulse25', arp: 'pulse12', arpRate: 1, bass: 'gallop', drums: 'break' },
+  hollowoak:    { bpm: 168, root: 50, mode: 'harm',   lead: 'square',  alt: 'pulse25', arp: 'pulse12', arpRate: 1, bass: 'gallop', drums: 'drive', harmony: true, pad: true },
+  tidecrab:     { bpm: 150, root: 45, mode: 'dorian', lead: 'pulse12', arp: 'pluck',   arpRate: 2, bass: 'syn',    drums: 'break' },
+  pufferking:   { bpm: 144, root: 48, mode: 'mixo',   lead: 'square',  alt: 'bell',    arp: 'pulse12', arpRate: 2, bass: 'walk', drums: 'groove' },
+  sunray:       { bpm: 156, root: 51, mode: 'minor',  lead: 'pulse25', arp: 'bell',    arpRate: 1, bass: 'root8',  drums: 'drive' },
+  coralhydra:   { bpm: 162, root: 46, mode: 'harm',   lead: 'square',  arp: 'pulse12', arpRate: 1, bass: 'gallop', drums: 'break' },
+  beacon:       { bpm: 154, root: 41, mode: 'phryg',  lead: 'pulse25', arp: 'pulse12', arpRate: 2, bass: 'syn',    drums: 'drive' },
+  gloomfin:     { bpm: 172, root: 44, mode: 'minor',  lead: 'square',  alt: 'pulse25', arp: 'bell',    arpRate: 1, bass: 'gallop', drums: 'drive', harmony: true, pad: true },
+  snowduke:     { bpm: 146, root: 49, mode: 'minor',  lead: 'bell',    alt: 'square',  arp: 'pulse12', arpRate: 1, bass: 'root8', drums: 'groove' },
+  admiral:      { bpm: 140, root: 46, mode: 'major',  lead: 'square',  arp: 'pulse12', arpRate: 2, bass: 'walk',   drums: 'march' },
+  tusker:       { bpm: 132, root: 42, mode: 'phryg',  lead: 'pulse25', arp: null,      bass: 'root8',  drums: 'stomp' },
+  auroraowl:    { bpm: 158, root: 47, mode: 'dorian', lead: 'pulse12', alt: 'bell',    arp: 'bell',    arpRate: 1, bass: 'syn', drums: 'break' },
+  rimehold:     { bpm: 150, root: 40, mode: 'harm',   lead: 'square',  arp: 'pulse12', arpRate: 2, bass: 'gallop', drums: 'stomp' },
+  yetiking:     { bpm: 176, root: 45, mode: 'harm',   lead: 'square',  alt: 'pulse25', arp: 'bell',    arpRate: 1, bass: 'gallop', drums: 'drive', harmony: true, pad: true },
+  grumbletoad:  { bpm: 138, root: 40, mode: 'phryg',  lead: 'pulse25', arp: 'pluck',   arpRate: 2, bass: 'syn',    drums: 'stomp' },
+  kilnmole:     { bpm: 146, root: 43, mode: 'minor',  lead: 'square',  arp: 'pulse12', arpRate: 2, bass: 'root8',  drums: 'break' },
+  peafowl:      { bpm: 156, root: 48, mode: 'mixo',   lead: 'pulse12', alt: 'square',  arp: 'bell',    arpRate: 1, bass: 'walk', drums: 'groove' },
+  kettle:       { bpm: 164, root: 41, mode: 'harm',   lead: 'bell',    alt: 'pulse25', arp: 'pulse12', arpRate: 1, bass: 'gallop', drums: 'drive' },
+  magmor:       { bpm: 152, root: 45, mode: 'phryg',  lead: 'square',  arp: null,      bass: 'root8',  drums: 'stomp' },
+  blazefang:    { bpm: 184, root: 40, mode: 'harm',   lead: 'square',  alt: 'pulse25', arp: 'pulse12', arpRate: 1, bass: 'gallop', drums: 'drive', harmony: true, pad: true },
+};
+// master trim, set by measurement (2026-10-21, 20 s offline renders of all 29 tunes): at 0.55 they read -29..-25 dB RMS, so 0.22
+// puts them about -37..-33 dB: under the sound effects (peaks around -23 dB) and above the ambience (-47..-38 dB). The menu
+// setting multiplies it (Quiet -6 dB, Loud +6 dB).
+const MUS_VOL = 0.22;
+const MUS_LEVELS = { off: { v: 0, label: 'Off' }, quiet: { v: 0.5, label: 'Quiet' }, normal: { v: 1, label: 'Normal' }, loud: { v: 2, label: 'Loud' } };
+const MUS_ORDER = ['off', 'quiet', 'normal', 'loud'];
+const MUS_HOLD = ['pause', 'report', 'logbook', 'controls'];          // the music waits here (picks up where it left off)
+const MUS_SILENT = ['over', 'levelDone', 'title'];                     // these end the current tune
+const MUS = { g: null, probe: null, tracks: [], cur: null, held: false, songs: {}, waves: null, noise: null };
+
+const MUS_SCALES = { major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10], dorian: [0, 2, 3, 5, 7, 9, 10], mixo: [0, 2, 4, 5, 7, 9, 10],
+  lydian: [0, 2, 4, 6, 7, 9, 11], harm: [0, 2, 3, 5, 7, 8, 11], phryg: [0, 1, 3, 5, 7, 8, 10] };
+// stock four-bar progressions as scale-degree roots (0 = tonic)
+const MUS_PROG_MAJ = [[0, 4, 5, 3], [0, 5, 3, 4], [0, 3, 4, 4], [3, 4, 2, 5], [0, 2, 3, 4], [5, 3, 0, 4], [0, 3, 5, 4], [3, 0, 4, 0]];
+const MUS_PROG_MIN = [[0, 5, 2, 6], [0, 3, 4, 0], [0, 6, 5, 6], [0, 5, 3, 4], [0, 3, 6, 2], [5, 6, 0, 0], [0, 2, 5, 4], [3, 4, 0, 0]];
+// one bar of melody rhythm, in 16th steps (negative = rest)
+const MUS_RHY = {
+  calm:   [[4, 4, 4, 4], [6, 2, 8], [4, 2, 2, 8], [8, 4, 4], [3, 3, 2, 4, 4], [2, 2, 4, -4, 4], [12, 4], [4, 4, 8], [6, 2, 4, 4]],
+  lively: [[2, 2, 4, 2, 2, 4], [3, 3, 2, 4, 4], [4, 2, 2, 4, -2, 2], [2, 2, 2, 2, 8], [6, 2, 4, 4], [3, 3, 4, 2, 2, 2], [-2, 2, 2, 2, 4, 4]],
+  boss:   [[2, 2, 2, 2, 4, 4], [3, 3, 2, 2, 2, 4], [2, 2, 4, 2, 2, 4], [1, 1, 2, 2, 2, 4, 4], [4, 2, 2, 2, 2, 4], [3, 3, 3, 3, 4], [2, -2, 2, 2, 4, 4], [3, 3, 2, 8]],
+};
+// 16-step drum lanes: k kick, s snare, h hat (x = hit, o = soft)
+const MUS_DRUMS = {
+  calm:   { k: 'x.......x.......', s: '............o...', h: '..o...o...o...o.' },
+  groove: { k: 'x.....x.x.......', s: '....x.......x...', h: 'x.o.x.o.x.o.x.o.' },
+  drive:  { k: 'x...x...x...x...', s: '....x.......x...', h: 'xoxoxoxoxoxoxoxo' },
+  break:  { k: 'x..x..x...x..x..', s: '....x..o....x...', h: 'x.xox.x.x.xox.x.' },
+  stomp:  { k: 'x..xx...x..xx...', s: '....x.......x..o', h: 'x...x...x...x...' },
+  march:  { k: 'x.......x.......', s: '....x.o.....xoxo', h: 'x.x.x.x.x.x.x.x.' },
+};
+// mixer: peak gain per voice before the track and master gains
+const MUS_MIX = { pulse25: 0.07, pulse12: 0.065, square: 0.05, tri: 0.13, bell: 0.09, pluck: 0.1, pad: 0.035, bass: 0.16, kick: 0.3, snare: 0.11, hat: 0.03, crash: 0.04 };
+
+const musMidiF = m => 440 * Math.pow(2, (m - 69) / 12);
+const musDeg = (sp, d) => { const sc = MUS_SCALES[sp.mode] || MUS_SCALES.major, o = Math.floor(d / 7); return sp.root + 12 * o + sc[d - 7 * o]; };
+function musRng(seed) { let s = seed >>> 0 || 1; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+const isFinalBoss = id => BIOMES.some(b => b.finalBoss === id);
+
+// ---- which tune: data first, then a fallback made from the id (new levels / bosses) ----
+function musFallback(kind, id) {
+  const h = hashStr(kind + ':' + id), r = musRng(h), pk = a => a[Math.floor(r() * a.length)];
+  if (kind === 'level') return { bpm: 96 + Math.floor(r() * 30), root: 40 + h % 12, mode: pk(['dorian', 'mixo', 'major', 'lydian', 'minor']), feel: pk(['calm', 'lively']),
+    lead: pk(['pulse25', 'bell', 'pulse12']), alt: pk(['tri', 'bell', 'square']), arp: pk(['bell', 'pluck', 'pulse12']), arpRate: pk([1, 2]), bass: pk(['half', 'syn', 'walk']), drums: pk(['calm', 'groove']), pad: r() < 0.5, swing: pk([0, 0.1]) };
+  const fin = isFinalBoss(id);
+  return { bpm: (fin ? 168 : 140) + Math.floor(r() * 18), root: 40 + h % 12, mode: pk(['minor', 'harm', 'phryg', 'dorian']), lead: pk(['square', 'pulse25', 'pulse12']), alt: 'bell',
+    arp: pk(['pulse12', 'bell', null]), arpRate: pk([1, 2]), bass: pk(['gallop', 'root8', 'syn']), drums: pk(['drive', 'break', 'stomp']), harmony: fin, pad: fin };
+}
+function musSpec(key) {
+  const [kind, id] = key.split(':');
+  const base = kind === 'hub' ? MUSIC_HUB : kind === 'level' ? MUSIC_BIOME[id] : MUSIC_BOSS[id];
+  const sp = Object.assign({ feel: kind === 'boss' ? 'boss' : 'calm', swing: 0, arpRate: 2 }, base || musFallback(kind, id));
+  sp.seed = hashStr('music:' + key); sp.boss = kind === 'boss';
+  return sp;
+}
+
+// ---- composer: 24 bars, sections A A B A B A'; each section 4 bars over one progression ----
+// The melody is a two-bar motif (rhythm cells + step intervals) replayed over the next chords; strong beats snap to chord
+// tones, the phrase ends on the tonic. Arrangement grows: first A is sparse, later sections add arp / pad / harmony.
+function musCompose(sp) {
+  const r = musRng(sp.seed), pk = a => a[Math.floor(r() * a.length)];
+  const minorish = !['major', 'mixo', 'lydian'].includes(sp.mode), progs = minorish ? MUS_PROG_MIN : MUS_PROG_MAJ;
+  const pa = pk(progs); let pb = pk(progs); while (pb === pa) pb = pk(progs);
+  const bank = MUS_RHY[sp.feel] || MUS_RHY.calm;
+  const motif = () => {   // two bars: [{pos, len, iv, rest}]
+    const notes = []; let pos = 0;
+    for (let b = 0; b < 2; b++) for (const l of pk(bank)) {
+      const len = Math.abs(l);
+      notes.push({ pos, len, rest: l < 0, iv: pk([-2, -1, -1, 1, 1, 2, 2, -3, 3, 4, 0]) }); pos += len;
+    }
+    return notes;
+  };
+  const M1 = motif(), M2 = motif(), M3 = motif();
+  const form = [[pa, M1, M1, 0], [pa, M1, M2, 1], [pb, M3, M3, 2], [pa, M1, M2, 3], [pb, M3, M2, 4], [pa, M2, M1, 5]];
+  const BARS = form.length * 4, N = BARS * 16, steps = Array.from({ length: N }, () => []);
+  const add = (st, v, m, len, vel) => steps[st].push([v, m, len, vel]);
+  const chordTones = root => [root, root + 2, root + 4];
+  const LO = 12, HI = 20;   // melody range in scale degrees above the bass tonic (about two octaves up)
+  let prev = 14;
+  const dk = MUS_DRUMS[sp.drums] || MUS_DRUMS.calm;
+  form.forEach(([prog, ma, mb, sec], si) => {
+    const sparse = si === 0, full = si >= 2;
+    prog.forEach((root, bi) => {
+      const bar = si * 4 + bi, s0 = bar * 16, last = bi === 3;
+      // melody: bars 0-1 take motif a, bars 2-3 motif b
+      const mot = bi < 2 ? ma : mb, half = bi % 2;
+      for (const n of mot) {
+        if ((n.pos >= 16) !== !!half || n.rest) continue;
+        const pos = n.pos - half * 16;
+        let d = prev + n.iv;
+        if (pos % 8 === 0) {   // strong beat: nearest chord tone
+          const ct = chordTones(root); let best = d, bd = 99;
+          for (let o = -14; o <= 21; o += 7) for (const c of ct) { const x = c + o; if (Math.abs(x - d) < bd && x >= LO && x <= HI) { bd = Math.abs(x - d); best = x; } }
+          d = best;
+        }
+        if (d > HI) d -= 2 * (d - HI); if (d < LO) d += 2 * (LO - d);
+        let len = n.len;
+        // the phrase lands on the tonic (end of a section), held to the bar's end
+        if (last && sec !== 0 && pos + len >= 16) { d = 14; len = 16 - pos; }
+        prev = d;
+        const m = musDeg(sp, d);
+        add(s0 + pos, 'lead', m, len, pos % 4 === 0 ? 1 : 0.8);
+        if (sp.harmony && full) add(s0 + pos, 'lead2', musDeg(sp, d - 2), len, 0.55);
+      }
+      // bass
+      const bDown = musDeg(sp, root) > 54 ? 12 : 0, B = d => musDeg(sp, root + d) - bDown, bv = sp.bassV || 'bass';   // keep the bass low
+      const bassStyle = sparse && !sp.boss ? 'half' : sp.bass;
+      if (bassStyle === 'half') { add(s0, bv, B(0), 8, 1); add(s0 + 8, bv, B(4), 8, 0.85); }
+      else if (bassStyle === 'walk') { const nx = prog[(bi + 1) % 4]; [B(0), B(2), B(4), musDeg(sp, nx + (nx > root ? -1 : 1))].forEach((m, i) => add(s0 + i * 4, bv, m, 3, i ? 0.8 : 1)); }
+      else if (bassStyle === 'root8') { for (let i = 0; i < 8; i++) add(s0 + i * 2, bv, B(0) + (i % 2 ? 12 : 0), 2, i % 2 ? 0.7 : 1); }
+      else if (bassStyle === 'gallop') { for (let b = 0; b < 4; b++) { const m = b === 2 ? B(0) + 12 : b === 3 ? B(4) : B(0); add(s0 + b * 4, bv, m, 2, 1); add(s0 + b * 4 + 2, bv, m, 1, 0.7); add(s0 + b * 4 + 3, bv, m, 1, 0.7); } }
+      else { [[0, 3, 0], [3, 3, 7], [6, 2, 4], [8, 4, 0], [12, 2, 7], [14, 2, 4]].forEach(([p, l, iv]) => add(s0 + p, bv, iv === 7 ? B(0) + 12 : B(iv), l, p % 4 ? 0.75 : 1)); }
+      // arpeggio / pad
+      if (sp.arp && !sparse) {
+        const tones = [root + 7, root + 9, root + 11, root + 14], pat = (bar % 2) ? [0, 1, 2, 3, 2, 1, 0, 1] : [0, 2, 1, 3, 2, 3, 1, 2];
+        for (let i = 0, k = 0; i < 16; i += sp.arpRate, k++) add(s0 + i, sp.arp, musDeg(sp, tones[pat[k % 8]]), sp.arpRate, i % 4 ? 0.7 : 1);
+      }
+      if (sp.pad && (full || !sp.boss)) [root + 7, root + 9, root + 11].forEach(d => add(s0, 'pad', musDeg(sp, d), 16, 1));
+      // drums (none in the first bar of a calm tune; a fill closes each section in the busier ones)
+      if (!(sparse && bi === 0 && !sp.boss)) for (let i = 0; i < 16; i++) {
+        const fill = last && sp.drums !== 'calm' && i >= 12;
+        if (dk.k[i] !== '.') add(s0 + i, 'kick', 0, 1, 1);
+        if (fill) add(s0 + i, 'snare', 0, 1, 0.5 + 0.15 * (i - 12));
+        else if (dk.s[i] !== '.') add(s0 + i, 'snare', 0, 1, dk.s[i] === 'x' ? 1 : 0.45);
+        if (dk.h[i] !== '.' && !(sparse && sp.boss)) add(s0 + i, 'hat', 0, 1, dk.h[i] === 'x' ? 1 : 0.55);
+      }
+      if (sp.boss && bi === 0 && (sec === 2 || sec === 4)) add(s0, 'crash', 0, 16, 1);
+    });
+  });
+  return steps;
+}
+
+// ---- voices ----
+function musWaves(c) {
+  if (MUS.waves && MUS.waves.c === c) return MUS.waves;
+  const pulse = duty => { const n = 32, re = new Float32Array(n), im = new Float32Array(n); for (let k = 1; k < n; k++) re[k] = 2 * Math.sin(Math.PI * k * duty) / (Math.PI * k); return c.createPeriodicWave(re, im); };
+  const len = c.sampleRate | 0, nb = c.createBuffer(1, len, c.sampleRate), d = nb.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  MUS.waves = { c, pulse25: pulse(0.25), pulse12: pulse(0.125), noise: nb };
+  return MUS.waves;
+}
+function musOsc(c, W, wave, f, t, stop, dest, det) {
+  const o = c.createOscillator();
+  if (wave === 'pulse25' || wave === 'pulse12') o.setPeriodicWave(W[wave]); else o.type = wave;
+  o.frequency.value = f; if (det) o.detune.value = det;
+  o.connect(dest); o.start(t); o.stop(stop); return o;
+}
+function musNoise(c, W, t, stop, filt, f, dest) {
+  const s = c.createBufferSource(), fl = c.createBiquadFilter();
+  s.buffer = W.noise; fl.type = filt; fl.frequency.value = f; s.connect(fl); fl.connect(dest);
+  s.start(t, Math.random() * 0.5); s.stop(stop);
+}
+// the track's vibrato drives each lead note's detune; unhooked when the note ends so dead oscillators can be freed
+function musVib(T, o) { T.lg.connect(o.detune); o.onended = () => { try { T.lg.disconnect(o.detune); } catch (e) {} }; }
+// one note: v = voice name, m = MIDI, dur = seconds, vel 0-1. T = the track (context, buses, vibrato)
+function musNote(T, v, m, t, dur, vel) {
+  const c = T.c, W = musWaves(c), g = c.createGain(), pk = (MUS_MIX[v] || 0.05) * vel, gg = g.gain, f = musMidiF(m);
+  g.connect(v === 'lead' || v === 'lead2' ? T.lead : T.out);
+  if (v === 'kick') {
+    const o = musOsc(c, W, 'sine', 150, t, t + 0.35, g); o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.11);
+    gg.setValueAtTime(pk, t); gg.setTargetAtTime(0, t + 0.01, 0.07); return;
+  }
+  if (v === 'snare') {
+    musNoise(c, W, t, t + 0.25, 'bandpass', 1900, g); const o = musOsc(c, W, 'triangle', 190, t, t + 0.08, g); o.frequency.exponentialRampToValueAtTime(130, t + 0.06);
+    gg.setValueAtTime(pk, t); gg.setTargetAtTime(0, t + 0.005, 0.05); return;
+  }
+  if (v === 'hat') { musNoise(c, W, t, t + 0.08, 'highpass', 7500, g); gg.setValueAtTime(pk, t); gg.setTargetAtTime(0, t + 0.002, 0.015); return; }
+  if (v === 'crash') { musNoise(c, W, t, t + 1.4, 'highpass', 3500, g); gg.setValueAtTime(pk, t); gg.setTargetAtTime(0, t + 0.01, 0.35); return; }
+  let wave = v === 'lead' ? T.leadV : v === 'lead2' ? T.lead2V : v === 'bass' ? 'triangle' : v;
+  const voice = wave;
+  if (wave === 'tri' || wave === 'pluck' || wave === 'pad') wave = 'triangle';
+  else if (wave === 'bell') wave = 'sine';
+  const vol = (MUS_MIX[voice] || 0.05) * vel * (v === 'lead2' ? 0.6 : 1), end = t + dur;
+  if (voice === 'bell') {   // sine + a quick bright partial, rings past the note
+    const o = musOsc(c, W, 'sine', f, t, t + 1.6, g), g2 = c.createGain(); musOsc(c, W, 'sine', f * 4.01, t, t + 0.3, g2); g2.connect(g); g2.gain.setValueAtTime(0.35, t); g2.gain.setTargetAtTime(0, t, 0.05);
+    if (v === 'lead' || v === 'lead2') musVib(T, o);
+    gg.setValueAtTime(0, t); gg.linearRampToValueAtTime(vol, t + 0.004); gg.setTargetAtTime(0, t + 0.01, Math.min(0.45, 0.12 + dur * 0.4)); return;
+  }
+  if (voice === 'pluck') { musOsc(c, W, 'triangle', f, t, t + 0.7, g); gg.setValueAtTime(0, t); gg.linearRampToValueAtTime(vol, t + 0.003); gg.setTargetAtTime(0, t + 0.005, 0.11); return; }
+  if (voice === 'pad') {
+    musOsc(c, W, 'triangle', f, t, end + 1.2, g, -7); musOsc(c, W, 'triangle', f, t, end + 1.2, g, 7);
+    gg.setValueAtTime(0, t); gg.linearRampToValueAtTime(vol, t + Math.min(0.5, dur / 3)); gg.setValueAtTime(vol, end); gg.setTargetAtTime(0, end, 0.25); return;
+  }
+  // held voices: lead pulses / square / triangle, and the bass
+  const o = musOsc(c, W, wave, f, t, end + 0.3, g);
+  if (v === 'lead' || v === 'lead2') musVib(T, o);
+  const sus = v === 'bass' ? 0.85 : 0.6;
+  gg.setValueAtTime(0, t); gg.linearRampToValueAtTime(vol, t + 0.006); gg.setTargetAtTime(vol * sus, t + 0.006, 0.08);
+  gg.setTargetAtTime(0, end, v === 'bass' ? 0.025 : 0.04);
+}
+
+// ---- tracks ----
+function musTrack(key) {
+  const sp = musSpec(key), c = actx;
+  const song = MUS.songs[key] || (MUS.songs[key] = musCompose(sp));
+  const out = c.createGain(); out.gain.value = 0; out.connect(MUS.g);
+  const sd = 15 / sp.bpm;   // one 16th
+  // lead bus: dry + a dotted-8th echo (soft, darker), plus one shared vibrato for every lead note
+  const lead = c.createGain(), dl = c.createDelay(1), fb = c.createGain(), lp = c.createBiquadFilter(), wet = c.createGain();
+  dl.delayTime.value = sd * 3; fb.gain.value = 0.25; lp.type = 'lowpass'; lp.frequency.value = 2200; wet.gain.value = sp.boss ? 0.22 : 0.35;
+  lead.connect(out); lead.connect(dl); dl.connect(lp); lp.connect(fb); fb.connect(dl); lp.connect(wet); wet.connect(out);
+  const lfo = c.createOscillator(), lg = c.createGain(); lfo.frequency.value = 5.4; lg.gain.value = sp.boss ? 9 : 14; lfo.connect(lg); lfo.start();
+  return { key, sp, song, c, out, lead, lfo, lg, sd, step: 0, loop: 0, next: c.currentTime + 0.08, dead: false,
+    leadV: sp.lead, lead2V: sp.alt || 'pulse25' };
+}
+function musKill(T, fade) {
+  if (T.dead) return; T.dead = true;
+  const now = T.c.currentTime; T.out.gain.cancelScheduledValues(now); T.out.gain.setValueAtTime(T.out.gain.value, now); T.out.gain.linearRampToValueAtTime(0, now + fade);
+  T.endAt = now + fade + 0.1;
+}
+function musSchedule(T, until) {
+  const N = T.song.length;
+  while (T.next < until) {
+    const st = T.step, sw = st % 4 === 2 ? T.sp.swing * 2 * T.sd : st % 2 ? T.sp.swing * T.sd : 0;   // swung 8ths (and 16ths)
+    for (const [v, m, len, vel] of T.song[st]) { try { musNote(T, v, m, T.next + sw, len * T.sd * 0.92, vel); } catch (e) { /* skip a bad note */ } }
+    T.next += T.sd; T.step = (st + 1) % N;
+    if (!T.step) { T.loop++; T.leadV = T.loop % 2 && T.sp.alt ? T.sp.alt : T.sp.lead; }
+  }
+}
+// what should be playing now?
+function musWant() {
+  if (!G.player || !G.room || MUS_SILENT.includes(G.state)) return null;
+  if (G.mode === 'hub' || G.room.hub) return 'hub';
+  const b = G.enemies.find(e => e.boss && !e.dummy);
+  if (b) return 'boss:' + b.id;
+  return 'level:' + biome().id;
+}
+function musVolume() { const l = MUS_LEVELS[SAVE.music] || MUS_LEVELS.normal; return l.v; }
+function musTick() {
+  if (!actx || actx.state !== 'running') return;
+  const c = actx, now = c.currentTime;
+  if (!MUS.g) { MUS.g = c.createGain(); MUS.g.gain.value = 0; MUS.g.connect(MUS.probe || c.destination); }
+  const vol = musVolume(), on = (!muted || MUS.probe) && !document.hidden && vol > 0;
+  const hold = !on || MUS_HOLD.includes(G.state);
+  const want = on ? musWant() : null;
+  // master: full in play and boss intros, softer behind overlays (cards, map, shops ...), nothing while held
+  const k = hold ? 0 : (G.state === 'play' || G.state === 'intro') ? 1 : 0.45;
+  MUS.g.gain.setTargetAtTime(MUS_VOL * vol * k, now, hold ? 0.08 : 0.3);
+  if (!on) { if (MUS.cur) { MUS.tracks.forEach(T => musKill(T, 0.2)); MUS.cur = null; } }
+  else if (want !== (MUS.cur && MUS.cur.key)) {
+    const into = want && want.startsWith('boss:'), from = MUS.cur && MUS.cur.key.startsWith('boss:');
+    if (MUS.cur) musKill(MUS.cur, into ? 0.7 : from ? 2.4 : 1.6);
+    MUS.cur = null;
+    if (want) { const T = musTrack(want); T.out.gain.setValueAtTime(0, now); T.out.gain.linearRampToValueAtTime(1, now + (into ? 0.35 : 1.4)); T.next = now + (into ? 0.05 : 0.3); MUS.tracks.push(T); MUS.cur = T; }
+  }
+  // drop finished tracks
+  MUS.tracks = MUS.tracks.filter(T => {
+    if (T.dead && now > T.endAt) { try { T.lfo.stop(); T.out.disconnect(); } catch (e) {} return false; }
+    return true;
+  });
+  if (hold) { MUS.held = true; return; }
+  if (MUS.held) { MUS.held = false; MUS.tracks.forEach(T => { T.next = Math.max(T.next, now + 0.05); if (T.next > now + 0.5) T.next = now + 0.05; }); }
+  for (const T of MUS.tracks) { if (T.next < now) T.next = now + 0.02; musSchedule(T, now + 0.35); }
+}
+setInterval(() => { try { musTick(); } catch (e) { /* never let music break the game */ } }, 100);
+
+// ---- menu: Music Off / Quiet / Normal / Loud (pause menu, also the hub's Menu) ----
+function musLabel() {
+  const el = $('#musicLbl'); if (!el) return;
+  el.textContent = (MUS_LEVELS[SAVE.music] || MUS_LEVELS.normal).label + (muted && SAVE.music !== 'off' ? ' (sound is off)' : '');
+}
+function cycleMusic() {
+  const cur = MUS_LEVELS[SAVE.music] ? SAVE.music : 'normal';
+  SAVE.music = MUS_ORDER[(MUS_ORDER.indexOf(cur) + 1) % MUS_ORDER.length]; writeSave(); musLabel();
+}
+{ const b = $('#musicBtn'); if (b) b.addEventListener('click', cycleMusic); }
+musLabel();
 // ---------- game feel ("juice") ----------
 // Trauma camera shake, the motion/flash settings, gun kick + muzzle flash, enemy hit punch, kill bursts, ground decals.
 // Rules: rapid-fire weapons stay subtle, heavy ones punch; nothing here may hide enemy bullets or move your aim.
@@ -18574,7 +18892,7 @@ function gameOver() {
   setTimeout(() => { $('#over').hidden = false; $('#hud').hidden = true; $('#againBtn').focus(); }, 900);
   Hub.emit('runEnd', { level: G.level, sector: G.sector, kills: G.kills, gadgets: total, difficulty: G.diff, mode: G.run, depth: G.run === 'endless' ? depth() : undefined, bosses: G.run === 'rush' ? G.rush : undefined });
 }
-function setSound(on) { muted = !on; SAVE.sound = on; writeSave(); $('#muteLbl').textContent = on ? 'On' : 'Off'; }
+function setSound(on) { muted = !on; SAVE.sound = on; writeSave(); $('#muteLbl').textContent = on ? 'On' : 'Off'; musLabel(); }
 // buttons
 $('#againBtn').addEventListener('click', () => {
   const lvl = G.level, run = G.run, sw = G.startWeapon; $('#over').hidden = true; resetActors(); G.player = makePlayer(); G.players = [G.player];
@@ -18732,7 +19050,7 @@ function frame(now) {
 let booted = false;
 function boot() {
   if (booted) return; booted = true;
-  muted = !SAVE.sound; $('#muteLbl').textContent = muted ? 'Off' : 'On'; applyFeel();
+  muted = !SAVE.sound; $('#muteLbl').textContent = muted ? 'Off' : 'On'; musLabel(); applyFeel();
   G.player = makePlayer(); G.players = [G.player];
   buildHub();
   requestAnimationFrame(frame);
