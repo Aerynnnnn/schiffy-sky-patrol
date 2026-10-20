@@ -450,6 +450,12 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 #hubLogo.gone { opacity: 0; transform: translateY(-14px); }
 .hubbar { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 14px); right: 16px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; max-width: calc(100% - 32px); }
 .hubbar .pill { padding: 4px 14px; font-size: 16px; }
+.hubbar .hubgold { gap: 6px; background: linear-gradient(#fff6c8, #ffe08a); }
+.hubbar .hubgold b { font-variant-numeric: tabular-nums; }
+.hubbar .hubgold i { width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff4b0, #ffc93c 55%, #c98a1e); border: 2px solid var(--navy); flex: none; }
+.hubbar .hubgold.pop { animation: hubGoldPop .5s cubic-bezier(.3, 1.6, .6, 1); }
+@keyframes hubGoldPop { 40% { transform: scale(1.15); } }
+@media (prefers-reduced-motion: reduce) { .hubbar .hubgold.pop { animation: none; } }
 .pill.diff.normal { background: #c9f7b5; }
 .pill.diff.hard { background: #ff8fa3; color: #fff; }
 .petchip i { width: 16px; height: 16px; border-radius: 50%; border: 2.5px solid var(--navy); }
@@ -929,6 +935,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
     <div class="hubbar">
       <span class="pill diff normal" id="hubDiff">Cozy</span>
       <span class="pill" id="hubProgress">Levels open: 1/2</span>
+      <span class="pill hubgold" id="hubGold" title="Gold Schiffy has saved from runs: spend it at the playground's blueprint table"><i aria-hidden="true"></i><b>0</b> gold</span>
       <span class="pill" id="hubCollect">Pets 0/6</span>
       <button class="smallbtn" id="hubReport" type="button" title="Report a bug (F2)">Report bug · F2</button>
       <button class="smallbtn" id="hubLog" type="button" title="Past runs and issues">Logbook</button>
@@ -14342,8 +14349,19 @@ function updateHubHud() {
   $('#hubDiff').textContent = DIFF().name; $('#hubDiff').className = 'pill diff ' + G.diff;
   $('#hubProgress').textContent = `Levels open: ${SAVE.unlocked}/${STORY_LEVELS}`;
   $('#hubCollect').textContent = `Pets ${pets}/${Object.keys(PETS).length} · Weapons ${weapons}/${WEAPON_KEYS.length}`;
+  hubGoldPill();
+}
+// the hub bar's saved-gold pill (2026-10-18): Schiffy's playground savings, refreshed whenever they change
+let hubGoldShown = -1;
+function hubGoldPill() {
+  const g = homeGold(); if (g === hubGoldShown) return;
+  const el = $('#hubGold'); if (!el) return;
+  const up = hubGoldShown >= 0 && g > hubGoldShown; hubGoldShown = g;
+  el.querySelector('b').textContent = g.toLocaleString();
+  if (up) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }   // a little bounce when gold comes in
 }
 function updateHub(dt) {
+  hubGoldPill();
   if (G.hubLogoT > 0) { G.hubLogoT -= dt; const p = G.player; if (G.hubLogoT <= 0 || Math.hypot(p.vx, p.vz) > 1) { $('#hubLogo').classList.add('gone'); G.hubLogoT = 0; } }
   for (const pad of G.padMeshes || []) { if (pad.t > 0) { pad.t -= dt; pad.m.userData.top.position.y = (pad.m.userData.topY ?? 0.24) + Math.sin(pad.t * 30) * 0.08; } }
   animateSky(dt);
