@@ -12617,8 +12617,9 @@ function homeRotXZ(x, z, rot) { const a = -(rot || 0) * Math.PI / 180, c = Math.
 // Dreamlight Valley's milestone rewards, all turned dog-and-sky-isle). Three ways to get one:
 //   gold   = home savings: whatever run gold is left when a run ends is banked for the home (bankRunGold, user's choice
 //            2026-10-17), so saving vs spending in a run is a real decision. Everyday furniture and garden pieces.
-//   gems   = Paw Gems through the Wallet (82-wallet): the real-money currency (free playtest gems until a store is wired
-//            up). Big showpiece buildings. Looks only, like everything in the boutique.
+//            The big showpiece buildings were Paw Gems until 2026-10-18 (user's choice): now gold too, 1 gem = 1 gold, so they
+//            stay the top tier (400-1500 against 40-600). Paw Gems are boutique-only. (The 'gems' code paths below are kept,
+//            but no catalogue item uses them.)
 //   unlock = earned by a task (HOME_TASKS), never sold: trophies for milestones, granted when you come home after one.
 // What you get goes to storage; place it from Edit home's catalogue. sku 'home.<id>', model Home_<id>, shape HOME_PARTS[sku].
 const HOME_CAT = [
@@ -12637,15 +12638,15 @@ const HOME_CAT = [
   { id: 'picnic', cur: 'gold', price: 200, name: 'Picnic Table', desc: 'Benches built in, a checked runner, a jug and a cake.' },
   { id: 'veggies', cur: 'gold', price: 160, name: 'Veggie Patch', desc: 'Carrots, cabbages and pumpkins in a raised bed.' },
   { id: 'swing', cur: 'gold', price: 220, name: 'Tyre Swing', desc: 'A sturdy A-frame with a tyre that sways in the breeze.' },
-  // Paw Gems: showpiece buildings
-  { id: 'cottage', cur: 'gems', price: 1500, name: 'Cosy Cottage', desc: 'A cream cottage with a pink roof, round windows, flower boxes and a chimney.' },
-  { id: 'treehouse', cur: 'gems', price: 1200, name: 'Treehouse', desc: 'A hut on a deck high in an apple tree, with a ladder up.' },
-  { id: 'windmill', cur: 'gems', price: 1000, name: 'Windmill', desc: 'A tall windmill whose sails turn all day.' },
-  { id: 'lighthouse', cur: 'gems', price: 1100, name: 'Sky Lighthouse', desc: 'Red and white stripes and a lamp that sweeps the sky.' },
-  { id: 'balloon', cur: 'gems', price: 900, name: 'Hot-Air Balloon', desc: 'A striped balloon bobbing over its basket.' },
-  { id: 'gazebo', cur: 'gems', price: 800, name: 'Garden Gazebo', desc: 'A six-sided gazebo with a mint roof and hanging flowers.' },
-  { id: 'hotspring', cur: 'gems', price: 900, name: 'Hot Spring', desc: 'A steaming pool ringed with rocks, a bucket, a towel and a rubber duck.' },
-  { id: 'agility', cur: 'gems', price: 700, name: 'Agility Course', desc: 'An A-frame, a hoop jump and weave poles. Show off!' },
+  // showpiece buildings (Paw Gems until 2026-10-18, now gold at the same number: they stay the priciest tier)
+  { id: 'cottage', cur: 'gold', price: 1500, name: 'Cosy Cottage', desc: 'A cream cottage with a pink roof, round windows, flower boxes and a chimney.' },
+  { id: 'treehouse', cur: 'gold', price: 1200, name: 'Treehouse', desc: 'A hut on a deck high in an apple tree, with a ladder up.' },
+  { id: 'windmill', cur: 'gold', price: 1000, name: 'Windmill', desc: 'A tall windmill whose sails turn all day.' },
+  { id: 'lighthouse', cur: 'gold', price: 1100, name: 'Sky Lighthouse', desc: 'Red and white stripes and a lamp that sweeps the sky.' },
+  { id: 'balloon', cur: 'gold', price: 900, name: 'Hot-Air Balloon', desc: 'A striped balloon bobbing over its basket.' },
+  { id: 'gazebo', cur: 'gold', price: 800, name: 'Garden Gazebo', desc: 'A six-sided gazebo with a mint roof and hanging flowers.' },
+  { id: 'hotspring', cur: 'gold', price: 900, name: 'Hot Spring', desc: 'A steaming pool ringed with rocks, a bucket, a towel and a rubber duck.' },
+  { id: 'agility', cur: 'gold', price: 700, name: 'Agility Course', desc: 'An A-frame, a hoop jump and weave poles. Show off!' },
   // unlocks: trophies for milestones
   { id: 't_oak', cur: 'unlock', task: 'level1', name: 'Hollow Oak Sapling', desc: 'A potted cutting of the Hollow Oak, glowing lilac fruit and all.' },
   { id: 't_aquarium', cur: 'unlock', task: 'level2', name: 'Coral Aquarium', desc: 'A tank of Golden Reef coral and glowing fish.' },
@@ -12759,10 +12760,10 @@ const HOME_MORE = [
   ['runner_teal', 'build', 'gold', 90, 'Long Rug · Teal', 'The long rug in teal.', 'floor'],
   // water
   ['pond', 'water', 'gold', 300, 'Lily Pond', 'Lily pads, reeds, a frog and two koi swimming round.'],
-  ['pawfountain', 'water', 'gems', 450, 'Paw Fountain', 'Water spills from a stone paw into an eight-sided basin.'],
+  ['pawfountain', 'water', 'gold', 450, 'Paw Fountain', 'Water spills from a stone paw into an eight-sided basin.'],
   ['well', 'water', 'gold', 260, 'Wishing Well', 'A stone well with a red roof and a bobbing bucket.'],
-  ['footbridge', 'water', 'gems', 400, 'Arched Footbridge', 'A red-railed bridge over its own little stream.'],
-  ['waterwheel', 'water', 'gems', 650, 'Water Wheel', 'A stone mill whose wheel turns in the stream.'],
+  ['footbridge', 'water', 'gold', 400, 'Arched Footbridge', 'A red-railed bridge over its own little stream.'],
+  ['waterwheel', 'water', 'gold', 650, 'Water Wheel', 'A stone mill whose wheel turns in the stream.'],
   // decor
   ['easel', 'decor', 'gold', 110, 'Painter\'s Easel', 'A sunset painting of a little pup on a hill.'],
   ['easel_sea', 'decor', 'gold', 110, 'Painter\'s Easel · Sky', 'The easel with a blue-sky painting.'],
@@ -12778,23 +12779,23 @@ const HOME_MORE = [
   ['gnome', 'decor', 'gold', 80, 'Garden Pup Gnome', 'A pup in a pointy red hat, holding a bone.'],
   ['birdhouse', 'decor', 'gold', 90, 'Birdhouse', 'A yellow birdhouse on a post, with a tenant.'],
   // seasonal
-  ['blossom', 'season', 'gems', 450, 'Blossom Tree', 'Spring: a cherry tree in full pink bloom, petals drifting.'],
+  ['blossom', 'season', 'gold', 450, 'Blossom Tree', 'Spring: a cherry tree in full pink bloom, petals drifting.'],
   ['umbrella', 'season', 'gold', 150, 'Beach Umbrella', 'Summer: a striped umbrella, a towel and a beach ball.'],
   ['umbrella_blue', 'season', 'gold', 150, 'Beach Umbrella · Blue', 'The beach umbrella in blue stripes.'],
   ['sandcastle', 'season', 'gold', 120, 'Sandcastle', 'Summer: four towers, two flags and a moat.'],
   ['jackolantern', 'season', 'gold', 130, 'Jack-o\'-Lantern Pile', 'Autumn: a grinning pumpkin and two little ones.'],
   ['leafpile', 'season', 'gold', 60, 'Leaf Pile', 'Autumn: a heap of leaves made for jumping in. Walk through it.', 'floor'],
-  ['xmastree', 'season', 'gems', 500, 'Holiday Tree', 'Winter: baubles, twinkling lights and a turning star.'],
+  ['xmastree', 'season', 'gold', 500, 'Holiday Tree', 'Winter: baubles, twinkling lights and a turning star.'],
   ['gifts', 'season', 'gold', 110, 'Gift Pile', 'Winter: four presents with big bows.'],
   ['snowpup', 'season', 'gold', 140, 'Snow Pup', 'Winter: a snow dog in a red scarf and pink hat.'],
   // buildings (showpieces)
-  ['greenhouse', 'structure', 'gems', 1000, 'Greenhouse', 'A glass house with potted plants and tomato vines.'],
-  ['shed', 'structure', 'gems', 600, 'Garden Shed', 'A mint shed with barn doors and a flower box.'],
-  ['stall', 'structure', 'gems', 500, 'Market Stall', 'A striped awning over crates of fresh fruit.'],
-  ['stall_blue', 'structure', 'gems', 500, 'Market Stall · Blue', 'The market stall with a blue awning.'],
-  ['ferris', 'structure', 'gems', 1400, 'Mini Ferris Wheel', 'Six cabins and a ring of lights, turning slowly.'],
-  ['carousel', 'structure', 'gems', 1500, 'Pup Carousel', 'Six pups to ride round and round under a striped top.'],
-  ['barn', 'structure', 'gems', 1200, 'Red Barn', 'A gambrel-roofed barn with hay bales by the door.'],
+  ['greenhouse', 'structure', 'gold', 1000, 'Greenhouse', 'A glass house with potted plants and tomato vines.'],
+  ['shed', 'structure', 'gold', 600, 'Garden Shed', 'A mint shed with barn doors and a flower box.'],
+  ['stall', 'structure', 'gold', 500, 'Market Stall', 'A striped awning over crates of fresh fruit.'],
+  ['stall_blue', 'structure', 'gold', 500, 'Market Stall · Blue', 'The market stall with a blue awning.'],
+  ['ferris', 'structure', 'gold', 1400, 'Mini Ferris Wheel', 'Six cabins and a ring of lights, turning slowly.'],
+  ['carousel', 'structure', 'gold', 1500, 'Pup Carousel', 'Six pups to ride round and round under a striped top.'],
+  ['barn', 'structure', 'gold', 1200, 'Red Barn', 'A gambrel-roofed barn with hay bales by the door.'],
   // sky isles: sets echoing the three levels
   ['toadstool', 'isles', 'gold', 280, 'Toadstool House', 'Moonlit Meadows: a giant mushroom with a door and a window.'],
   ['toadstool_lilac', 'isles', 'gold', 280, 'Toadstool House · Moonlit', 'The toadstool house with a lilac cap.'],
@@ -12805,7 +12806,7 @@ const HOME_MORE = [
   ['palm', 'isles', 'gold', 220, 'Palm Tree', 'Golden Reef: a leaning palm with coconuts.'],
   ['icesculpture', 'isles', 'gold', 260, 'Ice Pup Sculpture', 'Frostcap Peaks: a pup carved from glittering ice.'],
   ['pine', 'isles', 'gold', 170, 'Snowy Pine', 'Frostcap Peaks: a pine dusted with snow.'],
-  ['igloo', 'isles', 'gems', 900, 'Igloo', 'Frostcap Peaks: a snow-block dome with two ice lanterns.'],
+  ['igloo', 'isles', 'gold', 900, 'Igloo', 'Frostcap Peaks: a snow-block dome with two ice lanterns.'],
   // Ember Volcano set (Level 4, 2026-10-17)
   ['lavalamp', 'isles', 'gold', 180, 'Lava Lamp', 'Ember Volcano: a tall glass lamp where glowing blobs rise and fall.'],
   ['lavalamp_blue', 'isles', 'gold', 180, 'Lava Lamp · Deep Blue', 'The lava lamp with cool blue blobs.'],
@@ -12820,7 +12821,7 @@ const HOME_MORE = [
   ['minecart', 'isles', 'gold', 210, 'Mine Cart Planter', 'Ember Volcano: an old ore cart on its rails, full of fire blooms and ember crystals.'],
   ['crystallamp', 'isles', 'gold', 150, 'Ember Crystal Lamp', 'Ember Volcano: a cluster of glowing crystal shards on a basalt stand.'],
   ['crystallamp_teal', 'isles', 'gold', 150, 'Ember Crystal Lamp · Teal', 'The crystal lamp in glassy teal.'],
-  ['lavafall', 'isles', 'gems', 650, 'Lavafall', 'Ember Volcano: lava pours between basalt columns into a glowing pool.'],
+  ['lavafall', 'isles', 'gold', 650, 'Lavafall', 'Ember Volcano: lava pours between basalt columns into a glowing pool.'],
   // trophies
   ['t_bone', 'trophy', 'unlock', 'bank5k', 'Golden Bone', 'A gold bone on a plinth, for a well-filled piggy bank.'],
   ['t_captain', 'trophy', 'unlock', 'runs100', 'Sky Captain Statue', 'A pup in a captain\'s hat with a brass spyglass.'],
@@ -12859,7 +12860,7 @@ const HOME_DECOR = [
   ['statues', 'decor', 900, 'Boss Statues', 'Stone statues of the three bosses you have beaten most. No longer sold: every boss now earns its own trophy.', 'retired'],
 ];
 for (const [id, sec, price, name, desc, flag] of HOME_DECOR)
-  HOME_CAT.push({ id: 'cd_' + id, sku: 'cos.decor.' + id, sec, cur: 'gems', price, name, desc, decor: true, retired: flag === 'retired' });
+  HOME_CAT.push({ id: 'cd_' + id, sku: 'cos.decor.' + id, sec, cur: 'gold', price, name, desc, decor: true, retired: flag === 'retired' });
 for (const h of HOME_CAT) { h.sku = h.sku || 'home.' + h.id; h.home = true; h.cat = 'home'; }
 const HOME_CAT_BY = Object.fromEntries(HOME_CAT.map(h => [h.sku, h]));
 // each item's shape as boxes [cx, cz, hx, hz, y0, y1] (blender/build_home.py writes these next to the models)
@@ -13712,7 +13713,7 @@ function homePlaceFromStorage(x) {
 // (a model's variants). Nothing is bought from a card: Preview puts the item on the isle at real size next to Schiffy
 // (hpStart) and Buy & place happens there.
 const CAT = { sec: 'all', cur: 'all', own: 'all', q: '', hooked: false, iconQ: [], pump: 0, scroll: 0 };
-const CAT_CUR = [['all', 'Any'], ['gold', 'Gold'], ['gems', null], ['unlock', 'Earned']];   // null = the gem currency's name (82-wallet loads later)
+const CAT_CUR = [['all', 'Any'], ['gold', 'Gold'], ['unlock', 'Earned']];   // (no Paw Gems chip since 2026-10-18: the catalogue is gold + earned)
 const CAT_OWN = [['all', 'All'], ['new', 'Not owned'], ['own', 'Owned']];
 const HOME_FAMILY = {}; for (const h of HOME_CAT) (HOME_FAMILY[h.model] = HOME_FAMILY[h.model] || []).push(h);
 // a boss trophy not earned yet gets a dark silhouette icon (its model drawn in one flat dark colour)
@@ -13777,6 +13778,7 @@ function catList() {
 function catRender() {
   const stored = homeStored();
   $('#catGold').innerHTML = `<b>${homeGold().toLocaleString()}</b> gold saved`;
+  $('#catGems').hidden = !HOME_CAT.some(h => h.cur === 'gems' && catListed(h));   // hidden: nothing here costs Paw Gems now
   $('#catGems').innerHTML = Wallet.available() ? `<b>${Wallet.balance().toLocaleString()}</b> ${CURRENCY.name}${Wallet.tag() ? ` <small>${Wallet.tag()}</small>` : ''}` : `${CURRENCY.name}: coming soon`;
   const tabs = [['all', 'All']].concat(HOME_SECS, [['storage', 'Storage']]);
   $('#catTabs').innerHTML = tabs.map(([k, n]) => {
@@ -13790,7 +13792,7 @@ function catRender() {
   $('#catChips').innerHTML = CAT.sec === 'storage' ? '' : `<span class="cat-chipset">${chips(CAT_CUR, 'cur', 'catcur')}</span><span class="cat-chipset">${chips(CAT_OWN, 'own', 'catown')}</span>`;
   $('#catSearch').hidden = CAT.sec === 'storage';
   $('#catNote').innerHTML = CAT.sec === 'storage' ? (stored.length ? `Everything you own that isn't on the isle. Place it, then drag, turn, stack or hover it.` : `Storage is empty: everything you own is out on the isle.`)
-    : `Preview anything on your isle before you buy it. Gold is what Schiffy saves from runs (spending gold in a run never costs savings); ${CURRENCY.name} buy the showpieces; trophies are earned (every boss you beat adds its statue). Looks only: nothing here changes how a run plays.`;
+    : `Preview anything on your isle before you buy it. Everything here is bought with gold, what Schiffy saves from runs (spending gold in a run never costs savings), or earned: trophies (every boss you beat adds its statue). Looks only: nothing here changes how a run plays.`;
   catRenderGrid();
 }
 function catRenderGrid() {
