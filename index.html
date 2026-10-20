@@ -1346,7 +1346,9 @@ const isleSizeFor = room => room && (room.type === 'bonus' || room.type === 'sec
 // obstacle footprints: h = height (anything at or below 2 can be stood on), half = half-width of its square
 // gap: a hole only ground enemies treat as a wall; the player falls in (see updateFalling)
 const OB = {
-  crate: { h: 1.2, half: 0.85 }, rock: { h: 1.9, half: 0.85 }, bush: { h: 0.8, half: 0.8 }, tree: { h: 5, half: 0.7 },
+  // round: true = the footprint is a circle of radius half (2026-10-18). Bushes, trees and rocks look round, but their square
+  // footprints met at the corners of diagonal cells, closing gaps Schiffy could plainly fit through.
+  crate: { h: 1.2, half: 0.85 }, rock: { h: 1.9, half: 0.85, round: true }, bush: { h: 0.8, half: 0.8, round: true }, tree: { h: 5, half: 0.7, round: true },
   stall: { h: 4.4, half: 1.0 }, chest: { h: 1.0, half: 0.75 }, mesa: { h: 1.6, half: 1.0 }, gap: { h: 0.05, half: 0.95, enemyOnly: true },
   // Ember Volcano: lava (and a surge's flooded floor, 'flood') walls ground enemies like a gap; the player walks in and gets burned
   // (27-volcano). Lava-native enemies (e.lavaOK) wade through both. 'vent' is an eruption cone in an isle corner (solid, stand-on).
@@ -2696,7 +2698,7 @@ function overlapCell(x, z, r, y, enemy) {
     if (OB[t].enemyOnly && !enemy) continue;
     if (enemy === 2 && (t === 'lava' || t === 'flood')) continue;   // lava-native enemies (Magmite, Scorchnewt) wade through lava
     const cx = cellX(i), cz = cellX(j), h = OB[t].half;
-    if (Math.abs(x - cx) < h + r && Math.abs(z - cz) < h + r) return { t, cx, cz, h, i, j };
+    if (OB[t].round ? Math.hypot(x - cx, z - cz) < h + r : Math.abs(x - cx) < h + r && Math.abs(z - cz) < h + r) return { t, cx, cz, h, i, j };
   }
   return null;
 }
@@ -2709,7 +2711,7 @@ function groundAt(x, z, r, y) {
   for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
     const t = obsAt(i, j); if (!t || OB[t].enemyOnly || OB[t].h > y + 0.08 || OB[t].h > 2) continue;
     const cx = cellX(i), cz = cellX(j), h = OB[t].half;
-    if (Math.abs(x - cx) < h + r && Math.abs(z - cz) < h + r) g = Math.max(g, OB[t].h);
+    if (OB[t].round ? Math.hypot(x - cx, z - cz) < h + r : Math.abs(x - cx) < h + r && Math.abs(z - cz) < h + r) g = Math.max(g, OB[t].h);
   }
   return g;
 }
@@ -5844,8 +5846,9 @@ function updateBeam(p, s, firing, dt) {
     let a = m.a + (k === 0 ? 0 : (Math.ceil(k / 2) * (k % 2 ? 1 : -1)) * s.d.spread);
     if (s.homing) { const t = nearestEnemy(m.x + Math.cos(a) * 4, m.z + Math.sin(a) * 4, 5); if (t) a += clamp(angDiff(a, Math.atan2(t.z - m.z, t.x - m.x)), -0.25 * s.homing, 0.25 * s.homing); }
     // the beam stops at the first tall obstacle
-    let len = s.range;
-    for (let d = 0.5; d < s.range; d += 0.3) { if (blockedAt(m.x + Math.cos(a) * d, m.z + Math.sin(a) * d, 0.05, m.y)) { len = d; break; } }
+    // (2026-10-18) a foe standing up on the very block that stopped the beam is still hit: bc = that block's cell
+    let len = s.range, bc = null;
+    for (let d = 0.5; d < s.range; d += 0.3) { const bx = m.x + Math.cos(a) * d, bz = m.z + Math.sin(a) * d; if (blockedAt(bx, bz, 0.05, m.y)) { len = d; bc = [cellOf(bx), cellOf(bz)]; break; } }
     const b = G.beams[k], ex = m.x + Math.cos(a) * len, ez = m.z + Math.sin(a) * len;
     b.position.set((m.x + ex) / 2, m.y, (m.z + ez) / 2); b.rotation.y = -a + Math.PI / 2;
     updateLance(b, len, width, dt); lanceImpact(ex, m.y, ez);
@@ -5853,7 +5856,7 @@ function updateBeam(p, s, firing, dt) {
       for (const e of [...G.enemies]) {
         if (e.spawnT > 0) continue;
         const rx = e.x - m.x, rz = e.z - m.z, along = rx * Math.cos(a) + rz * Math.sin(a);
-        if (along < 0 || along > len + e.r) continue;
+        if (along < 0 || (along > len + e.r && !(bc && e.y > 0.3 && cellOf(e.x) === bc[0] && cellOf(e.z) === bc[1] && along <= len + CELL * 1.2))) continue;
         const perp = Math.abs(-rx * Math.sin(a) + rz * Math.cos(a));
         if (perp < e.r + width) { const crit = rollCrit(s); hitEnemy(e, s.dmg * dm * (crit ? 3 : 1), s, { crit, kx: Math.cos(a), kz: Math.sin(a), knock: 0.25 }); }
       }
@@ -5866,9 +5869,14 @@ function updateBeam(p, s, firing, dt) {
 // chains to the nearest foe it hasn't hit, each jump at THUNDER_FALL of the last. Extra = another bolt at the next-best foe (split).
 // With nothing in reach it crackles out to a point ahead, harmless. Looks: thunderFx (42-shots).
 const THUNDER_FALL = 0.6;
-function thunderClear(x, z, tx, tz, y) {
-  const d = Math.hypot(tx - x, tz - z);
-  for (let k = 0.5; k < d - 0.3; k += 0.35) if (blockedAt(x + (tx - x) * k / d, z + (tz - z) * k / d, 0.05, y)) return false;
+// (2026-10-18) the bolt rises toward a foe up on a block (y0 -> y1 along the way), and the block it stands on never counts as cover
+function thunderClear(x, z, tx, tz, y0, y1 = y0) {
+  const d = Math.hypot(tx - x, tz - z), ti = cellOf(tx), tj = cellOf(tz), up = y1 > y0 + 0.3;
+  for (let k = 0.5; k < d - 0.3; k += 0.35) {
+    const px = x + (tx - x) * k / d, pz = z + (tz - z) * k / d;
+    if (up && cellOf(px) === ti && cellOf(pz) === tj) continue;
+    if (blockedAt(px, pz, 0.05, lerp(y0, y1, k / d))) return false;
+  }
   return true;
 }
 function thunderAttack(p, s, m, a0) {
@@ -5878,7 +5886,7 @@ function thunderAttack(p, s, m, a0) {
   for (const e of G.enemies) {
     if (e.spawnT > 0 || e.dead || e.hidden) continue;
     const dx = e.x - m.x, dz = e.z - m.z, d = Math.hypot(dx, dz), off = Math.abs(angDiff(a0, Math.atan2(dz, dx)));
-    if (d > reach + e.r || off > cone || !thunderClear(m.x, m.z, e.x, e.z, m.y)) continue;
+    if (d > reach + e.r || off > cone || !thunderClear(m.x, m.z, e.x, e.z, m.y, Math.max(m.y, e.y + e.h * 0.6))) continue;
     picks.push({ e, score: off * 4 + d * 0.15 });
   }
   picks.sort((a, b) => a.score - b.score);
@@ -6120,16 +6128,35 @@ function spawnProj(kind, x, y, z, a, s, o = {}) {
   b.size = size; b.maxLife = b.life;
   // vertical auto-aim for the player's straight shots: tilt toward the enemy closest to the aim line,
   // so shots climb to a turret on a plateau or dip down to foes below when you stand on one
-  if (s && (kind === 'bolt' || kind === 'pellet' || kind === 'slug' || kind === 'flame')) {
+  // (2026-10-18: every flying shot, boomerangs and bubbles too. A shot that climbs also clears the near edge of the block its
+  // target stands on, so close-range shots no longer clip the plateau's side, and it levels off at the target's height
+  // (b.yTo) instead of climbing on into the sky, so a miss can still find another foe up there.)
+  if (s && (kind === 'bolt' || kind === 'pellet' || kind === 'slug' || kind === 'flame' || kind === 'boomer' || kind === 'bubble' || kind === 'wave')) {
     // only when the target stands on a different level from you (plateau above, or ground below while you're up high);
     // same-level shots fly flat at chest height, which already hits everything on that level
     const t = aimTarget(x, z, a, 16), py = G.player ? G.player.y : 0;
-    if (t && Math.abs(t.y - py) > 0.5) { const d = Math.hypot(t.x - x, t.z - z), ty = t.y + Math.max(0.6, t.h * 0.55); b.vy = clamp((ty - y) * speed / Math.max(d, 0.6), -speed * 0.8, speed * 0.8); }
+    if (t && Math.abs(t.y - py) > 0.5) {
+      const d = Math.hypot(t.x - x, t.z - z), ty = t.y + Math.max(0.6, t.h * 0.55);
+      let vy = (ty - y) * speed / Math.max(d, 0.6);
+      if (t.y > y - 0.2) vy = Math.max(vy, (t.y + 0.2 - y) * speed / Math.max(0.3, d - PERCH_EDGE));   // over the block's near edge
+      b.vy = clamp(vy, -speed * 0.8, speed * 0.8); b.yTo = ty;
+    }
   }
+  // ground-hugging shots (critters always, balls aimed at a foe up on a block) hop up onto low blocks instead of bouncing off
+  // them, run across the top and drop off the far side (critterFloor in updateBullets)
+  if (s && kind === 'critter') b.climb = true;
+  if (s && kind === 'ball') { const t = aimTarget(x, z, a, 16); if (t && t.y > 0.5) b.climb = true; }
+  if (b.climb) b.base = 0;
   b.mesh.position.set(b.x, b.y, b.z); scene.add(b.mesh);
   G.bullets.push(b);
   return b;
 }
+// how far a raised foe's footing reaches toward you (a mesa or crate cell is about 2 units across): shots aim over this edge
+const PERCH_EDGE = 1.05;
+// Low blocks you can stand on (a top at most 2 up: mesas, crates, stumps) are floor for climbing shots. A climbing shot treats
+// them as passable (walls only above CLIMB_UP over its current footing) and rides their top; anything taller still bounces it.
+const CLIMB_UP = 2.05;
+const climbFloor = (x, z) => (G.room && G.room.hub ? 0 : groundAt(x, z, 0.12, 2.5));
 // the live enemy nearest the aim line (within ~20 degrees and `range`), used for vertical aim
 function aimTarget(x, z, a, range) {
   let best = null, bs = Infinity;
@@ -6233,20 +6260,27 @@ function updateBullets(dt) {
       if (b.rebiteT > 0 && (b.rebiteT -= dt) <= 0) b.hit.clear();
       const t = nearestEnemy(b.x, b.z, b.seek);
       if (t) steer(b, t, CRITTER_TURN, dt);
-      const hop = Math.abs(Math.sin(b.age * 12)) * 0.4; b.mesh.position.y = 0.35 + hop;
+      const hop = Math.abs(Math.sin(b.age * 12)) * 0.4; b.mesh.position.y = (b.base || 0) + 0.35 + hop;
     } else if (b.homing || (b.bounced && G.st.seekBounce)) {
       const t = nearestEnemy(b.x, b.z, 9); if (t) steer(b, t, 4 * Math.max(1, b.homing) + (b.bounced ? 4 : 0), dt);
     }
     if (b.kind === 'flame') { b.vx *= Math.max(0, 1 - dt * 2.2); b.vz *= Math.max(0, 1 - dt * 2.2); }   // its look grows and cools in SHOT_FX.flame
     if (b.kind === 'ball') { b.mesh.userData.spin.rotation.z -= dt * 12; }
     const ox = b.x, oz = b.z; b.x += b.vx * dt; b.z += b.vz * dt;
-    if (b.vy) { b.y += b.vy * dt; if (b.y < 0.12) { killBullet(b, i); continue; } }
-    if (wallAt(b.x, b.z, b.y)) {
+    if (b.vy) {
+      b.y += b.vy * dt;
+      if (b.yTo != null && ((b.vy > 0 && b.y >= b.yTo) || (b.vy < 0 && b.y <= b.yTo))) { b.y = b.yTo; b.vy = 0; }   // level off at the target's height
+      if (b.y < 0.12) { killBullet(b, i); continue; }
+    }
+    // climbing shots ride the tops of low blocks: up quickly (a hop), down a little slower (dropping off the edge)
+    if (b.climb) { const f = climbFloor(b.x, b.z); b.base += (f - b.base) * Math.min(1, dt * (f > b.base ? 16 : 9)); b.y = b.base + (b.kind === 'ball' ? 0.6 : 0.5); }
+    const wy = b.climb ? b.base + CLIMB_UP : b.y;
+    if (wallAt(b.x, b.z, wy)) {
       if (b.bounce > 0 || b.kind === 'boomer') {
         if (b.kind === 'boomer' && b.bounce <= 0) { b.outT = 0; b.x = ox; b.z = oz; }
         else {
           b.bounce--; b.bounced = true;
-          const bx = wallAt(b.x, oz, b.y), bz = wallAt(ox, b.z, b.y);
+          const bx = wallAt(b.x, oz, wy), bz = wallAt(ox, b.z, wy);
           if (bx) b.vx = -b.vx; if (bz) b.vz = -b.vz; if (!bx && !bz) { b.vx = -b.vx; b.vz = -b.vz; }
           b.x = ox; b.z = oz;
           if (b.kind === 'ball') { SHOT_FX.ball.bounce(b); sfx('boing'); }
