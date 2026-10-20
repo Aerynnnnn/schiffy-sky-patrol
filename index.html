@@ -10687,7 +10687,7 @@ function clearPetMesh() { if (G.pet && G.pet.mesh) { removeObj(G.pet.mesh); G.pe
 // Unknown ids (a new level or boss) fall back to a tune generated from the id itself (musFallback), so they always have music;
 // add an entry to MUSIC_BIOME / MUSIC_BOSS to hand-pick its character.
 // Playback: a small look-ahead scheduler on its own 10 Hz timer (like the ambience), one gain per track for crossfades, one
-// master gain (MUS_VOL x the menu's Music setting). Follows the Sound switch (`muted`); holds its place on the pause menu,
+// master gain (MUS_VOL x the menu's Music setting). Follows the Sound switch (`muted`); plays on through the Esc menu,
 // softer behind the other overlays, silent on a hidden tab. Straight to the speakers, not through the sfx compressor, so a
 // blast never pumps the music. MUS.probe (tests only) sends it to an analyser instead, like AMB.probe.
 
@@ -10734,7 +10734,9 @@ const MUSIC_BOSS = {
 const MUS_VOL = 0.22;
 const MUS_LEVELS = { off: { v: 0, label: 'Off' }, quiet: { v: 0.5, label: 'Quiet' }, normal: { v: 1, label: 'Normal' }, loud: { v: 2, label: 'Loud' } };
 const MUS_ORDER = ['off', 'quiet', 'normal', 'loud'];
-const MUS_HOLD = ['pause', 'report', 'logbook', 'controls'];          // the music waits here (picks up where it left off)
+// the Esc menu and the screens it opens: the music plays on at full volume (user's call, 2026-10-21: holding it here felt like
+// the song stopped and restarted)
+const MUS_MENU = ['pause', 'report', 'logbook', 'controls'];
 const MUS_SILENT = ['over', 'levelDone', 'title'];                     // these end the current tune
 const MUS = { g: null, probe: null, tracks: [], cur: null, held: false, songs: {}, waves: null, noise: null };
 
@@ -10960,10 +10962,10 @@ function musTick() {
   const c = actx, now = c.currentTime;
   if (!MUS.g) { MUS.g = c.createGain(); MUS.g.gain.value = 0; MUS.g.connect(MUS.probe || c.destination); }
   const vol = musVolume(), on = (!muted || MUS.probe) && !document.hidden && vol > 0;
-  const hold = !on || MUS_HOLD.includes(G.state);
+  const hold = !on;
   const want = on ? musWant() : null;
-  // master: full in play and boss intros, softer behind overlays (cards, map, shops ...), nothing while held
-  const k = hold ? 0 : (G.state === 'play' || G.state === 'intro') ? 1 : 0.45;
+  // master: full in play, boss intros and the Esc menu, softer behind the other overlays (cards, map, shops ...)
+  const k = hold ? 0 : (G.state === 'play' || G.state === 'intro' || MUS_MENU.includes(G.state)) ? 1 : 0.45;
   MUS.g.gain.setTargetAtTime(MUS_VOL * vol * k, now, hold ? 0.08 : 0.3);
   if (!on) { if (MUS.cur) { MUS.tracks.forEach(T => musKill(T, 0.2)); MUS.cur = null; } }
   else if (want !== (MUS.cur && MUS.cur.key)) {
