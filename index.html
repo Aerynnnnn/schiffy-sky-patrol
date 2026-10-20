@@ -1257,7 +1257,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 <!-- Sky landmarks seen from the hub lookout + its telescope (blender/build_sky.py) -->
 <script type="application/octet-stream" id="skyGlb" data-src="models/sky.glb?v=408ace2977"></script>
 <!-- Stall, jump pad, coral turret and boss bodies (blender/build_creatures.py) -->
-<script type="application/octet-stream" id="creaturesGlb" data-src="models/creatures.glb?v=f2af6e0fb7"></script>
+<script type="application/octet-stream" id="creaturesGlb" data-src="models/creatures.glb?v=b72f9101e9"></script>
 <!-- Regular enemy bodies (blender/build_enemies.py) -->
 <script type="application/octet-stream" id="enemiesGlb" data-src="models/enemies.glb?v=864318df48"></script>
 <!-- Boss bodies (blender/build_bosses.py) -->
@@ -4026,8 +4026,9 @@ function addCrackTell(room, g, th) {
       if (!room.crackHint && Math.hypot(p.x - cx, p.z - cz) < CRACK_NEAR) { room.crackHint = true; popText('Looks fragile...', p.x, p.y + 2.6, p.z, '#fff4dc'); }
     } });
 }
-// Stall_B's goods spots in model space [x, float height, z]: 0-3 the counter cushions, 4/5 crate and barrel tops, 7 a floor stump beside the counter
-const STALL_SPOTS = [[-2.4, 2.07, 1.0], [-0.8, 2.07, 1.0], [0.8, 2.07, 1.0], [2.4, 2.07, 1.0], [-4.0, 1.89, 0.2], [4.0, 1.58, -0.15], null, [-6.4, 0, 1.4]];
+// Stall_B's goods spots in model space [x, float height, z]: 0-3 and 6 the five counter cushions (left to right: 0 1 2 3 6),
+// 4/5 crate and barrel tops, 7 a floor stump beside the counter (unused since 2026-10-18: the snack has the fifth cushion now)
+const STALL_SPOTS = [[-2.6, 2.07, 1.0], [-1.3, 2.07, 1.0], [0.0, 2.07, 1.0], [1.3, 2.07, 1.0], [-4.0, 1.89, 0.2], [4.0, 1.58, -0.15], [2.6, 2.07, 1.0], [-6.4, 0, 1.4]];
 function stallSpot(pd, st, i) {
   const [lx, ly, lz] = STALL_SPOTS[i], c = Math.cos(st.rot), s = Math.sin(st.rot);
   pd.x = st.x + lx * c + lz * s; pd.z = st.z - lx * s + lz * c;
@@ -11173,7 +11174,7 @@ function setupRoomType(room) {
       const used = new Set(), st = room.stall, healP = Math.round((6 + G.sector * 2 + G.level * 3) * G.st.priceMul);
       const put = (spot, item, price) => { const pd = addPedestal(room, 0, 0, item, price); stallSpot(pd, st, spot); return pd; };
       [0, 1, 2].forEach(i => { let k = rollItem(i === 0 ? { min: 'rare' } : {}), g = 0; while (used.has(k) && g++ < 30) k = rollItem(); used.add(k); put(i, k, priceOf(k)); });
-      if (Math.random() < 0.55) { const w = 'w:' + rollWeaponId(); put(3, w, priceOf(w)); put(7, 'heal', healP); }   // 7 = a little display stump beside the counter
+      if (Math.random() < 0.55) { const w = 'w:' + rollWeaponId(); put(3, w, priceOf(w)); put(6, 'heal', healP); }   // 6 = the fifth cushion, right end of the counter (was a stump outside)
       else put(3, 'heal', healP);
       put(4, 'key', Math.round((10 + G.sector * 2) * G.st.priceMul));
       put(5, 'bombs', Math.round((8 + G.sector) * G.st.priceMul));
