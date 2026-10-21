@@ -319,6 +319,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #ffc8a6; col
 .swapopt kbd { position: absolute; left: 6px; top: 8px; margin: 0; z-index: 1; font-size: 11px; padding: 0 5px; }
 .swapopt:hover .invitem, .swapopt:focus-visible .invitem { transform: translateY(-2px); background: #ffe9e4; border-color: #c2412a; box-shadow: 0 0 0 3px #ffb3a3; }
 .swapopt:focus-visible { outline: none; }
+.swapopt.bound { cursor: not-allowed; }
+.swapopt.bound .invitem { filter: grayscale(.85); opacity: .55; }
+.swapopt.bound kbd { background: #ff4f6a; color: #fff; }
+.swapopt.bound .invitem { height: auto; }
+.swapopt.bound .boundtag { display: block; margin: 3px 4px 0 30px; font: 800 10.5px var(--body); color: #c2243f; text-align: center; }
 #swapCancel { margin-top: 2px; }
 .chip { font: 400 13px var(--display); min-width: 34px; height: 34px; padding: 0 6px; display: grid; place-items: center; color: var(--navy);
   border: 3px solid var(--navy); border-radius: 12px; box-shadow: 0 3px 0 var(--navy); position: relative; }
@@ -2206,7 +2211,7 @@ const GADGET_ART = {
 const G = {
   state: 'boot', mode: 'hub', run: 'story', loop: 0, rush: 0, level: 1, sector: 1, diff: 'normal', map: null, room: null, player: null, players: [],
   enemies: [], bullets: [], ebullets: [], hazards: [], traps: [], barriers: [], drones: [], orbs: [], fx: [],
-  crystals: 0, keys: 0, bombs: 0, kills: 0, items: {}, itemOrder: [], st: null, time: 0, lockGates: {}, chest: null,
+  crystals: 0, keys: 0, bombs: 0, kills: 0, items: {}, itemOrder: [], bound: {}, st: null, time: 0, lockGates: {}, chest: null,
   weapon: null, ability: 0, pet: null, runFound: [], phoenixUsed: false, runStats: null,
   shake: 0, hitstop: 0, transit: 0, roomGroup: null, world: null, portal: null, haloT: 0, haloMesh: null, bubble: null,
   cam: new THREE.Vector3(), zoom: 1, flash: 0, stormT: 4, interactables: [], npcs: [], waves: null,
@@ -10071,14 +10076,20 @@ function salvagePedestal(pd, xp) {
   toast('Salvaged', `${goodsInfo(pd.item).name} became ${xp} weapon XP`, '#6fe3ff');
   gainXP(xp / G.st.xp);   // gainXP applies the XP Specs bonus; the prompt already showed the boosted number
 }
+// cursed gadgets bind their slot when taken (G.bound[k]): the swap prompt and the safety net below can't drop them, so a curse
+// can't be swapped away the moment its upside or the altar's epic is in hand. The next sector/final boss kill unbinds them (onBossDead).
+const curseBound = k => !!(G.bound && G.bound[k] && G.items[k]);
+function curseBlockToast() { sfx('curse'); toast('Your passives are bound', 'Every slot holds a curse. Beat this sector\'s boss to loosen them', '#ff4f6a'); }
 function offerGadget(k, take) {
   if (!gadgetFull(k)) { take(); return; }
+  if (!G.itemOrder.some(i => !curseBound(i))) { curseBlockToast(); return; }   // nothing swappable: the new gadget stays put
   openSwap('gadget', k, old => { removeGadget(old, true); take(); });
 }
 // drop a gadget entirely, then resync everything stats drive (max bones, bubble shield, drones, orbs, the static hoop)
 function removeGadget(k, quiet) {
   if (!G.items[k]) return;
   delete G.items[k]; G.itemOrder = G.itemOrder.filter(i => i !== k);
+  if (G.bound) delete G.bound[k];
   computeStats();
   const p = G.player;
   if (p) { p.maxHp = G.st.maxHp; p.hp = Math.min(p.hp, p.maxHp); p.shield = Math.min(p.shield, G.st.shield); }
@@ -10102,9 +10113,15 @@ function giveItem(k) {
     return;
   }
   // safety net: interactive paths ask first (offerGadget); anything else that overflows drops the lowest-level, oldest gadget
-  if (gadgetFull(k)) removeGadget(G.itemOrder.slice().sort((a, b) => G.items[a] - G.items[b])[0], true);
+  // (never a bound curse; if every slot is bound the gadget isn't given)
+  if (gadgetFull(k)) {
+    const free = G.itemOrder.filter(i => !curseBound(i));
+    if (!free.length) { curseBlockToast(); return; }
+    removeGadget(free.sort((a, b) => G.items[a] - G.items[b])[0], true);
+  }
   const before = G.st.maxHp;
   G.items[k] = (G.items[k] || 0) + 1; G.upGain = (G.upGain || 0) + 1;
+  if (ITEMS[k].r === 'cursed') (G.bound || (G.bound = {}))[k] = true;
   if (!G.itemOrder.includes(k)) G.itemOrder.push(k);
   computeStats();
   p.maxHp = G.st.maxHp;
@@ -10254,6 +10271,7 @@ function updateInteract(dt) {
     if (wpn && G.weapon && G.weapon.id !== near.item.slice(2)) desc += `<br><b>Feeds your ${WEAPONS[G.weapon.id].name} (Lv ${G.weapon.level}) into it: Lv ${Math.max(1, Math.floor(G.weapon.level * 0.7))}, keeping its upgrades (up to ${WEAPON_SLOTS}).</b>`;
     const maxed = gadgetMaxed(near.item);
     if (maxed) desc += `<br><b>${info.name} is already MAX (Lv ${GADGET_MAX}). ${near.price ? 'It can\'t stack any higher.' : 'Salvage it for weapon XP instead.'}</b>`;
+    else if (gadgetFull(near.item) && !G.itemOrder.some(i => !curseBound(i))) desc += `<br><b>Passives full and every slot is bound by a curse: beat this sector's boss to loosen them, or salvage it instead.</b>`;
     else if (gadgetFull(near.item)) desc += `<br><b>Passives full (${G.itemOrder.length}/${GADGET_SLOTS}): you'll choose one to replace, or salvage it instead.</b>`;
     const salv = salvageXP(near);
     setPrompt({
@@ -11694,18 +11712,21 @@ function onBossDead(b) {
   petIsleCleared();
   if (b.mini) { makePedestalMesh(addPedestal(r, 0, -3, rollItem({ min: 'rare', noCursed: true }), 0)); toast('Rival defeated!', 'It left something behind'); updateHUD(true); return; }
   Hub.emit('sectorClear', { level: G.level, sector: G.sector, boss: b.id, kills: G.kills });
+  // curses bound before this fight loosen: still active, but they can be swapped out from now on (60-items curseBound)
+  const loose = G.itemOrder.filter(curseBound);
+  if (loose.length) { G.bound = {}; evLater(1.4, () => toast('Your curses loosen', `${loose.map(k => ITEMS[k].name).join(' & ')} can be swapped out now`, '#9dff7a')); }
   if (G.st.crown && G.crownBones < 3) { G.crownBones++; computeStats(); G.player.maxHp = G.st.maxHp; G.player.hp = Math.min(G.player.maxHp, G.player.hp + 1); popText('+1 max bone', G.player.x, G.player.y + 2.6, G.player.z, '#ffe08a'); }
   if (r.type === 'final' && G.run === 'rush') {
     // Boss Rush: a level boss is just another fight, unless it's the last one (77-modes)
     makePedestalMesh(addPedestal(r, -4.5, -3, rollItem({ min: 'epic', noCursed: true }), 0));
     toast(`${b.name} defeated!`, rushLast() ? 'Every boss is down!' : 'A portal opened', '#ffd34d');
-    if (rushLast()) G.doneT = 2.6; else addSectorPortal();
+    if (rushLast()) addFinishPortal(); else addSectorPortal();
   } else if (r.type === 'final') {
     makePedestalMesh(addPedestal(r, -3, -3, rollItem({ min: 'epic', noCursed: true }), 0));
     toast(`${b.name} defeated!`, `${biome().name} is safe`, '#ffd34d');
-    // the unlock is saved right now; the "Level cleared" screen follows a moment later, waiting out any
-    // level-up card, bag or pause screen that is open (a one-shot timer used to skip the unlock if one was)
-    recordLevelClear(); G.doneT = 2.6;
+    // the unlock is saved right now; the "Level cleared" screen waits for the finish portal, so the reward pedestal
+    // (and the gold, the swap prompt, a level-up card) can be dealt with first. It used to pop 2.6 s after the kill.
+    recordLevelClear(); addFinishPortal();
   } else {
     // sector bosses drop a weapon or a good gadget, then open the way on
     makePedestalMesh(addPedestal(r, -4.5, -3, Math.random() < 0.45 ? 'w:' + rollWeaponId() : rollItem({ min: 'rare', noCursed: true }), 0));
@@ -11713,6 +11734,16 @@ function onBossDead(b) {
     addSectorPortal();
   }
   updateHUD(true);
+}
+// after a level's final boss (or the last Boss Rush fight): jumping in opens the cleared screen (levelComplete via G.doneT)
+function addFinishPortal() {
+  const rush = G.run === 'rush';
+  addPortal(4.5, -3, {
+    label: rush ? 'Finish' : 'Level cleared',
+    prompt: () => ({ icon: PROMPT_ICONS.portal, verb: rush ? 'Boss Rush' : 'Level cleared', title: rush ? 'Finish the Boss Rush' : `Leave ${biome().name}`,
+      desc: 'Grab your reward first: the results come up when you jump in.', action: 'Jump in' }),
+    use: () => { if (!(G.doneT > 0)) G.doneT = 0.01; },
+  });
 }
 function addSectorPortal() {
   if (G.run === 'rush') { addRushPortal(); return; }
@@ -14571,7 +14602,7 @@ function startStory(level, run = 'story', startId) {
   hideBeams();
   clearPetMesh(); G.pet = null; G.puppy = null;
   showHubUI(false);
-  Object.assign(G, { state: 'play', mode: 'story', run, loop: 0, rush: 0, level, sector: 1, crystals: 0, keys: 0, bombs: 1, kills: 0, items: {}, itemOrder: [], shake: 0, hitstop: 0, flash: 0, ability: 0, phoenixUsed: false, runFound: [], pendingCards: 0, crownBones: 0, houndKills: 0, cloudT: 3, doneT: 0, levelRecorded: 0, goldFrac: 0, startWeapon: startW, daily: plan, runBanked: false });
+  Object.assign(G, { state: 'play', mode: 'story', run, loop: 0, rush: 0, level, sector: 1, crystals: 0, keys: 0, bombs: 1, kills: 0, items: {}, itemOrder: [], bound: {}, shake: 0, hitstop: 0, flash: 0, ability: 0, phoenixUsed: false, runFound: [], pendingCards: 0, crownBones: 0, houndKills: 0, cloudT: 3, doneT: 0, levelRecorded: 0, goldFrac: 0, startWeapon: startW, daily: plan, runBanked: false });
   // time = play time in seconds, counted in update() only (90-flow), so pauses, menus, cards and intros don't count; id tags this run's record (77-modes)
   G.runStats = { kills: 0, isles: 0, secrets: 0, hits: 0, start: performance.now(), time: 0, id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6) };
   computeStats();
@@ -16055,14 +16086,16 @@ $('#cardKeep').addEventListener('click', keepBuild);
 let SWAP = null;
 function openSwap(kind, key, onPick) {
   const wpn = kind === 'weapon', w = G.weapon;
-  const opts = wpn ? Object.keys(w.aff) : G.itemOrder.slice();
+  const opts = wpn ? Object.keys(w.aff) : G.itemOrder.filter(k => !curseBound(k));
+  const locked = wpn ? [] : G.itemOrder.filter(curseBound);   // bound curses: shown, padlocked, not pickable
   SWAP = { kind, key, onPick, prev: G.state, opts };
   G.state = 'swap'; mouse.down = false; hideBeams(); setPrompt(null);
   const name = wpn ? AFFIXES[key].name : ITEMS[key].name;
   $('#swapVerb').textContent = wpn ? `Weapon upgrades full · ${affCount(w)}/${WEAPON_SLOTS}` : `Schiffy's passives full · ${G.itemOrder.length}/${GADGET_SLOTS}`;
   $('#swapTitle').textContent = `Make room for ${name}?`;
   $('#swapNew').innerHTML = (wpn ? affCardHTML(key, 1) : gadgetCardHTML(key, 1)).replace('<em class="lv">', '<em class="lv new">New · ');
-  $('#swapList').innerHTML = opts.map((k, i) => `<button class="swapopt" type="button" data-swap="${k}"><kbd>${i + 1}</kbd>${wpn ? affCardHTML(k, w.aff[k]) : gadgetCardHTML(k, G.items[k])}</button>`).join('');
+  $('#swapList').innerHTML = opts.map((k, i) => `<button class="swapopt" type="button" data-swap="${k}"><kbd>${i + 1}</kbd>${wpn ? affCardHTML(k, w.aff[k]) : gadgetCardHTML(k, G.items[k])}</button>`).join('') +
+    locked.map(k => `<div class="swapopt bound" aria-disabled="true" title="Cursed: bound until you beat this sector's boss"><kbd>🔒</kbd>${gadgetCardHTML(k, G.items[k])}<span class="boundtag">Cursed · bound until you beat this sector's boss</span></div>`).join('');
   $('#swapCancel').innerHTML = wpn ? 'Back to the cards <small>Esc</small>' : `Keep my passives <small>Esc · ${name} stays here</small>`;
   $('#swapView').hidden = false; $('#swapList').querySelector('button').focus();
 }
