@@ -19185,8 +19185,8 @@ window.SchiffySkyPatrol = window.VoltageDescent = { manifest: GAME_MANIFEST, sta
 // Two players over the relay in coop-server/ (a Node WebSocket relay behind Caddy on an Oracle Cloud Always Free VM; setup in
 // coop-server/SETUP.md). The host's browser runs the whole game; the guest sends its input and draws the host's world from
 // snapshots (92-coop). This file is the socket, the room code flow and the Co-op panel in the hub menu.
-// COOP_URL empty = co-op hidden everywhere. `?coop=ws://localhost:8090` on the page URL overrides it (local tests).
-const COOP_URL = '';
+// COOP_URL empty = co-op hidden everywhere. `?coop=ws://127.0.0.1:8090` on the page URL overrides it (local relay tests).
+const COOP_URL = 'wss://schiffy-coop.onrender.com';   // Render free web service (coop-server/RENDER.md)
 const COOP_PROTO = 1;   // bump when the messages change: both players need the same build
 const COOP = {
   url: '', ws: null, role: null, code: '', peer: false, status: 'off', err: '', inRun: false, live: false,
@@ -19204,7 +19204,7 @@ function coopUrl() {
 }
 const coopAvailable = () => !!coopUrl();
 const coopConnected = () => !!(COOP.ws && COOP.ws.readyState === 1 && COOP.role);
-function coopSend(m) { if (COOP.ws && COOP.ws.readyState === 1) { try { COOP.ws.send(typeof m === 'string' ? m : JSON.stringify(m)); } catch (e) {} } }
+function coopSend(m) { if (COOP.ws && COOP.ws.readyState === 1) { try { COOP.ws.send(typeof m === 'string' ? m : JSON.stringify(m)); COOP.lastTx = performance.now(); } catch (e) {} } }
 // A free Render server sleeps after ~15 idle minutes and takes up to about a minute to wake: knock on /health first
 // (each try waits for the wake-up) and say so, then open the socket. A server that's awake answers at once.
 let coopTry = 0;
@@ -19245,6 +19245,7 @@ async function coopOpen(role, code) {
 }
 function coopClose(quiet) {
   coopTry++;   // stops a wake-up still waiting
+  coopSend('{"t":"bye"}');   // tells the relay at once (through Render's proxy a bare close can take a minute to arrive)
   const ws = COOP.ws; COOP.ws = null;
   const was = COOP.role, hadPeer = COOP.peer;
   COOP.role = null; COOP.peer = false; COOP.code = ''; COOP.status = 'off';
@@ -19252,7 +19253,26 @@ function coopClose(quiet) {
   if (was && !quiet) coopLost(was, hadPeer, true);
   coopPanelDraw(); coopPillDraw();
 }
+// While paired, each side sends something at least every COOP_KA_MS (a 'ka' when there's no game traffic), and a partner
+// who has said nothing for COOP_SILENT_MS is treated as gone: closing a tab through Render's proxy can leave the relay
+// unaware for up to 20 s, and a lost connection never says goodbye. (Timers run at 1/s in a background tab, so 'ka' keeps
+// going there; after ~5 hidden minutes Chrome slows them to 1/min and the partner may drop: they can rejoin with the code.)
+const COOP_KA_MS = 4000, COOP_SILENT_MS = 30000;
+COOP.lastTx = 0; COOP.lastPeerRx = 0;
+setInterval(() => {
+  if (!coopConnected() || !COOP.peer) return;
+  const now = performance.now();
+  if (now - COOP.lastTx > COOP_KA_MS - 500) coopSend({ t: 'ka' });
+  if (COOP.lastPeerRx && now - COOP.lastPeerRx > COOP_SILENT_MS) {
+    toast('Lost your partner', 'Nothing heard from them for 30 seconds', '#ff8f8f');
+    if (COOP.role === 'guest') coopClose();                              // the host's game is gone: leave and go home
+    else { COOP.peer = false; COOP.status = 'waiting'; coopPeerLeft(false); coopPanelDraw(); coopPillDraw(); }   // host keeps the room open for a rejoin
+  }
+}, 1000);
+addEventListener('pagehide', () => coopSend('{"t":"bye"}'));
 function coopOnMessage(m) {
+  if (m.t !== 'room' && m.t !== 'err' && m.t !== 'pong') COOP.lastPeerRx = performance.now();
+  if (m.t === 'ka') return;
   switch (m.t) {
     case 'room': COOP.role = 'host'; COOP.code = m.code; COOP.status = 'waiting'; coopPanelDraw(); coopPillDraw(); return;
     case 'joined': COOP.role = 'guest'; COOP.code = m.code; COOP.status = 'paired'; COOP.peer = true; coopSend({ t: 'hello', v: COOP_PROTO, ver: GAME_MANIFEST.version, cos: coopMyCos() }); coopPanelDraw(); coopPillDraw(); return;
@@ -19331,10 +19351,10 @@ function coopPanelDraw() {
   if (COOP.status === 'connecting') b.innerHTML = `<p class="cp-msg">Connecting…</p>`;
   else if (COOP.status === 'waking') b.innerHTML = `<p class="cp-msg">Waking the co-op server up… This can take up to a minute when nobody has played for a while.</p><button class="bigbtn" type="button" data-coop="leave">Cancel</button>`;
   else if (COOP.role === 'host') b.innerHTML = `<p class="cp-msg">Your game code</p><div class="cp-code">${COOP.code}</div>
-    <p class="cp-msg">${COOP.peer ? 'Your partner is here! Jump into any portal to start a run together.' : 'Send this code to your friend. They open Co-op, type it and press Join.'}</p>${err}
+    <p class="cp-msg">${COOP.peer ? 'Your partner is in your hub! Either of you can jump into a portal to start a run together.' : 'Send this code to your friend. They open Co-op, type it and press Join, and arrive in your hub.'}</p>${err}
     <button class="bigbtn" type="button" data-coop="leave">Stop hosting <small>End co-op</small></button>${note}`;
   else if (COOP.role === 'guest') b.innerHTML = `<p class="cp-msg">Joined game</p><div class="cp-code">${COOP.code}</div>
-    <p class="cp-msg">You're in! When the host starts a run you'll drop in beside them.</p>${err}
+    <p class="cp-msg">You're in your partner's hub. Look around their playground, then jump into a portal to start a run together.</p>${err}
     <button class="bigbtn" type="button" data-coop="leave">Leave <small>End co-op</small></button>${note}`;
   else b.innerHTML = `<button class="bigbtn primary" type="button" data-coop="host">Host a game <small>Get a code</small></button>
     <p class="cp-msg">or join a friend's game:</p>
@@ -19692,7 +19712,11 @@ function coopHostMsg(m) {
   switch (m.t) {
     case 'in': COOP.gin = m; if (mate && !mate.seen) { mate.seen = true; mate.x = m.x; mate.z = m.z; mate.y = m.y; mate.mesh.position.set(m.x, m.y, m.z); } return;
     case 'rejoin': if (G.mode === 'story' && G.state !== 'over') { if (!COOP.inRun) coopHostBegin(); else coopSendRoom(null); } return;
-    case 'left': COOP.inRun = false; coopRemoveMate(); coopToast('Your partner went home', 'You carry on solo. They can rejoin from Co-op in their hub menu.'); return;
+    case 'go':   // the guest jumped into a portal in my hub: start that run for both
+      if (G.mode === 'hub' && G.state === 'play' && !COOP.inRun) startStory(m.level || 1, m.run || 'story');
+      else coopSend({ t: 'nogo' });
+      return;
+    case 'left': COOP.inRun = false; coopRemoveMate(); COOP.hubSentKey = ''; coopToast('Your partner went home', 'You carry on solo. They can rejoin from Co-op in their hub menu.'); return;
   }
   if (!coopHost()) return;
   switch (m.t) {
@@ -19745,9 +19769,13 @@ function coopGuestMsg(m) {
     case 'over': if (COOP.inRun) coopGuestOver(m); return;
     case 'done': if (COOP.inRun) coopGuestDone(m); return;
     case 'hub': if (COOP.inRun) { COOP.hostHome = true; goHome(); } return;
+    case 'hubv': if (!COOP.inRun && G.mode === 'hub') coopVisitStart(m); return;
+    case 'hs': if (!COOP.inRun) coopGuestHubSnap(m); return;
+    case 'nogo': toast('Your partner is busy', 'They\'re in a menu. Try the portal again in a moment.', '#8fe3ff'); return;
   }
 }
 function coopGuestBegin(m) {
+  coopVisitEnd(false);   // my own save back before the run (its boss defeats, unlocks and gold are mine)
   for (const id of ['#levelDone', '#over', '#pause', '#mapView', '#invView', '#cardView', '#feedView', '#swapView', '#ctlView', '#collectView']) { const el = $(id); if (el) el.hidden = true; }
   if (coopEl) coopEl.hidden = true;
   if (G.state === 'homeEdit') { try { endHomeEdit(); } catch (e) {} }
@@ -19962,7 +19990,7 @@ function coopGuestPuppets(dt) {
         m.vx = dt > 0 ? (m.x - px) / dt : 0; m.vz = dt > 0 ? (m.z - pz) / dt : 0;
         m.mesh.position.set(m.x, m.y, m.z); m.mesh.rotation.y = m.face; m.mesh.scale.setScalar(r[13] ? 0.6 : 1);
         m.animate(dt, !!r[4]); m.body.rotation.x = r[9] ? 0.35 : 0;
-        m.mesh.visible = r[8] && !r[9] ? Math.floor(G.time * 18) % 2 === 0 : true; m.gun.visible = true;
+        m.mesh.visible = r[8] && !r[9] ? Math.floor(G.time * 18) % 2 === 0 : true; m.gun.visible = !COOP.visit;   // nobody holds a weapon in the hub
         m.blob.position.set(m.x, groundAt(m.x, m.z, m.r, m.y) + 0.03, m.z);
       }
     }
@@ -20091,6 +20119,115 @@ function coopGuestEndRun() {
 }
 
 // ================================================================
+// SHARED HUB (2026-10-24): the guest visits the host's hub
+// ================================================================
+// While paired outside a run, the guest is in the host's hub: it rebuilds its hub from a copy of the host's save fields the
+// hub is made of (the playground, trophies, open portals ...), both Schiffies run around and see each other, and a portal
+// either of them walks into starts the run for both (the guest's asks the host's game to start it). The guest's own save
+// is never touched: the borrowed fields are swapped back in for every write, and out again when the visit ends (a run
+// starting, leaving co-op, the host going away). Editing the host's playground, its difficulty, its pet bed or the
+// boutique is the host's alone.
+const COOP_VISIT_KEYS = ['home', 'bosses', 'unlocked', 'cleared', 'rush', 'endless', 'pets', 'weapons', 'runs', 'records', 'daily'];
+const COOP_VISIT_BLOCK = /^(Blueprint table|Difficulty|Schiffy's Playground|Boutique)/;
+const COOP_HUB_MS = 50;
+COOP.visit = false; COOP.own = null; COOP.hubSentKey = ''; COOP.hubT = 0; COOP.hubCheckT = 0;
+const coopHubLive = () => COOP.role === 'host' && COOP.peer && !COOP.inRun && G.mode === 'hub';
+// the host's side: what its hub is made of
+function coopVisitData() {
+  const d = {}; for (const k of COOP_VISIT_KEYS) if (SAVE[k] !== undefined) d[k] = SAVE[k];
+  d.owned = cosSave().owned;
+  return d;
+}
+function coopSendHub(force) {
+  const data = coopVisitData(), key = JSON.stringify(data) + '|' + G.diff;
+  if (!force && key === COOP.hubSentKey) return;
+  COOP.hubSentKey = key;
+  const p = G.player, msg = { t: 'hubv', save: data, diff: G.diff, x: cr2(p.x), z: cr2(p.z) };
+  let s = JSON.stringify(msg);
+  if (s.length > 60000) { delete data.records; delete data.daily; s = JSON.stringify(msg); }   // the relay takes 64 KB a message
+  coopSend(s);
+}
+function coopHubHostTick(dt) {
+  const m = COOP.mate, gi = COOP.gin; if (!m) return;
+  if (gi) {
+    const d = Math.hypot(gi.x - m.x, gi.z - m.z), k = d > 3 ? 1 : 1 - Math.exp(-dt * 25);
+    m.x += (gi.x - m.x) * k; m.z += (gi.z - m.z) * k; m.y += (gi.y - m.y) * k; m.face = gi.f || 0; m.vx = gi.vx || 0; m.vz = gi.vz || 0;
+  }
+  m.mesh.position.set(m.x, m.y, m.z); m.mesh.rotation.y = m.face; m.mesh.visible = true; m.mesh.scale.setScalar(gi && gi.fa ? 0.6 : 1);
+  m.animate(dt, !!(gi && gi.mv)); m.body.rotation.x = gi && gi.d ? 0.35 : 0; m.gun.visible = false;
+  m.blob.position.set(m.x, groundAt(m.x, m.z, m.r, m.y) + 0.03, m.z);
+}
+// the guest's side
+function coopVisitStart(m) {
+  const first = !COOP.visit;
+  if (first) {
+    COOP.own = { diff: G.diff, cosmetics: SAVE.cosmetics };
+    for (const k of COOP_VISIT_KEYS) COOP.own[k] = SAVE[k];
+  }
+  for (const k of COOP_VISIT_KEYS) { if (m.save[k] !== undefined) SAVE[k] = JSON.parse(JSON.stringify(m.save[k])); else delete SAVE[k]; }
+  // my outfits stay mine (equipped is shared, so a change made while visiting is kept); the owned list adds the host's
+  // playground items so their placed ones show
+  SAVE.cosmetics = Object.assign({}, COOP.own.cosmetics, { owned: Object.assign({}, COOP.own.cosmetics.owned, m.save.owned || {}) });
+  COOP.visit = true; G.diff = DIFFICULTY[m.diff] ? m.diff : 'normal';
+  // (re)build the hub as the host's; keep my spot on a refresh, else land beside the host
+  const p = G.player, keep = !first && G.mode === 'hub' && p ? [p.x, p.z] : null;
+  for (const id of ['#pause', '#collectView', '#howView']) { const el = $(id); if (el) el.hidden = true; }
+  if (coopEl) coopEl.hidden = true;
+  if (G.state === 'homeEdit') { try { endHomeEdit(); } catch (e) {} }
+  coopRemoveMate(); resetActors(); G.player = makePlayer(); G.players = [G.player];
+  try { cosHeroApply(G.player); } catch (e) {}
+  buildHub();
+  const me = G.player;
+  if (keep) { me.x = keep[0]; me.z = keep[1]; } else { me.x = (m.x || ARRIVE.x) + 1.3; me.z = m.z || ARRIVE.z; }
+  snapCamera();
+  COOP.mate = coopMakeMate(false); COOP.mate.h = []; COOP.mate.x = m.x || ARRIVE.x; COOP.mate.z = m.z || ARRIVE.z; COOP.mate.gun.visible = false;
+  COOP.mate.mesh.position.set(COOP.mate.x, 0, COOP.mate.z);
+  COOP.off = null;
+  if (first) toast(`You're in your partner's hub`, 'Look around their playground. Jump into a portal to start a run together.', '#8fe3ff');
+}
+function coopVisitEnd(rebuild) {
+  if (!COOP.visit) return;
+  const own = COOP.own; COOP.visit = false; COOP.own = null;
+  for (const k of COOP_VISIT_KEYS) { if (own[k] !== undefined) SAVE[k] = own[k]; else delete SAVE[k]; }
+  SAVE.cosmetics = own.cosmetics; G.diff = DIFFICULTY[SAVE.diff] ? SAVE.diff : own.diff;
+  coopRemoveMate(); COOP.off = null;
+  if (rebuild && G.mode === 'hub') { resetActors(); G.player = makePlayer(); G.players = [G.player]; try { cosHeroApply(G.player); } catch (e) {} buildHub(); }
+}
+function coopGuestHubSnap(s) {
+  if (!COOP.visit || !COOP.mate) return;
+  const now = performance.now(), off = s.ts - now;
+  if (COOP.off == null || off > COOP.off) COOP.off = off; else COOP.off += (off - COOP.off) * 0.02;
+  const m = COOP.mate, q = s.P;
+  (m.h || (m.h = [])).push([s.ts, q[0], q[1], q[2], q[3]]); if (m.h.length > 12) m.h.shift();
+  m.row = [q[0], q[1], q[2], q[3], q[4], 4, 4, 0, 0, q[5], 0, 0, 0, q[6]]; m.down = false;
+}
+// a guest's writes must never carry the host's borrowed fields into its own save
+const _writeSave = writeSave;
+writeSave = function () {
+  if (!COOP.visit || !COOP.own) return _writeSave();
+  const lent = {}; for (const k of COOP_VISIT_KEYS) lent[k] = SAVE[k];
+  const cos = SAVE.cosmetics;
+  for (const k of COOP_VISIT_KEYS) { if (COOP.own[k] !== undefined) SAVE[k] = COOP.own[k]; else delete SAVE[k]; }
+  SAVE.cosmetics = COOP.own.cosmetics;
+  try { _writeSave(); } finally { for (const k of COOP_VISIT_KEYS) { if (lent[k] !== undefined) SAVE[k] = lent[k]; else delete SAVE[k]; } SAVE.cosmetics = cos; }
+};
+// what's the host's alone in their hub
+const _addInteractable = addInteractable;
+addInteractable = function (o) {
+  if (o && typeof o.use === 'function') {
+    const use = o.use;
+    o.use = function (...a) {
+      if (COOP.visit) {
+        let pr = null; try { pr = o.prompt && o.prompt(); } catch (e) {}
+        if (pr && COOP_VISIT_BLOCK.test(pr.verb || '')) { sfx('deny'); toast('This is your partner\'s hub', 'Only they can change things here. Your own hub is back when co-op ends.', '#8fe3ff'); return; }
+      }
+      return use.apply(this, a);
+    };
+  }
+  return _addInteractable(o);
+};
+
+// ================================================================
 // messages + frame
 // ================================================================
 function coopGame(m) {
@@ -20099,9 +20236,10 @@ function coopGame(m) {
 }
 function coopPartnerHello() {
   if (COOP.role === 'host') {
-    coopToast('Your partner joined!', G.mode === 'story' ? 'They drop into your run now' : 'Start a run and they come along', '#8fe3ff');
+    coopToast('Your partner joined!', G.mode === 'story' ? 'They drop into your run now' : 'They\'re in your hub now. Either of you can start a run from a portal.', '#8fe3ff');
     if (G.mode === 'story' && G.state !== 'over') { if (!COOP.runId) COOP.runId = Date.now().toString(36); coopHostBegin(); }
-  } else toast('Joined!', 'You join your partner when they start a run', '#8fe3ff');
+    else COOP.hubSentKey = '';   // coopFrame sends the hub
+  } else toast('Joined!', 'Heading to your partner\'s hub…', '#8fe3ff');
 }
 function coopPeerLeft(closed) {
   if (COOP.role === 'host') {
@@ -20109,12 +20247,13 @@ function coopPeerLeft(closed) {
     COOP.inRun = false;
     const h = G.player;
     if (h && h.down) { h.down = false; coopUpPose(h); coopRemoveMate(); if (G.mode === 'story' && G.state !== 'over') _gameOver(); return; }
-    coopRemoveMate();
+    coopRemoveMate(); COOP.hubSentKey = '';
     for (const s of Object.values(COOP_VIEWS)) $(s).classList.remove('coopwait');
     COOP.cardOwner = COOP.swapOwner = COOP.feedOwner = 'host';
   } else if (closed) coopLost('guest', true);
 }
 function coopLost(role, hadPeer) {
+  if (role === 'guest' && COOP.visit) { toast('Co-op ended', 'Back to your own hub', '#8fe3ff'); coopVisitEnd(true); }
   if (role === 'guest' && COOP.inRun) { COOP.hostHome = true; toast('Co-op ended', 'Lost the connection to your partner', '#ff8f8f'); if (G.state !== 'over') goHome(); else coopGuestEndRun(); }
   if (role === 'host') { if (COOP.mate) coopToast('Co-op ended', 'Lost the connection to the co-op server', '#ff8f8f'); COOP.inRun = false; coopRemoveMate(); }
   COOP.runId = '';
@@ -20128,15 +20267,24 @@ function coopWaitBanner(on) {
 function coopFrame(now) {
   const dt = Math.min(0.05, Math.max(0, (now - (COOP.lastFrame || now)) / 1000)); COOP.lastFrame = now;
   if (COOP.role === 'host') {
-    if (COOP.inRun && G.mode === 'hub') { COOP.inRun = false; coopRemoveMate(); if (COOP.peer) coopSend({ t: 'hub' }); }
+    if (COOP.inRun && G.mode === 'hub') { COOP.inRun = false; coopRemoveMate(); COOP.hubSentKey = ''; if (COOP.peer) coopSend({ t: 'hub' }); }
     if (coopHost()) {
       if (!COOP.swapMate) COOP.hostP = G.player;
       coopEnsurePlayers(); coopModalSync();
       if (now - COOP.snapT >= COOP_SNAP_MS) { COOP.snapT = now; coopSnap(); }
+    } else if (coopHubLive() && G.player) {
+      // shared hub: the partner's Schiffy here, my hub's makeup (resent when it changes) and where I am, 20x a second
+      if (!COOP.mate) { COOP.mate = coopMakeMate(true); COOP.gin = null; COOP.mate.gun.visible = false; }
+      if (!COOP.hubSentKey) coopSendHub(true);
+      else if (now - COOP.hubCheckT > 1000) { COOP.hubCheckT = now; if (G.state === 'play') coopSendHub(false); }
+      if (now - COOP.hubT >= COOP_HUB_MS) {
+        COOP.hubT = now; const p = G.player;
+        coopSend({ t: 'hs', ts: Math.round(now), P: [cr2(p.x), cr2(p.y), cr2(p.z), cr2(p.face), p.onGround && Math.hypot(p.vx, p.vz) > 0.6 ? 1 : 0, p.dashT > 0 ? 1 : 0, p.falling > 0 ? 1 : 0] });
+      }
     }
-  } else if (COOP.role === 'guest' || COOP.inRun) {
+  } else if (COOP.role === 'guest' || COOP.inRun || COOP.visit) {
     if (COOP.inRun && G.mode === 'hub') coopGuestEndRun();
-    if (COOP.inRun) {
+    if (COOP.inRun || COOP.visit) {
       coopGuestPuppets(dt);
       if (now - COOP.inT >= COOP_IN_MS && G.player) {
         COOP.inT = now;
@@ -20160,6 +20308,7 @@ update = function (dt) {
   if (coopGuest()) { coopGuestUpdate(dt); return; }
   _update(dt);
   if (coopHost()) guard(coopHostTick, dt, 'coop');
+  else if (coopHubLive()) guard(coopHubHostTick, dt, 'coophub');
 };
 const _updatePlayer = updatePlayer;
 updatePlayer = function (dt) {
@@ -20188,6 +20337,8 @@ gameOver = function () {
 };
 const _startStory = startStory;
 startStory = function (level, run, startId) {
+  // a guest in the host's hub: the host's game starts the run (and sends us in)
+  if (COOP.role === 'guest' && COOP.visit && G.mode === 'hub') { coopSend({ t: 'go', level, run: run || 'story' }); sfx('go'); toast('Starting the run…', 'Your partner\'s game is opening it', '#8fe3ff'); return; }
   const co = COOP.role === 'host' && COOP.peer;
   if (co) { COOP.inRun = true; COOP.starting = true; COOP.runId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
   try { _startStory(level, run, startId); } finally { COOP.starting = false; }
