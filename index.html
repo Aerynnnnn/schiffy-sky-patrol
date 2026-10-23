@@ -19253,7 +19253,7 @@ function coopConnect(url, role, code, my, until) {
     if (COOP.ws !== ws) return;
     if (!opened) { COOP.ws = null; retry(); return; }   // never got through (asleep, or still waking): try again
     const was = COOP.role, hadPeer = COOP.peer;
-    COOP.ws = null; COOP.role = null; COOP.peer = false; COOP.status = 'off';
+    COOP.ws = null; COOP.role = null; COOP.peer = false; COOP.status = 'off'; COOP.rtt = 0;
     if (was) coopLost(was, hadPeer);
     coopPanelDraw(); coopPillDraw();
   };
@@ -19273,10 +19273,12 @@ function coopClose(quiet) {
 // unaware for up to 20 s, and a lost connection never says goodbye. (Timers run at 1/s in a background tab, so 'ka' keeps
 // going there; after ~5 hidden minutes Chrome slows them to 1/min and the partner may drop: they can rejoin with the code.)
 const COOP_KA_MS = 4000, COOP_SILENT_MS = 30000;
-COOP.lastTx = 0; COOP.lastPeerRx = 0;
+COOP.lastTx = 0; COOP.lastPeerRx = 0; COOP.rtt = 0; COOP.pingT = 0;
 setInterval(() => {
   if (!coopConnected() || !COOP.peer) return;
   const now = performance.now();
+  // round trip to the partner (through the relay) every 2 s, shown in the co-op pill
+  if (now - COOP.pingT > 2000) { COOP.pingT = now; coopSend({ t: 'png', at: Math.round(now) }); }
   if (now - COOP.lastTx > COOP_KA_MS - 500) coopSend({ t: 'ka' });
   if (COOP.lastPeerRx && now - COOP.lastPeerRx > COOP_SILENT_MS) {
     toast('Lost your partner', 'Nothing heard from them for 30 seconds', '#ff8f8f');
@@ -19288,6 +19290,8 @@ addEventListener('pagehide', () => coopSend('{"t":"bye"}'));
 function coopOnMessage(m) {
   if (m.t !== 'room' && m.t !== 'err' && m.t !== 'pong') COOP.lastPeerRx = performance.now();
   if (m.t === 'ka') return;
+  if (m.t === 'png') { coopSend({ t: 'pog', at: m.at }); return; }
+  if (m.t === 'pog') { const r = performance.now() - m.at; if (r >= 0 && r < 10000) COOP.rtt = COOP.rtt ? COOP.rtt * 0.6 + r * 0.4 : r; return; }
   switch (m.t) {
     case 'room': COOP.role = 'host'; COOP.code = m.code; COOP.status = 'waiting'; coopPanelDraw(); coopPillDraw(); return;
     case 'joined': COOP.role = 'guest'; COOP.code = m.code; COOP.status = 'paired'; COOP.peer = true; coopSend({ t: 'hello', v: COOP_PROTO, ver: GAME_MANIFEST.version, cos: coopMyCos() }); coopPanelDraw(); coopPillDraw(); return;
@@ -19329,6 +19333,10 @@ function coopStyle() {
 #coopPill b{font:400 16px var(--display,sans-serif);letter-spacing:.12em}
 #coopPill .bones{color:#ff5d7a;letter-spacing:0}
 #coopPill.down{background:#ffd2d2}
+#coopPill .ping{letter-spacing:0}
+#coopPill .ping.ok{color:#1d7a3a}
+#coopPill .ping.meh{color:#9a6200}
+#coopPill .ping.bad{color:#c2213a}
 #coopWait{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);z-index:7;font:400 26px var(--display,sans-serif);color:var(--cream,#fff4dc);text-shadow:0 3px 0 rgba(23,22,28,.6);pointer-events:none;text-align:center}
 .coopwait #cardRow,.coopwait #cardKeep,.coopwait #swapList,.coopwait #swapCancel,.coopwait #feedOk{pointer-events:none;opacity:.55}
 .coopwait .cw-tag{display:block}
@@ -19362,7 +19370,7 @@ function coopPanel() {
 function coopPanelDraw() {
   if (!coopEl) return;
   const b = coopEl.querySelector('.cp-body'), err = COOP.err ? `<p class="cp-msg cp-err">${COOP.err}</p>` : '';
-  const note = `<p class="cp-note">The host's game runs the world and leads: portals, shops and the pause menu work on the host's side, and you both share one weapon, its upgrades, the passives and the gold. Level-up picks take turns. Each of you keeps your own outfit. When the run ends, its gold goes into both players' savings.</p>`;
+  const note = `<p class="cp-note">Each of you has your own weapon, upgrades, passives and gold. Every kill levels up both weapons, gold drops a copy for each of you, and every pedestal can be taken once by each player. You pick your own level-up cards while your partner plays on. The host's pause menu pauses the game for both. Each of you keeps your own outfit and your own run gold.</p>`;
   if (COOP.status === 'connecting') b.innerHTML = `<p class="cp-msg">Connecting…</p>`;
   else if (COOP.status === 'waking') b.innerHTML = `<p class="cp-msg">Waking the co-op server up… This can take up to a minute when nobody has played for a while.</p><button class="bigbtn" type="button" data-coop="leave">Cancel</button>`;
   else if (COOP.role === 'host') b.innerHTML = `<p class="cp-msg">Your game code</p><div class="cp-code">${COOP.code}</div>
@@ -19412,6 +19420,7 @@ function coopPillDraw() {
   if (!COOP.peer) html += ' · waiting for partner';
   else if (P) { const mx = Math.min(12, P.maxHp || 0), hp = clamp(P.hp | 0, 0, mx); html += ` · Partner <span class="bones">${'♥'.repeat(hp)}${'♡'.repeat(mx - hp)}</span>${P.down ? ' · DOWN' : ''}`; }
   else html += ' · partner here';
+  if (COOP.peer && COOP.rtt) { const ms = Math.round(COOP.rtt); html += ` · <span class="ping ${ms < 120 ? 'ok' : ms < 250 ? 'meh' : 'bad'}" title="Round trip to your partner">${ms} ms</span>`; }
   if (coopPillEl.dataset.h !== html) { coopPillEl.dataset.h = html; coopPillEl.innerHTML = html; }
   coopPillEl.classList.toggle('down', !!(P && P.down));
 }
@@ -19420,16 +19429,25 @@ function coopPillDraw() {
 // guest's input. The guest moves its own Schiffy locally (so walking and dashing never lag) and sends where it is, its aim and
 // its trigger 30 times a second; the host fires the guest's weapon, decides every hit on both players, and sends a snapshot of
 // the world 20 times a second. The guest draws that world 100 ms in the past, interpolating between snapshots.
-// Shared run: one weapon (with its upgrades), one set of passives, one gold / key / grenade pool, one Bark Wave meter. Level-up
-// cards take turns (host, guest, host...). Each player has their own bones; at 0 they go down, and the partner revives them by
-// standing close for COOP_REVIVE_T s (or clearing the isle). Both down = game over. Run gold goes into both players' savings.
+// Each player has their own build (2026-10-24, the user's call): weapon, its level and upgrades, passives, gold, keys, grenades
+// and Bark Wave meter (COOP_BUILD_KEYS). The host keeps the guest's in COOP.mb and swaps it into G while running anything for
+// the guest's Schiffy (asPlayer). Every kill gives both weapons full XP; each player picks their own level-up cards while the
+// other plays on (the picker can't be hurt meanwhile). Gold drops twice (one copy each); treats, keys and grenades go to whoever
+// grabs them; every pedestal (gadgets, weapons, shop goods, vault picks) can be taken once by each player. Each player has
+// their own bones; at 0 they go down, and the partner revives them by standing close for COOP_REVIVE_T s (or clearing the
+// isle). Both down = game over. Run gold goes into each player's own savings.
 // Everything here is behind wrappers that call the original straight through unless a partner is connected (COOP.inRun), so
 // solo play runs the same code it always did.
 const COOP_SNAP_MS = 50, COOP_IN_MS = 33, COOP_DELAY = 100, COOP_REVIVE_R = 1.8, COOP_REVIVE_T = 2.0;
+// Revive penalty (2026-10-24, the user's request): each knockout in a run makes the next revive slower (COOP_REVIVE_T, then
+// +COOP_REVIVE_STEP s per earlier knockout, up to COOP_REVIVE_MAX). Either player can pay COOP_REVIVE_PAY of their own
+// gold at the body (E) to clear the penalty: the knockout count starts over and this revive needs COOP_REVIVE_T again.
+const COOP_REVIVE_STEP = 2.0, COOP_REVIVE_MAX = 12, COOP_REVIVE_PAY = 30;
+const coopReviveNeed = p => Math.min(COOP_REVIVE_MAX, COOP_REVIVE_T + COOP_REVIVE_STEP * Math.max(0, (p.deaths || 1) - 1));
 Object.assign(COOP, {
   hostP: null, mate: null, gin: null, iterP: null, starting: false, runId: '', nid: 0,
   sent: new Set(), ev: [], sfxSet: new Set(), snapT: 0, inT: 0, hudS: '', pedS: '', mapS: '',
-  cardTurn: 0, cardOwner: 'host', swapOwner: 'host', feedOwner: 'host', remote: false, modalK: null, modalN: 0, modalSent: -1,
+  mb: null, mbRun: '', gPendSent: 0, gStart: null, gDrop: null, mateSwap: null, hostPick: false, killXP: false, gunIds: '',
   pup: new Map(), off: null, evq: [], hostSt: 'play', lastSnap: null, myFire: false, lastFrame: 0, beams: [], swapMate: false,
 });
 const coopHost = () => COOP.role === 'host' && COOP.inRun && COOP.peer && !!COOP.mate;   // host, partner in this run
@@ -19438,7 +19456,8 @@ function coopPartner() { return COOP.mate; }
 const coopCid = o => o._cid || (o._cid = ++COOP.nid);
 const cr2 = v => Math.round(v * 100) / 100;
 // tell the partner about something visual (host only); dropped when nobody is listening
-function coopEv(...a) { if (coopHost() && !COOP.noEv && COOP.ev.length < 120) COOP.ev.push(a); }
+// (COOP.noEv: the host's own news, not sent; anything happening for the guest's Schiffy, inside asPlayer(mate), always is)
+function coopEv(...a) { if (coopHost() && (!COOP.noEv || COOP.swapMate) && COOP.ev.length < 120) COOP.ev.push(a); }
 // a toast meant for this screen only (the forwarded toast() would show it to the partner too)
 function coopToast(...a) { COOP.noEv = true; try { toast(...a); } finally { COOP.noEv = false; } }
 
@@ -19458,12 +19477,56 @@ function coopEnsurePlayers() {
   if (G.players.coop && G.players[0] === h && G.players[1] === COOP.mate) return;
   G.players = coopPlayersArray([h, COOP.mate]);
 }
-// run fn as if p were G.player (the guest's weapon, pickups, interactions on the host; the host's avatar on the guest)
+// the parts of G that make up one player's build
+const COOP_BUILD_KEYS = ['weapon', 'items', 'itemOrder', 'bound', 'st', 'crystals', 'keys', 'bombs', 'ability', 'pendingCards', 'goldFrac', 'crownBones', 'upGain', 'phoenixUsed', 'drones', 'orbs', 'houndKills', 'luckCurse'];
+function coopPutBuild(b) { const prev = {}; for (const k of COOP_BUILD_KEYS) { prev[k] = G[k]; G[k] = b[k]; } return prev; }
+// run fn as if p were G.player (the guest's weapon, pickups, interactions on the host, with the guest's own build swapped in;
+// on the guest it only swaps G.player, for the host's avatar)
 function asPlayer(p, fn) {
-  const P = G.player, ma = mouse.active, mg = mouseGround, gi = COOP.gin, swap = p === COOP.mate && COOP.role === 'host';
-  G.player = p; COOP.swapMate = swap;
+  const swap = p === COOP.mate && COOP.role === 'host';
+  if (swap && COOP.swapMate) return fn();   // already running for the guest
+  const P = G.player, ma = mouse.active, mg = mouseGround, gi = COOP.gin;
+  const hostBuild = swap && COOP.mb ? coopPutBuild(COOP.mb) : null;
+  G.player = p; COOP.swapMate = swap; COOP.hostBuild = hostBuild;
   if (swap && gi) { mouse.active = !!gi.ms; mouseGround = () => new THREE.Vector3(gi.mx || 0, 0, gi.mz || 0); }
-  try { return fn(); } finally { G.player = P; mouse.active = ma; mouseGround = mg; COOP.swapMate = false; }
+  try { return fn(); } finally {
+    if (hostBuild) { for (const k of COOP_BUILD_KEYS) COOP.mb[k] = G[k]; coopPutBuild(hostBuild); }
+    G.player = P; mouse.active = ma; mouseGround = mg; COOP.swapMate = false; COOP.hostBuild = null;
+  }
+}
+// the reverse, from inside asPlayer(mate): run fn as the host with the host's build (a portal the guest used, a room change)
+function coopAsHost(fn) {
+  if (!COOP.swapMate || !COOP.hostBuild) return fn();
+  const P = G.player, hb = COOP.hostBuild;
+  for (const k of COOP_BUILD_KEYS) COOP.mb[k] = G[k];
+  coopPutBuild(hb); G.player = COOP.hostP || P; COOP.swapMate = false;
+  try { return fn(); } finally {
+    for (const k of COOP_BUILD_KEYS) hb[k] = G[k];
+    coopPutBuild(COOP.mb); G.player = P; COOP.swapMate = true;
+  }
+}
+// the guest's drones and orbiting snacks are meshes in the host's scene
+function coopDropMateExtras() { const b = COOP.mb; if (!b) return; for (const d of b.drones || []) removeObj(d.mesh); for (const o of b.orbs || []) removeObj(o.mesh); b.drones = []; b.orbs = []; }
+// the guest's starting build: the same kit startStory gives (75-hub), rolled for the guest's own weapon
+function coopInitMateBuild() {
+  coopDropMateExtras();
+  const plan = G.daily, startW = plan ? plan.weapon : (WEAPONS[COOP.gStart] ? COOP.gStart : 'blaster');
+  COOP.mb = { weapon: newWeapon(startW), items: {}, itemOrder: [], bound: {}, st: null, crystals: 0, keys: 0, bombs: 1, ability: 0, pendingCards: 0, goldFrac: 0,
+    crownBones: 0, upGain: 0, phoenixUsed: false, drones: [], orbs: [], houndKills: 0, luckCurse: null };
+  COOP.gPendSent = 0;
+  asPlayer(COOP.mate, () => {
+    computeStats();
+    const level = G.level;
+    if (level > 1 && G.run !== 'rush') {
+      G.weapon.level = Math.min(WEAPON_MAX_LV, 1 + 3 * (level - 1));
+      for (let k = 0; k < 2 * (level - 1); k++) kitAffix();
+      for (let k = 0; k < 3 * (level - 1); k++) kitGadget(k === 0 ? 'rare' : undefined);
+      G.crystals = 20 + 10 * (level >= 4); G.keys = 1; G.bombs = 2 + (level >= 4); computeStats();
+    }
+    if (G.run === 'rush') { try { rushKit(); } catch (e) {} }
+    if (plan) { try { dailyKit(plan); } catch (e) {} }
+    computeStats();
+  });
 }
 const coopTryOn = cos => { const t = {}; for (const s of ['fur', ...COS_WORN]) t[s] = (cos && cos[s] && COS_BY[cos[s]]) || null; return t; };
 // the partner's Schiffy on this screen, dressed in the partner's own outfit (hostSide: this is the host's screen)
@@ -19479,6 +19542,7 @@ function coopGunLook(p) { if (p && G.weapon) { try { asPlayer(p, () => setGunLoo
 function coopRemoveMate() {
   const m = COOP.mate; if (!m) return;
   removeObj(m.mesh); removeObj(m.blob); if (m.chargeOrb) removeObj(m.chargeOrb); if (m.ring) removeObj(m.ring);
+  coopDropMateExtras();
   COOP.mate = null;
   if (G.player && G.players.coop) G.players = [G.player];
 }
@@ -19492,7 +19556,7 @@ function coopDownPose(p, dt) {
     p.ring.rotation.x = -Math.PI / 2; scene.add(p.ring);
   }
   p.ring.visible = true; p.ring.position.set(p.x, 0.07, p.z);
-  const k = clamp((p.reviveT || 0) / COOP_REVIVE_T, 0, 1);
+  const k = clamp((p.reviveT || 0) / (p.reviveNeed || COOP_REVIVE_T), 0, 1);
   if (p.ring.userData.k !== Math.round(k * 40)) {
     p.ring.userData.k = Math.round(k * 40);
     p.ring.geometry.dispose(); p.ring.geometry = new THREE.RingGeometry(COOP_REVIVE_R - 0.3, COOP_REVIVE_R, 40, 1, Math.PI / 2, Math.max(0.05, k) * Math.PI * 2);
@@ -19510,7 +19574,7 @@ function coopUpPose(p) {
 function coopSer(o) {
   const seen = new WeakSet();
   return JSON.stringify(o, (k, v) => {
-    if (k === 'mesh' || k === 'icon' || k === 'ring' || k === 'lid' || k === 'g') return undefined;
+    if (k === 'mesh' || k === 'icon' || k === 'ring' || k === 'lid' || k === 'g' || k === 'allPeds' || k === 'gTaken' || k === '_g' || k === '_src') return undefined;
     if (typeof v === 'function') return undefined;
     if (v && typeof v === 'object') {
       if (v.isObject3D || v.isMaterial || v.isTexture || v.isBufferGeometry || v.isColor) return undefined;
@@ -19544,10 +19608,14 @@ function coopHostBegin() {
   if (COOP.role !== 'host' || !COOP.peer || G.mode !== 'story') return;
   COOP.inRun = true;
   if (!COOP.mate) COOP.mate = coopMakeMate(true);
-  const m = COOP.mate; m.maxHp = G.st.maxHp; m.hp = m.maxHp; m.shield = G.st.shield; m.down = false; m.reviveT = 0; m.inv = 1; coopUpPose(m);
+  const m = COOP.mate;
+  // a fresh run gets a fresh build for the guest; a rejoin mid-run keeps the one they had
+  if (!COOP.mb || COOP.mbRun !== COOP.runId) { COOP.mbRun = COOP.runId; coopInitMateBuild(); }
+  m.maxHp = COOP.mb.st.maxHp; m.hp = m.maxHp; m.shield = COOP.mb.st.shield; m.down = false; m.reviveT = 0; m.inv = 1; coopUpPose(m);
+  if (m.deathsRun !== COOP.runId) { m.deaths = 0; m.deathsRun = COOP.runId; if (G.player) G.player.deaths = 0; }   // a new run: no knockouts yet
   m.mesh.visible = true; m.blob.visible = true;
-  COOP.sent = new Set(); COOP.hudS = ''; COOP.pedS = ''; COOP.mapS = ''; COOP.cardTurn = 1;   // the guest picks the first card of a run
-  coopEnsurePlayers(); coopGunLook(m);
+  COOP.sent = new Set(); COOP.hudS = ''; COOP.pedS = ''; COOP.mapS = ''; COOP.gunIds = '';
+  coopEnsurePlayers();
   coopSend({ t: 'start', run: G.run, level: G.level, sector: G.sector, loop: G.loop, rush: G.rush, diff: G.diff, runId: COOP.runId, daily: G.daily || null });
   coopSendRoom(null);
 }
@@ -19558,6 +19626,7 @@ function coopSendRoom(via) {
   const side = Math.abs(p.z) > Math.abs(p.x) ? [1.3, 0] : [0, 1.3];
   m.x = clamp(p.x + side[0], -INNER, INNER); m.z = clamp(p.z + side[1], -INNER, INNER); m.y = p.y; m.vx = m.vz = 0; m.falling = 0;
   m.mesh.position.set(m.x, m.y, m.z); m.blob.position.set(m.x, 0.03, m.z);   // (the world may be frozen behind a menu right now)
+  if (COOP.mb && COOP.mb.st) m.shield = COOP.mb.st.shield;   // the bubble shield refills on every isle, as the host's does
   COOP.gin = null; COOP.sent = new Set(); COOP.pedS = '';
   coopSend({ t: 'isle', level: G.level, sector: G.sector, loop: G.loop, rush: G.rush, run: G.run, map: coopMapSummary(), room: coopSer(G.room), gx: m.x, gz: m.z, via });
 }
@@ -19565,7 +19634,7 @@ function coopSendRoom(via) {
 function coopSnap() {
   const h = G.player, m = COOP.mate, now = performance.now();
   const s = { t: 's', ts: Math.round(now), st: G.state };
-  const pl = p => [cr2(p.x), cr2(p.y), cr2(p.z), cr2(p.face), p.onGround && Math.hypot(p.vx, p.vz) > 0.6 ? 1 : 0, p.hp, p.maxHp, p.shield || 0, p.inv > 0 ? 1 : 0, p.dashT > 0 ? 1 : 0, p.down ? 1 : 0, cr2((p.reviveT || 0) / COOP_REVIVE_T), cr2(p.charge || 0), p.falling > 0 ? 1 : 0];
+  const pl = p => [cr2(p.x), cr2(p.y), cr2(p.z), cr2(p.face), p.onGround && Math.hypot(p.vx, p.vz) > 0.6 ? 1 : 0, p.hp, p.maxHp, p.shield || 0, p.inv > 0 ? 1 : 0, p.dashT > 0 ? 1 : 0, p.down ? 1 : 0, cr2((p.reviveT || 0) / (p.reviveNeed || COOP_REVIVE_T)), cr2(p.charge || 0), p.falling > 0 ? 1 : 0, p.reviveNeed || COOP_REVIVE_T];
   s.P = [pl(h), pl(m)];
   const E = [];
   for (const e of G.enemies) {
@@ -19577,7 +19646,7 @@ function coopSnap() {
   s.E = E;
   const B = [];
   for (const b of G.bullets) {
-    if (!b.mesh) continue;
+    if (!b.mesh || b._pred) continue;
     const id = coopCid(b), row = [id, cr2(b.x), cr2(b.y), cr2(b.z), cr2(b.mesh.rotation.y)];
     if (!COOP.sent.has(id)) { COOP.sent.add(id); row.push({ k: b.kind, c: b.color || 0xff7a4d, s: cr2(b.size || 1) }); }
     B.push(row);
@@ -19592,17 +19661,17 @@ function coopSnap() {
   s.S = S;
   const K = [];
   for (const it of (G.room && G.room.pickups) || []) {
-    if (!it.mesh) continue;
+    if (!it.mesh || it.owner === 'h') continue;   // (the host's own copy of a gold drop)
     const id = coopCid(it), row = [id, cr2(it.x), cr2(it.y), cr2(it.z)];
     if (!COOP.sent.has(id)) { COOP.sent.add(id); row.push({ k: it.kind, g: it.gem, sp: it.species, v: it.val }); }
     K.push(row);
   }
   s.K = K;
-  // pedestals, the shared purse and build: only when they change
-  const ped = JSON.stringify(((G.room && G.room.pedestals) || []).map(pd => ({ x: pd.x, z: pd.z, item: pd.item, price: pd.price, group: pd.group, slot: pd.slot, baseY: pd.baseY, sx: pd.sx, sz: pd.sz, sr: pd.sr, alt: pd.alt, ry: pd.mesh ? cr2(pd.mesh.rotation.y) : 0, vis: pd.mesh ? 1 : 0 })));
+  // the guest's own pedestals and build: only when they change
+  const ped = JSON.stringify(coopGuestPedList().map(pd => { const o = pd._src || pd; return { x: o.x, z: o.z, item: o.item, price: o.price, group: o.group, slot: o.slot, baseY: o.baseY, sx: o.sx, sz: o.sz, sr: o.sr, alt: o.alt, ry: o.mesh ? cr2(o.mesh.rotation.y) : cr2(pd.ry || 0), vis: 1 }; }));
   if (ped !== COOP.pedS) { COOP.pedS = ped; s.D = ped; }
-  const W = G.waves;
-  const hud = JSON.stringify({ c: G.crystals, k: G.keys, b: G.bombs, a: Math.round(G.ability), kl: G.kills, w: G.weapon, it: G.items, io: G.itemOrder, bd: G.bound, cb: G.crownBones || 0, ph: G.phoenixUsed ? 1 : 0, wv: W ? { n: W.n, total: W.total, left: W.left, delay: Math.ceil(W.delay || 0) } : null, rt: G.runStats ? Math.floor(G.runStats.time || 0) : 0 });
+  const W = G.waves, mb = COOP.mb || {};
+  const hud = JSON.stringify({ c: mb.crystals, k: mb.keys, b: mb.bombs, a: Math.round(mb.ability || 0), kl: G.kills, w: mb.weapon, it: mb.items, io: mb.itemOrder, bd: mb.bound, cb: mb.crownBones || 0, ph: mb.phoenixUsed ? 1 : 0, wv: W ? { n: W.n, total: W.total, left: W.left, delay: Math.ceil(W.delay || 0) } : null, rt: G.runStats ? Math.floor(G.runStats.time || 0) : 0 });
   if (hud !== COOP.hudS) { COOP.hudS = hud; s.H = hud; }
   const ms = JSON.stringify(coopMapSummary().map(r => [r.gx, r.gy, r.known ? 1 : 0, r.visited ? 1 : 0, r.cleared ? 1 : 0, r.hidden ? 1 : 0]));
   if (ms !== COOP.mapS) { COOP.mapS = ms; s.M = coopMapSummary(); }
@@ -19620,12 +19689,40 @@ function coopLookKey(look) {
   if (!coopLookKeys) { coopLookKeys = new Map(); for (const k in ESHOT) coopLookKeys.set(ESHOT[k], k); }
   return coopLookKeys.get(look) || null;
 }
+// Pedestals "one each": every pedestal the room ever had (room.allPeds) can be taken once by each player. The host's own list
+// is the game's room.pedestals as always; the guest's is allPeds minus what the guest took (room.gTaken), as stable stand-in
+// objects (pd._g, no meshes) so the game's own interaction code can run on it inside asPlayer(mate) without touching the
+// host's pedestals.
+function coopGuestPedList(room = G.room) {
+  if (!room || room.hub || !room.pedestals) return [];
+  if (!room.allPeds) room.allPeds = room.pedestals.slice();
+  if (!room.gTaken) room.gTaken = new Set();
+  return room.allPeds.filter(pd => !room.gTaken.has(pd)).map(pd => {
+    const g = pd._g || (pd._g = Object.assign({}, pd, { mesh: null, icon: null, ring: null, _src: pd, ry: pd.mesh ? pd.mesh.rotation.y : 0 }));
+    g.hold = pd.hold; return g;
+  });
+}
+// run fn for the guest with the guest's pedestal list in place of the host's
+function coopWithGuestPeds(fn) {
+  const room = G.room; if (!room || room.hub) return fn();
+  const own = room.pedestals, list = coopGuestPedList(room), before = list.slice();
+  room.pedestals = list;
+  try { return fn(); } finally {
+    for (const g of before) if (!room.pedestals.includes(g)) room.gTaken.add(g._src);
+    room.pedestals = own;
+  }
+}
 // the guest's Schiffy on the host: follows its reported position, fires its weapon, picks up loot, gets hurt, goes down
 function coopHostTick(dt) {
-  const m = COOP.mate, gi = COOP.gin; if (!m) return;
+  const m = COOP.mate, gi = COOP.gin, mb = COOP.mb; if (!m || !mb) return;
   coopEnsurePlayers();
-  // a weapon taken by either player: both Schiffies hold the new model
-  if (G.weapon && COOP.gunId !== G.weapon.id) { COOP.gunId = G.weapon.id; asPlayer(COOP.hostP || G.player, () => setGunLook()); coopGunLook(m); }
+  // each Schiffy holds its own weapon's model
+  const ids = (G.weapon ? G.weapon.id : '') + '|' + (mb.weapon ? mb.weapon.id : '');
+  if (COOP.gunIds !== ids) { COOP.gunIds = ids; setGunLook(); asPlayer(m, () => setGunLook()); }
+  // the guest's Bark Wave meter fills over time like the host's (update(), 90-flow); new level-ups go to the guest's screen
+  if (mb.st) mb.ability = Math.min(ABILITY_MAX, (mb.ability || 0) + dt * 4 * (1 + 0.5 * mb.st.bark) * (mb.st.barkRate || 1));
+  if (mb.pendingCards > COOP.gPendSent) { coopSend({ t: 'glevel', n: mb.pendingCards - COOP.gPendSent }); COOP.gPendSent = mb.pendingCards; }
+  if (gi && gi.pk) m.inv = Math.max(m.inv, 0.3);   // picking a card / a swap: can't be hurt meanwhile
   m.inv -= dt;
   if (gi && !m.down) {
     const d = Math.hypot(gi.x - m.x, gi.z - m.z), k = d > 3 ? 1 : 1 - Math.exp(-dt * 25);
@@ -19642,8 +19739,16 @@ function coopHostTick(dt) {
     m.mesh.visible = m.inv > 0 && m.dashT <= 0 ? Math.floor(G.time * 18) % 2 === 0 : true;
     m.gun.visible = true;
     const gy = groundAt(m.x, m.z, m.r, m.y); m.blob.position.set(m.x, gy + 0.03, m.z);
-    if (G.weapon && G.mode === 'story') asPlayer(m, () => weaponTick(m, !!(gi && gi.fi), dt));
-    if (G.room && !G.room.hub && m.falling <= 0) asPlayer(m, () => updatePickups(0));
+    if (G.mode === 'story') asPlayer(m, () => {
+      if (G.weapon) { COOP.predFire = coopPredictable(wStats()); try { weaponTick(m, !!(gi && gi.fi), dt); } finally { COOP.predFire = false; } }
+      try { syncDrones(); syncOrbs(); updateDrones(dt); } catch (e) {}   // the guest's own drones / orbiting snacks follow the guest
+    });
+    // loot: the guest's copies of gold drops fly to the guest (full physics), and the guest can grab the shared treats,
+    // keys and grenades (collect only: the host's pass already moves those)
+    if (G.room && !G.room.hub && m.falling <= 0) asPlayer(m, () => {
+      COOP.pkMode = 'mine'; try { updatePickups(dt); } finally { COOP.pkMode = null; }
+      COOP.pkMode = 'shared'; try { updatePickups(0); } finally { COOP.pkMode = null; }
+    });
     coopTraps(m);
     // walking off an edge takes the whole team to the next isle
     if (G.transit <= 0 && G.map && G.state === 'play' && m.falling <= 0) {
@@ -19659,9 +19764,34 @@ function coopHostTick(dt) {
     if (!down.down) continue;
     const near = !helper.down && helper.falling <= 0 && Math.hypot(helper.x - down.x, helper.z - down.z) < COOP_REVIVE_R;
     down.reviveT = near ? (down.reviveT || 0) + dt : Math.max(0, (down.reviveT || 0) - dt * 0.5);
-    if (down.reviveT >= COOP_REVIVE_T || (G.room && G.room.cleared && !G.room.sealed && !G.enemies.length)) coopRevive(down);
+    if (down.reviveT >= (down.reviveNeed || COOP_REVIVE_T) || (G.room && G.room.cleared && !G.room.sealed && !G.enemies.length)) coopRevive(down);
+    else if (!down.revIa || !G.interactables.includes(down.revIa)) down.revIa = coopReviveSpot(down, true);   // (a room change clears interactables)
   }
 }
+// the spot at a downed player's body: shows the revive timer, and E pays COOP_REVIVE_PAY of the presser's own gold to clear
+// the penalty. On the host it's real (the guest's E reaches it through 'use', inside asPlayer(mate) with the guest's gold);
+// on the guest it only shows the prompt.
+function coopReviveSpot(p, real) {
+  const ia = addInteractable({ x: p.x, z: p.z, r: COOP_REVIVE_R, coopRevive: p,
+    tick() { this.x = p.x; this.z = p.z; },
+    prompt: () => {
+      if (!p.down) return null;
+      const need = p.reviveNeed || COOP_REVIVE_T, mine = p === G.player, extra = need > COOP_REVIVE_T + 0.01;
+      return { icon: PROMPT_ICONS.spring, verb: mine ? 'Knocked out' : 'Revive', title: mine ? 'Your partner can revive you' : 'Stand here to revive',
+        desc: `Takes ${need} s${extra ? ` (each knockout this run adds ${COOP_REVIVE_STEP} s). Pay ${COOP_REVIVE_PAY} gold to clear that and make it ${COOP_REVIVE_T} s.` : '.'}`,
+        cost: extra ? { kind: 'gold', amount: COOP_REVIVE_PAY, have: G.crystals } : null, action: extra ? `Pay ${COOP_REVIVE_PAY} gold` : 'Stand here' };
+    },
+    use: () => {
+      if (!real || !p.down || !((p.reviveNeed || 0) > COOP_REVIVE_T + 0.01)) return;
+      if (G.crystals < COOP_REVIVE_PAY) { sfx('deny'); toast('Not enough gold', `Clearing the revive penalty costs ${COOP_REVIVE_PAY} gold`); return; }
+      G.crystals -= COOP_REVIVE_PAY; p.deaths = 1; p.reviveNeed = COOP_REVIVE_T; sfx('pickup');
+      popText(`-${COOP_REVIVE_PAY} gold`, G.player.x, G.player.y + 2.4, G.player.z, '#ffd34d');
+      toast('Revive sped up', `Penalty cleared: ${COOP_REVIVE_T} s to get back up`, '#9dff7a');
+      updateHUD(true);
+    } });
+  return ia;
+}
+function coopReviveSpotOff(p) { if (p && p.revIa) { const i = G.interactables.indexOf(p.revIa); if (i >= 0) G.interactables.splice(i, 1); p.revIa = null; } }
 // pressure plates and crumbling floor also answer to the guest's Schiffy (updateTraps only checks G.player)
 function coopTraps(p) {
   for (const tm of G.trapMeshes || []) {
@@ -19681,22 +19811,23 @@ function coopHurtMate(sx, sz, opts) {
   const m = COOP.mate;
   if (!m || m.down || m.hp <= 0 || G.state !== 'play' || G.mode !== 'story') return;
   if ((m.inv > 0 || m.dashT > 0) && !opts.fall) return;
+  const ms = (COOP.mb && COOP.mb.st) || G.st;   // the guest's own gadgets
   if (m.shield > 0 && !opts.fall) {
     m.shield--; m.inv = 0.8; sfx('shield');
-    if (G.st.guardian) explodeAt(m.x, m.z, 3.4, 2 * G.st.dmg * levelScale(), null, false);
+    if (ms.guardian) explodeAt(m.x, m.z, 3.4, 2 * ms.dmg * levelScale(), null, false);
     emit(m.x, m.y + 1, m.z, 26, 0x8fd3ff, { speed: 6, grav: 0, glow: true, color2: 0xffffff });
     return;
   }
   const dbl = !opts.fall && !opts.lava && Math.random() < endlessDoubleHit();
-  m.hp -= opts.fall && G.st.paper ? 2 : dbl ? 2 : 1; m.inv = 1.2;
+  m.hp -= opts.fall && ms.paper ? 2 : dbl ? 2 : 1; m.inv = 1.2;
   if (G.runStats) G.runStats.hits++;
   let kx = 0, kz = 0;
   if (!opts.fall && sx !== undefined) { const dx = m.x - sx, dz = m.z - sz, l = Math.hypot(dx, dz) || 1; kx = dx / l; kz = dz / l; }
   coopSend({ t: 'hurt', kx: cr2(kx), kz: cr2(kz), dbl: dbl ? 1 : 0, fall: opts.fall ? 1 : 0 });
   emit(m.x, m.y + 1, m.z, 10, 0xff5d7a, { speed: 6 });
   if (m.hp <= 0) {
-    if (G.st.phoenix && !G.phoenixUsed) {
-      G.phoenixUsed = true; m.hp = 1; m.inv = 2.2;
+    if (ms.phoenix && COOP.mb && !COOP.mb.phoenixUsed) {
+      COOP.mb.phoenixUsed = true; m.hp = 1; m.inv = 2.2;
       emit(m.x, m.y + 1, m.z, 50, 0xff9a3d, { speed: 9, size: 0.55, grav: -1, color2: 0xffe08a });
       coopToast('Second Wind!', 'Your partner is back on their paws with 1 bone'); coopEv('toast', 'Second Wind!', 'Back on your paws with 1 bone');
     } else coopDown(m);
@@ -19704,28 +19835,31 @@ function coopHurtMate(sx, sz, opts) {
 }
 function coopDown(p) {
   p.down = true; p.hp = 0; p.reviveT = 0; p.inv = 0; p.charge = 0; if (p.chargeOrb) p.chargeOrb.visible = false;
+  p.deaths = (p.deaths || 0) + 1; p.reviveNeed = coopReviveNeed(p);   // each knockout this run makes the revive slower
   const h = G.player, m = COOP.mate, mine = p === h;
   if (mine) { mouse.down = false; hideBeams(); }
   sfx('fall');
   if (h.down && m.down) { coopAllDown(); return; }
-  coopToast(mine ? 'You\'re down!' : 'Your partner is down!', mine ? 'Your partner can revive you: they stand next to you' : 'Stand next to them to revive them', '#ff8f8f');
-  coopEv('toast', mine ? 'The host is down!' : 'You\'re down!', mine ? 'Stand next to them to revive them' : 'Your partner can revive you: they stand next to you', '#ff8f8f');
+  const secs = `${p.reviveNeed} s`;
+  coopToast(mine ? 'You\'re down!' : 'Your partner is down!', mine ? `Your partner revives you by standing next to you (${secs})` : `Stand next to them for ${secs} to revive them`, '#ff8f8f');
+  coopEv('toast', mine ? 'The host is down!' : 'You\'re down!', mine ? `Stand next to them for ${secs} to revive them` : `Your partner revives you by standing next to you (${secs})`, '#ff8f8f');
+  p.revIa = coopReviveSpot(p, true);
 }
 function coopRevive(p) {
-  p.down = false; p.hp = 1; p.inv = 2; p.reviveT = 0; coopUpPose(p);
+  p.down = false; p.hp = 1; p.inv = 2; p.reviveT = 0; coopUpPose(p); coopReviveSpotOff(p);
   emit(p.x, p.y + 1, p.z, 30, 0x9dff7a, { speed: 6, size: 0.45, grav: -1, color2: 0xffffff }); FX.twinkle(p.x, p.y + 1.4, p.z, 0xc8ffb0, 10);
   sfx('heart'); popText('Back up!', p.x, p.y + 2.6, p.z, '#9dff7a');
 }
 function coopAllDown() {
   const h = G.player; h.hp = 0;
-  for (const p of [h, COOP.mate]) { p.down = false; coopUpPose(p); }
+  for (const p of [h, COOP.mate]) { p.down = false; coopUpPose(p); coopReviveSpotOff(p); }
   _gameOver();
 }
 // guest -> host messages
 function coopHostMsg(m) {
   const mate = COOP.mate;
   switch (m.t) {
-    case 'in': COOP.gin = m; if (mate && !mate.seen) { mate.seen = true; mate.x = m.x; mate.z = m.z; mate.y = m.y; mate.mesh.position.set(m.x, m.y, m.z); } return;
+    case 'in': COOP.gin = m; if (!COOP.inRun) COOP.gStart = m.sw || null; if (mate && !mate.seen) { mate.seen = true; mate.x = m.x; mate.z = m.z; mate.y = m.y; mate.mesh.position.set(m.x, m.y, m.z); } return;
     case 'rejoin': if (G.mode === 'story' && G.state !== 'over') { if (!COOP.inRun) coopHostBegin(); else coopSendRoom(null); } return;
     case 'go':   // the guest jumped into a portal in my hub: start that run for both
       if (G.mode === 'hub' && G.state === 'play' && !COOP.inRun) startStory(m.level || 1, m.run || 'story');
@@ -19735,40 +19869,29 @@ function coopHostMsg(m) {
   }
   if (!coopHost()) return;
   switch (m.t) {
-    case 'use': if (G.state === 'play' && !mate.down) asPlayer(mate, () => { const k = m.x ? 'KeyX' : 'KeyE', had = pressedSet.has(k); pressedSet.add(k); try { updateInteract(0); } finally { if (!had) pressedSet.delete(k); } }); return;
+    case 'use': if (G.state === 'play') asPlayer(mate, () => coopWithGuestPeds(() => { const k = m.x ? 'KeyX' : 'KeyE', had = pressedSet.has(k); pressedSet.add(k); try { updateInteract(0); } finally { if (!had) pressedSet.delete(k); } })); return;
     case 'ouch': if (G.state === 'play') coopHurtMate(mate.x, mate.z, { fall: !!m.fall, lava: !!m.lava }); return;
     case 'act':
       if (G.state !== 'play' || mate.down) return;
       if (m.a === 'bark') asPlayer(mate, () => useAbility(mate));
       else if (m.a === 'nade') asPlayer(mate, () => throwGrenade(mate));
       return;
-    case 'pick':
-      if (G.state !== 'card' || COOP.cardOwner !== 'guest') return;
-      COOP.remote = true; try { if (m.keep) keepBuild(); else pickCard(m.tag); } finally { COOP.remote = false; }
+    case 'gpick':   // the guest picked one of its own level-up cards (or kept its build)
+      if (!(COOP.mb.pendingCards > 0)) return;
+      asPlayer(mate, () => {
+        if (m.keep) { const p = G.player; if (p.hp < p.maxHp) p.hp++; else G.crystals += MAXED_GOLD; G.pendingCards--; }
+        else if (AFFIXES[m.tag]) { if (m.drop && G.weapon.aff[m.drop] !== undefined && weaponFull(m.tag)) delete G.weapon.aff[m.drop]; chooseCard(m.tag); }
+        else G.pendingCards--;
+      });
+      COOP.gPendSent = Math.max(0, COOP.gPendSent - 1);
       return;
-    case 'swapPick': if (G.state === 'swap' && COOP.swapOwner === 'guest') { COOP.remote = true; try { chooseSwap(m.k); } finally { COOP.remote = false; } } return;
-    case 'swapCancel': if (G.state === 'swap' && COOP.swapOwner === 'guest') { COOP.remote = true; try { cancelSwap(); } finally { COOP.remote = false; } } return;
-    case 'feedOk': if (G.state === 'feed' && COOP.feedOwner === 'guest') { COOP.remote = true; try { closeFeed(); } finally { COOP.remote = false; } } return;
+    case 'gswapPick':   // the guest chose which passive a new gadget replaces (its own swap prompt, sent as 'gswap')
+      if (COOP.mateSwap && COOP.mateSwap.opts.includes(m.old)) { const s = COOP.mateSwap; COOP.mateSwap = null; asPlayer(mate, () => coopWithGuestPeds(() => s.onPick(m.old))); }
+      return;
   }
 }
-// level-up cards, the swap prompt and the weapon-feed summary: whoever owns it picks, the other one watches
+// the overlays a player picks in (level-up cards, the swap prompt, the weapon-feed summary): in co-op each player's are their own
 const COOP_VIEWS = { card: '#cardView', swap: '#swapView', feed: '#feedView' };
-function coopModalOwner(k) { return k === 'card' ? COOP.cardOwner : k === 'swap' ? COOP.swapOwner : COOP.feedOwner; }
-function coopWaitTag(view, on, text) {
-  let t = view.querySelector('.cw-tag');
-  if (!t) { t = document.createElement('div'); t.className = 'cw-tag'; const menu = view.querySelector('.menu, .card, div') || view; menu.prepend(t); }
-  t.textContent = text; view.classList.toggle('coopwait', on);
-}
-function coopModalSync() {
-  const k = COOP_VIEWS[G.state] ? G.state : null;
-  if (!k) { if (COOP.modalK) { COOP.modalK = null; for (const s of Object.values(COOP_VIEWS)) $(s).classList.remove('coopwait'); coopSend({ t: 'modal', k: null }); } return; }
-  if (COOP.modalK === k && COOP.modalSent === COOP.modalN) return;
-  COOP.modalK = k; COOP.modalSent = COOP.modalN;
-  const view = $(COOP_VIEWS[k]), guestPicks = coopModalOwner(k) === 'guest';
-  coopWaitTag(view, guestPicks, k === 'card' ? 'Your partner picks this upgrade…' : 'Your partner is choosing…');
-  const html = view.innerHTML;
-  coopSend({ t: 'modal', k, html, mine: guestPicks ? 1 : 0 });
-}
 
 // ================================================================
 // GUEST
@@ -19778,7 +19901,9 @@ function coopGuestMsg(m) {
     case 'start': coopGuestBegin(m); return;
     case 'isle': if (COOP.inRun) coopGuestRoom(m); return;
     case 's': if (COOP.inRun && G.room) coopGuestSnap(m); return;
-    case 'modal': if (COOP.inRun) coopGuestModal(m); return;
+    case 'glevel': if (COOP.inRun) G.pendingCards = (G.pendingCards || 0) + (m.n || 1); return;   // my weapon levelled: cards to pick
+    case 'gswap': if (COOP.inRun) _openSwap(m.kind, m.key, old => coopSend({ t: 'gswapPick', old })); return;
+    case 'gfeed': if (COOP.inRun) { try { _openFeed(m.old, m.nw, m.dropped || []); } catch (e) {} } return;
     case 'hurt': if (COOP.inRun) coopGuestHurt(m); return;
     case 'boost': if (COOP.inRun && G.player) { G.player.vy = m.vy; G.player.onGround = false; } return;
     case 'over': if (COOP.inRun) coopGuestOver(m); return;
@@ -19856,9 +19981,11 @@ function coopGuestSnap(s) {
   const mate = COOP.mate, P = s.P;
   if (mate && P) {
     (mate.h || (mate.h = [])).push([s.ts, P[0][0], P[0][1], P[0][2], P[0][3]]); if (mate.h.length > 12) mate.h.shift();
-    mate.row = P[0]; mate.hp = P[0][5]; mate.maxHp = P[0][6]; mate.down = !!P[0][10]; mate.reviveT = P[0][11] * COOP_REVIVE_T;
+    mate.row = P[0]; mate.hp = P[0][5]; mate.maxHp = P[0][6]; mate.down = !!P[0][10]; mate.reviveNeed = P[0][14] || COOP_REVIVE_T; mate.reviveT = P[0][11] * mate.reviveNeed;
     const me = G.player, q = P[1];
-    me.hp = q[5]; me.maxHp = q[6]; me.shield = q[7]; if (q[8] && me.inv <= 0) me.inv = 0.25; me.down = !!q[10]; me.reviveT = q[11] * COOP_REVIVE_T;
+    me.hp = q[5]; me.maxHp = q[6]; me.shield = q[7]; if (q[8] && me.inv <= 0) me.inv = 0.25; me.down = !!q[10]; me.reviveNeed = q[14] || COOP_REVIVE_T; me.reviveT = q[11] * me.reviveNeed;
+    // the revive spot's prompt (paying is done by the host, through 'use')
+    for (const p of [mate, me]) { if (p.down && (!p.revIa || !G.interactables.includes(p.revIa))) p.revIa = coopReviveSpot(p, false); else if (!p.down) coopReviveSpotOff(p); }
     if (G.weapon && WEAPONS[G.weapon.id] && WEAPONS[G.weapon.id].kind === 'charge') { showChargeOrb(me, q[12]); showChargeOrb(mate, P[0][12]); }
   }
   if (s.H) coopGuestHud(JSON.parse(s.H));
@@ -19947,7 +20074,7 @@ function coopRemovePup(u, fx) {
 }
 function coopGuestClear() {
   for (const u of [...COOP.pup.values()]) coopRemovePup(u, false);
-  COOP.pup.clear(); COOP.evq = [];
+  COOP.pup.clear(); COOP.evq = []; coopCosClear();
   for (const b of COOP.lances || []) removeObj(b); COOP.lances = [];
 }
 // per frame on the guest (every state): move every puppet to where it was COOP_DELAY ms ago on the host
@@ -20059,18 +20186,6 @@ function coopGuestHurt(m) {
   flashScreen(0.35, '#ff5d7a');
   updateHUD(true);
 }
-function coopGuestModal(m) {
-  for (const [k, sel] of Object.entries(COOP_VIEWS)) if (k !== m.k) $(sel).hidden = true;
-  if (!m.k) { if (COOP_VIEWS[G.state]) G.state = COOP.hostSt === 'play' ? 'play' : 'coopwait'; return; }
-  const view = $(COOP_VIEWS[m.k]);
-  view.innerHTML = m.html; view.hidden = false;
-  coopWaitTag(view, !m.mine, m.k === 'card' ? 'Your partner picks this upgrade…' : 'Your partner is choosing…');
-  if (m.mine) { const t = view.querySelector('.cw-tag'); if (t) t.textContent = m.k === 'card' ? 'Your pick!' : ''; view.classList.remove('coopwait'); t && (t.style.display = 'block'); }
-  COOP.guestModalMine = !!m.mine;
-  if (m.k === 'card') { view.classList.remove('lvscreen'); void view.offsetWidth; view.classList.add('lvscreen'); }
-  G.state = m.k; mouse.down = false; keys.clear();
-  const b = view.querySelector('button:not([disabled])'); if (b && m.mine) b.focus();
-}
 function coopGuestOver(m) {
   G.state = 'over'; hideBeams(); setPrompt(null); $('#bossbar').hidden = true;
   if (G.player) G.player.mesh.visible = false;
@@ -20093,7 +20208,12 @@ function coopGuestDone(m) {
 function coopGuestUpdate(dt) {
   G.transit -= dt;
   const me = G.player;
-  if (me.down) { coopDownPose(me, dt); keys.clear(); }
+  if (me.down) {
+    coopDownPose(me, dt); keys.clear();
+    // E at my own body pays to clear the revive penalty (done by the host, with my gold)
+    if (pressedSet.has('KeyE')) coopSend({ t: 'use' });
+    for (const k of ['KeyE', 'KeyX', 'KeyQ', 'KeyG']) pressedSet.delete(k);
+  }
   else {
     coopUpPose(me);
     // E (use), X (salvage), Q (bark) and G / right-click (grenade) are done by the host
@@ -20106,10 +20226,13 @@ function coopGuestUpdate(dt) {
     if (bark) coopSend({ t: 'act', a: 'bark' });
     if (nade) coopSend({ t: 'act', a: 'nade' });
   }
+  guard(coopCosTick, dt, 'coopShots');
   guard(coopGuestTraps, dt); guard(coopGuestHazards, dt);
   guard(updateFx, dt); guard(updateDecals, dt); guard(updateTidePools, dt); guard(updateSnow, dt);
   guard(updateInteract, dt);
   guard(updateWaveHud, dt);
+  // my own level-up cards (the host told me how many with 'glevel'): picked here, sent to the host as 'gpick'
+  if (G.pendingCards > 0 && G.state === 'play' && G.weapon) openCards();
   // anything a local effect spawned that isn't a puppet (it would never move) goes
   for (let i = G.enemies.length - 1; i >= 0; i--) { const e = G.enemies[i]; if (!e._pup) { removeObj(e.mesh); removeObj(e.blob); if (e.warp) removeObj(e.warp); G.enemies.splice(i, 1); } }
   updateBossBar(); updateHUD(false);
@@ -20262,9 +20385,7 @@ function coopPeerLeft(closed) {
     COOP.inRun = false;
     const h = G.player;
     if (h && h.down) { h.down = false; coopUpPose(h); coopRemoveMate(); if (G.mode === 'story' && G.state !== 'over') _gameOver(); return; }
-    coopRemoveMate(); COOP.hubSentKey = '';
-    for (const s of Object.values(COOP_VIEWS)) $(s).classList.remove('coopwait');
-    COOP.cardOwner = COOP.swapOwner = COOP.feedOwner = 'host';
+    coopRemoveMate(); COOP.hubSentKey = ''; COOP.mateSwap = null;
   } else if (closed) coopLost('guest', true);
 }
 function coopLost(role, hadPeer) {
@@ -20285,7 +20406,15 @@ function coopFrame(now) {
     if (COOP.inRun && G.mode === 'hub') { COOP.inRun = false; coopRemoveMate(); COOP.hubSentKey = ''; if (COOP.peer) coopSend({ t: 'hub' }); }
     if (coopHost()) {
       if (!COOP.swapMate) COOP.hostP = G.player;
-      coopEnsurePlayers(); coopModalSync();
+      coopEnsurePlayers();
+      // my own level-up cards / swap prompt / weapon summary don't stop the world: it runs on while I pick (and I can't be hurt)
+      if (COOP_VIEWS[G.state] && G.mode === 'story') {
+        const st = G.state, wdt = Math.min(0.033, dt);
+        COOP.hostPick = true; G.state = 'play';
+        try { update(wdt); updateParticles(wdt); updateSprites(wdt); updatePopTexts(wdt); updateWorld(wdt); }
+        catch (e) { console.error('[coop] world while picking', e); }
+        finally { COOP.hostPick = false; if (G.state === 'play') G.state = st; }
+      }
       if (now - COOP.snapT >= COOP_SNAP_MS) { COOP.snapT = now; coopSnap(); }
     } else if (coopHubLive() && G.player) {
       // shared hub: the partner's Schiffy here, my hub's makeup (resent when it changes) and where I am, 20x a second
@@ -20305,7 +20434,9 @@ function coopFrame(now) {
         COOP.inT = now;
         const p = G.player, play = G.state === 'play' && !p.down, h = mouse.active && !TOUCH.on ? mouseGround(0) : null;
         coopSend({ t: 'in', x: cr2(p.x), y: cr2(p.y), z: cr2(p.z), vx: cr2(p.vx), vz: cr2(p.vz), f: cr2(p.face), ax: cr2(p.aimX), az: cr2(p.aimZ), fi: play && COOP.myFire ? 1 : 0,
-          d: p.dashT > 0 ? 1 : 0, g: p.onGround ? 1 : 0, fa: p.falling > 0 ? 1 : 0, mv: p.onGround && Math.hypot(p.vx, p.vz) > 0.6 ? 1 : 0, ms: h ? 1 : 0, mx: h ? cr2(h.x) : 0, mz: h ? cr2(h.z) : 0 });
+          d: p.dashT > 0 ? 1 : 0, g: p.onGround ? 1 : 0, fa: p.falling > 0 ? 1 : 0, mv: p.onGround && Math.hypot(p.vx, p.vz) > 0.6 ? 1 : 0, ms: h ? 1 : 0, mx: h ? cr2(h.x) : 0, mz: h ? cr2(h.z) : 0,
+          pk: COOP.inRun && COOP_VIEWS[G.state] ? 1 : 0,                                          // picking a card: the host keeps me safe
+          sw: COOP.visit && G.weapon && WEAPONS[G.weapon.id] ? G.weapon.id : undefined });      // the weapon I hold in the hub starts my run
       }
     }
     coopWaitBanner(COOP.inRun && G.state === 'coopwait');
@@ -20329,6 +20460,8 @@ const _updatePlayer = updatePlayer;
 updatePlayer = function (dt) {
   const p = G.player;
   if (coopHost() && p && p.down) { coopDownPose(p, dt); return; }
+  // picking my own card while the world runs on: Schiffy stands still and can't be hurt
+  if (COOP.hostPick && p) { p.inv = Math.max(p.inv, 0.3); p.vx = p.vz = 0; p.mesh.visible = true; p.animate(dt, false); return; }
   _updatePlayer(dt);
 };
 const _hurtPlayer = hurtPlayer;
@@ -20362,9 +20495,8 @@ startStory = function (level, run, startId) {
 const _enterRoom = enterRoom;
 enterRoom = function (room, via) {
   if (!coopHost()) return _enterRoom(room, via);
-  // the guest can walk the team through a gate: the move is still the host's Schiffy's
-  const P = G.player, h = COOP.hostP || P; G.player = h;
-  try { _enterRoom(room, via); } finally { G.player = P; }
+  // the guest can walk the team through a gate or a portal: the move is still the host's Schiffy's, with the host's build
+  coopAsHost(() => { const P = G.player; G.player = COOP.hostP || P; try { _enterRoom(room, via); } finally { G.player = P; } });
   if (!COOP.starting) coopSendRoom(via || null);
 };
 const _goHome = goHome;
@@ -20383,80 +20515,176 @@ for (const name of ['nextSector', 'startFinal']) {
   };
   if (name === 'nextSector') nextSector = w; else startFinal = w;
 }
-// stats that set the host's max bones / shield apply to the partner too
+// the guest's own stats set the guest's max bones and shield (computed inside asPlayer(mate), with the guest's build)
 const _computeStats = computeStats;
 computeStats = function () {
   _computeStats();
   const m = COOP.mate;
-  if (coopHost() && m) { m.maxHp = G.st.maxHp; m.hp = Math.min(m.hp, m.maxHp); if (m.shield > G.st.shield) m.shield = G.st.shield; }
+  if (coopHost() && COOP.swapMate && m) { m.maxHp = G.st.maxHp; m.hp = Math.min(m.hp, m.maxHp); if (m.shield > G.st.shield) m.shield = G.st.shield; }
 };
 const _onBossDead = onBossDead;
 onBossDead = function (b) { coopEv('boss', b.id, b.mini ? 1 : 0); _onBossDead(b); };
-// cards / swap / feed: who picks
+// ---- each player's own level-ups, swap prompts and weapon summaries ----
 const _openCards = openCards;
-openCards = function () {
-  if (coopHost()) { COOP.cardOwner = COOP.cardTurn % 2 ? 'guest' : 'host'; COOP.cardTurn++; COOP.modalN++; }
-  _openCards();
-};
-const _pickCard = pickCard;
-pickCard = function (tag) {
-  if (coopGuest()) { if (G.state === 'card' && COOP.guestModalMine) { coopSend({ t: 'pick', tag }); coopGuestPicked(tag); } return; }
-  if (coopHost() && COOP.cardOwner === 'guest' && !COOP.remote) return;
-  _pickCard(tag);
+openCards = function () { if (COOP.hostPick) return; _openCards(); };   // (the world running while I already pick)
+// the guest picks on its own screen: it applies the card locally at once and tells the host, which applies it to the real build
+const _chooseCard = chooseCard;
+chooseCard = function (tag) {
+  if (coopGuest()) { coopSend({ t: 'gpick', tag, drop: COOP.gDrop || undefined }); COOP.gDrop = null; }
+  return _chooseCard(tag);
 };
 const _keepBuild = keepBuild;
 keepBuild = function () {
-  if (coopGuest()) { if (G.state === 'card' && COOP.guestModalMine) { coopSend({ t: 'pick', keep: 1 }); coopGuestPicked(null); } return; }
-  if (coopHost() && COOP.cardOwner === 'guest' && !COOP.remote) return;
-  _keepBuild();
+  if (coopGuest() && G.state === 'card' && !G.cardPicking) coopSend({ t: 'gpick', keep: 1 });
+  return _keepBuild();
 };
-function coopGuestPicked(tag) { COOP.guestModalMine = false; const row = $('#cardRow'); if (row) row.querySelectorAll('.upcard').forEach(c => c.classList.add(c.dataset.card === tag ? 'chosen' : 'dismiss')); }
 const _openSwap = openSwap;
 openSwap = function (kind, k, onPick) {
-  if (coopHost()) { COOP.swapOwner = COOP.swapMate ? 'guest' : G.state === 'card' ? COOP.cardOwner : 'host'; COOP.modalN++; }
-  _openSwap(kind, k, onPick);
+  // a gadget the guest took on a full set of passives: the guest chooses on its own screen ('gswap' -> 'gswapPick')
+  if (coopHost() && COOP.swapMate) { COOP.mateSwap = { onPick, opts: kind === 'weapon' ? Object.keys(G.weapon.aff) : G.itemOrder.filter(i => !curseBound(i)) }; coopSend({ t: 'gswap', kind, key: k }); return; }
+  // the guest's own card on a full weapon: remember which upgrade goes, so the host drops the same one
+  if (coopGuest() && kind === 'weapon') return _openSwap(kind, k, old => { COOP.gDrop = old; onPick(old); });
+  return _openSwap(kind, k, onPick);
 };
-const _chooseSwap = chooseSwap;
-chooseSwap = function (old) {
-  if (coopGuest()) { if (G.state === 'swap' && COOP.guestModalMine) { COOP.guestModalMine = false; coopSend({ t: 'swapPick', k: old }); } return; }
-  if (coopHost() && COOP.swapOwner === 'guest' && !COOP.remote) return;
-  _chooseSwap(old);
-};
-const _cancelSwap = cancelSwap;
-cancelSwap = function () {
-  if (coopGuest()) { if (G.state === 'swap' && COOP.guestModalMine) { COOP.guestModalMine = false; coopSend({ t: 'swapCancel' }); } return; }
-  if (coopHost() && COOP.swapOwner === 'guest' && !COOP.remote) return;
-  _cancelSwap();
-};
-CLOSERS.swap = () => cancelSwap();
 const _openFeed = openFeed;
-openFeed = function (old, nw, dropped) { if (coopHost()) { COOP.feedOwner = COOP.swapMate ? 'guest' : 'host'; COOP.modalN++; } _openFeed(old, nw, dropped); };
-const _closeFeed = closeFeed;
-closeFeed = function () {
-  if (coopGuest()) { if (G.state === 'feed' && COOP.guestModalMine) { COOP.guestModalMine = false; coopSend({ t: 'feedOk' }); } return; }
-  if (coopHost() && COOP.feedOwner === 'guest' && !COOP.remote) return;
-  _closeFeed();
+openFeed = function (old, nw, dropped) {
+  if (coopHost() && COOP.swapMate) { coopSend({ t: 'gfeed', old, nw, dropped: dropped || [] }); return; }   // shown on the guest's screen
+  return _openFeed(old, nw, dropped);
 };
-// these buttons were bound to the original functions at load, and the guest's copies are rebuilt from the host's HTML (no
-// listeners at all): in a co-op run their clicks go through the wrappers above
-const COOP_BTNS = [['#cardKeep', () => keepBuild()], ['#swapCancel', () => cancelSwap()], ['#feedOk', () => closeFeed()]];
-document.addEventListener('click', e => {
-  if (!COOP.inRun || !e.target.closest) return;
-  for (const [sel, fn] of COOP_BTNS) if (e.target.closest(sel)) { e.stopImmediatePropagation(); e.preventDefault(); fn(); return; }
-}, true);
 // a guest leaving the host's run (Abandon run, Home on the game-over screen) never records Endless / Boss Rush / Daily results
 for (const sel of ['#quitBtn', '#titleBtn', '#homeBtn']) { const b = $(sel); if (b) b.addEventListener('click', () => { if (coopGuest()) { G.run = 'story'; G.loop = 0; } }, true); }
 // the guest's world is puppets: its own copies of these never fire, hit, drop or spawn anything
+// ---- the guest's own shots appear at once (2026-10-24, lag with a friend in the US) ----
+// With a far-away host the guest's bullets used to show up a full round trip late (300-500 ms). For weapons whose shots
+// fly straight (COOP_PRED: blaster, scattershot, flame puffer, bubble wand, while no Bounce / Homing upgrade bends them),
+// the guest now runs its own weapon locally in "look only" mode: the same attack() pattern, sounds, kick and muzzle flash,
+// with shots that fly, stop at walls and puff on the first foe (or pass on with Pierce) but deal no damage. The host still
+// fires the real ones (and decides every hit); it leaves those out of its snapshots so the guest doesn't see them twice.
+const COOP_PRED = new Set(['bolt', 'pellet', 'flame', 'bubble']);
+const COOP_FIRE_SFX = new Set(['shoot', 'scatter', 'flame', 'bubble']);
+const coopPredictable = s => !!s && COOP_PRED.has(s.kind) && !s.bounce && !s.homing;
+COOP.cosShots = [];
+function coopCosShot(kind, x, y, z, a, s, o = {}) {
+  const color = new THREE.Color(o.color || (s.d && s.d.color) || '#fff6c2').getHex();
+  const size = s.size * (o.sizeMul || 1) * (kind === 'pellet' ? 0.75 : 1), speed = (s.speed || 15) * (o.speedMul || 1);
+  const b = { kind, x, y, z, vx: Math.cos(a) * speed, vz: Math.sin(a) * speed, life: (s.life || 0.7) * (o.lifeMul || 1), age: 0, size, color, s, cos: true,
+    r: 0.16 * size * (kind === 'bubble' ? 2.4 : 1), pierce: (s.pierce || 0) + (kind === 'flame' ? 1 : 0), hit: new Set(), mesh: projMesh(kind, color, size) };
+  if (kind === 'flame') { b.burnBase = 1; b.grow = 1; }
+  if (kind === 'bubble') { b.radius = s.radius || 1.5; b.ph = rand(0, 6.3); }
+  b.maxLife = b.life; b.mesh.position.set(x, y, z); scene.add(b.mesh);
+  COOP.cosShots.push(b);
+  return b;
+}
+function coopCosEnd(b, i) {
+  const look = SHOT_FX[b.kind];
+  try { if (look && look.die) look.die(b); else if (b.kind !== 'flame') emit(b.x, b.y, b.z, 6, b.color, { speed: 4.5, size: 0.24, life: 0.25, grav: 2, drag: 4, glow: true, color2: 0xffffff }); } catch (e) {}
+  removeObj(b.mesh); COOP.cosShots.splice(i, 1);
+}
+function coopCosTick(dt) {
+  for (let i = COOP.cosShots.length - 1; i >= 0; i--) {
+    const b = COOP.cosShots[i]; b.age += dt; b.life -= dt;
+    if (b.life <= 0) { coopCosEnd(b, i); continue; }
+    if (b.kind === 'flame') { b.vx *= Math.max(0, 1 - dt * 2.2); b.vz *= Math.max(0, 1 - dt * 2.2); }
+    const ox = b.x, oz = b.z; b.x += b.vx * dt; b.z += b.vz * dt;
+    if (wallAt(b.x, b.z, b.y)) { coopCosEnd(b, i); continue; }
+    let dead = false;
+    for (const e of G.enemies) {
+      if (!e._pup || e.spawnT > 0 || e.hidden || b.hit.has(e)) continue;
+      if (segDist(ox, oz, b.x, b.z, e.x, e.z) < e.r + b.r && b.y > e.y - 0.4 && b.y < e.y + e.h + 0.3) {
+        b.hit.add(e);
+        try { if (SHOT_FX[b.kind] && SHOT_FX[b.kind].hit) SHOT_FX[b.kind].hit(b, e); } catch (er) {}
+        if (b.kind === 'bubble' || b.pierce <= 0) { dead = true; break; } b.pierce--;
+      }
+    }
+    if (dead) { coopCosEnd(b, i); continue; }
+    b.mesh.position.set(b.x, b.y, b.z);
+    try { if (SHOT_FX[b.kind] && SHOT_FX[b.kind].tick) SHOT_FX[b.kind].tick(b, dt); } catch (e) {}
+  }
+}
+function coopCosClear() { for (const b of COOP.cosShots) removeObj(b.mesh); COOP.cosShots = []; }
 const _weaponTick = weaponTick;
-weaponTick = function (p, firing, dt) { if (coopGuest() && p === G.player) { COOP.myFire = !!firing; return; } _weaponTick(p, firing, dt); };
+weaponTick = function (p, firing, dt) {
+  if (coopGuest() && p === G.player) {
+    COOP.myFire = !!firing;
+    if (G.weapon && G.state === 'play' && !p.down && coopPredictable(wStats())) { COOP.cos = true; try { _weaponTick(p, firing, dt); } finally { COOP.cos = false; } }
+    return;
+  }
+  _weaponTick(p, firing, dt);
+};
 const COOP_DUMMY_SHOT = () => ({ hit: new Set(), x: 0, y: 0, z: 0, vx: 0, vz: 0, mesh: null });
-const _spawnProj = spawnProj; spawnProj = function (...a) { if (coopGuest()) return COOP_DUMMY_SHOT(); return _spawnProj(...a); };
+const _spawnProj = spawnProj;
+spawnProj = function (kind, x, y, z, a, s, o) {
+  if (coopGuest()) return COOP.cos && s ? coopCosShot(kind, x, y, z, a, s, o) : COOP_DUMMY_SHOT();
+  const b = _spawnProj(kind, x, y, z, a, s, o);
+  if (coopHost() && COOP.swapMate && coopPredictable(s)) b._pred = 1;   // the guest draws this one itself
+  return b;
+};
 const _spawnLob = spawnLob; spawnLob = function (...a) { if (coopGuest()) return; return _spawnLob(...a); };
 const _enemyShoot = enemyShoot; enemyShoot = function (...a) { if (coopGuest()) return COOP_DUMMY_SHOT(); return _enemyShoot(...a); };
-const _spawnPickup = spawnPickup; spawnPickup = function (...a) { if (coopGuest()) return { kind: a[0], x: a[1], z: a[2], mesh: null }; return _spawnPickup(...a); };
+// gold drops twice in co-op: the host's copy (owner 'h') and the guest's (owner 'g', hidden on the host's screen); everything
+// else drops once and goes to whoever grabs it
+const _spawnPickup = spawnPickup;
+spawnPickup = function (kind, x, z, extra) {
+  if (coopGuest()) return { kind, x, z, mesh: null };
+  if (!(coopHost() && kind === 'gold' && G.mode === 'story')) return _spawnPickup(kind, x, z, extra);
+  const mine = _spawnPickup(kind, x, z, Object.assign({}, extra, { owner: 'h' }));
+  const theirs = _spawnPickup(kind, x, z, Object.assign({}, extra, { owner: 'g' }));
+  if (theirs.mesh) theirs.mesh.visible = false;
+  return mine;
+};
+const _makePickupMesh = makePickupMesh;
+makePickupMesh = function (it) { _makePickupMesh(it); if (it.owner === 'g' && COOP.role === 'host' && it.mesh) it.mesh.visible = false; };
+// each pass only sees its own pickups: the host's gold + the shared ones for the host; for the guest (COOP.pkMode) either
+// its gold (moved and collected) or the shared ones (collected only)
+const _updatePickups = updatePickups;
+updatePickups = function (dt) {
+  if (!coopHost() || !G.room || G.room.hub) return _updatePickups(dt);
+  const all = G.room.pickups, mode = COOP.swapMate ? COOP.pkMode : 'host';
+  const mine = all.filter(it => mode === 'host' ? it.owner !== 'g' : mode === 'mine' ? it.owner === 'g' : !it.owner), before = mine.slice();
+  G.room.pickups = mine;   // (the game splices this list as things are picked up)
+  try { _updatePickups(dt); } finally { const left = new Set(G.room.pickups), gone = before.filter(it => !left.has(it)); G.room.pickups = gone.length ? all.filter(it => !gone.includes(it)) : all; }
+};
+// pedestals: every one the room gets is also the guest's to take once (coopGuestPedList)
+const _addPedestal = addPedestal;
+addPedestal = function (room, x, z, item, price, group) {
+  const pd = _addPedestal(room, x, z, item, price, group);
+  if (COOP.role === 'host' && COOP.inRun && room && !room.hub) { if (!room.allPeds) room.allPeds = room.pedestals.slice(0, -1); room.allPeds.push(pd); }
+  return pd;
+};
+// every kill gives both weapons the full XP and both Bark meters their charge
+const _gainXP = gainXP, _chargeAbility = chargeAbility;
+function coopBoth(fn) {
+  if (!coopHost() || !COOP.killXP || COOP.inBoth) return fn();
+  COOP.inBoth = true;
+  try { fn(); if (COOP.swapMate) coopAsHost(fn); else asPlayer(COOP.mate, fn); } finally { COOP.inBoth = false; }
+}
+gainXP = function (amount) { coopBoth(() => _gainXP(amount)); };
+chargeAbility = function (amount) { coopBoth(() => _chargeAbility(amount)); };
+// the guest's weapon discoveries go into the guest's own save (from its HUD sync), not the host's
+const _discoverWeapon = discoverWeapon;
+discoverWeapon = function (id, level) { if (coopHost() && COOP.swapMate) return false; return _discoverWeapon(id, level); };
 const _hitEnemy = hitEnemy; hitEnemy = function (...a) { if (coopGuest()) return; return _hitEnemy(...a); };
 const _damageEnemy = damageEnemy; damageEnemy = function (...a) { if (coopGuest()) return; return _damageEnemy(...a); };
-const _killEnemy = killEnemy; killEnemy = function (...a) { if (coopGuest()) return; return _killEnemy(...a); };
+const _killEnemy = killEnemy;
+killEnemy = function (...a) {
+  if (coopGuest()) return;
+  if (!coopHost()) return _killEnemy(...a);
+  const was = COOP.killXP; COOP.killXP = true;
+  try { return _killEnemy(...a); } finally { COOP.killXP = was; }
+};
+// the host's own pickups, cards and purchases are the host's news: they aren't shown on the guest's screen (COOP.noEv)
+for (const name of ['updateInteract', 'chooseCard', 'keepBuild', 'giveItem', 'takeWeapon', 'removeGadget', 'salvagePedestal', 'offerGadget', 'gainXP']) {
+  const get = { updateInteract: () => updateInteract, chooseCard: () => chooseCard, keepBuild: () => keepBuild, giveItem: () => giveItem, takeWeapon: () => takeWeapon,
+    removeGadget: () => removeGadget, salvagePedestal: () => salvagePedestal, offerGadget: () => offerGadget, gainXP: () => gainXP }[name];
+  const orig = get();
+  const w = function (...a) {
+    if (!coopHost() || COOP.swapMate) return orig.apply(this, a);
+    const was = COOP.noEv; COOP.noEv = true;
+    try { return orig.apply(this, a); } finally { COOP.noEv = was; }
+  };
+  ({ updateInteract: f => { updateInteract = f; }, chooseCard: f => { chooseCard = f; }, keepBuild: f => { keepBuild = f; }, giveItem: f => { giveItem = f; }, takeWeapon: f => { takeWeapon = f; },
+    removeGadget: f => { removeGadget = f; }, salvagePedestal: f => { salvagePedestal = f; }, offerGadget: f => { offerGadget = f; }, gainXP: f => { gainXP = f; } })[name](w);
+}
 const _addPortal = addPortal; addPortal = function (x, z, opts) { if (coopHost() && G.mode === 'story') coopEv('portal', x, z, opts.label || '', opts.color); return _addPortal(x, z, opts); };
 // visual-only calls the host shares with the guest (all plain numbers / strings)
 // (not flashScreen: most flashes are the host's own hurt flash)
@@ -20467,12 +20695,22 @@ const COOP_FWD_FN = {
 };
 for (const [name, tag] of Object.entries(COOP_FWD)) {
   const [get, set] = COOP_FWD_FN[name], orig = get();
-  set(function (...a) { if (coopHost() && G.mode === 'story') coopEv(tag, ...a); return orig(...a); });
+  set(function (...a) {
+    if (coopHost() && G.mode === 'story') {
+      coopEv(tag, ...a);
+      if (tag === 'toast' && COOP.swapMate) return;   // the guest's own news (its card, its new gadget): only on the guest's screen
+    }
+    return orig(...a);
+  });
 }
 // sounds: each distinct one once per snapshot (the guest's own jump / dash play locally)
 const COOP_LOCAL_SFX = new Set(['ui', 'jump', 'jump2', 'dash', 'fall']);
 const _sfx = sfx;
-sfx = function (k) { if (coopHost() && G.mode === 'story' && !COOP_LOCAL_SFX.has(k)) COOP.sfxSet.add(k); return _sfx(k); };
+sfx = function (k) {
+  // (the guest already heard its own predicted shot's sound)
+  if (coopHost() && G.mode === 'story' && !COOP_LOCAL_SFX.has(k) && !(COOP.swapMate && COOP.predFire && COOP_FIRE_SFX.has(k))) COOP.sfxSet.add(k);
+  return _sfx(k);
+};
 const _seal = seal; seal = function () { _seal(); coopEv('seal'); };
 const _unseal = unseal; unseal = function () { _unseal(); coopEv('unseal'); };
 const _bloomIsle = bloomIsle; bloomIsle = function (animate) { if (animate) coopEv('bloom'); return _bloomIsle(animate); };
