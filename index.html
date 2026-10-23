@@ -19207,36 +19207,51 @@ const coopConnected = () => !!(COOP.ws && COOP.ws.readyState === 1 && COOP.role)
 function coopSend(m) { if (COOP.ws && COOP.ws.readyState === 1) { try { COOP.ws.send(typeof m === 'string' ? m : JSON.stringify(m)); COOP.lastTx = performance.now(); } catch (e) {} } }
 // A free Render server sleeps after ~15 idle minutes and takes up to about a minute to wake: knock on /health first
 // (each try waits for the wake-up) and say so, then open the socket. A server that's awake answers at once.
+// Some browsers and networks block that cross-site fetch (strict tracking protection, blockers, school networks) while the
+// socket itself would work (2026-10-24: a friend stayed on "Waking…" forever), so a fetch that fails outright twice stops
+// the knocking, and the socket is tried regardless, again every few seconds until COOP_CONNECT_MS is up.
+const COOP_CONNECT_MS = 100000;
+const COOP_NO_SERVER = 'Couldn\'t reach the co-op server. If you\'re on a school or work network, or use a strict blocker or tracking protection, try another network or browser.';
 let coopTry = 0;
-async function coopWake(url, my) {
-  const http = url.replace(/^ws/, 'http').replace(/\/$/, '') + '/health', t0 = performance.now();
-  while (performance.now() - t0 < 100000) {
-    if (my !== coopTry) return false;
+async function coopWake(url, my, until) {
+  const http = url.replace(/^ws/, 'http').replace(/\/$/, '') + '/health';
+  let refused = 0;
+  while (performance.now() < until) {
+    if (my !== coopTry) return 'stop';
+    const t1 = performance.now();
     try {
       const ac = new AbortController(), tm = setTimeout(() => ac.abort(), 20000);
       const r = await fetch(http, { cache: 'no-store', signal: ac.signal }); clearTimeout(tm);
-      if (r.ok) return true;
-    } catch (e) {}
-    if (performance.now() - t0 > 1500 && COOP.status !== 'waking') { COOP.status = 'waking'; coopPanelDraw(); }
+      if (r.ok) return 'up';
+    } catch (e) { if (performance.now() - t1 < 15000 && ++refused >= 2) return 'blocked'; }   // failed fast: blocked, not asleep
+    if (COOP.status !== 'waking') { COOP.status = 'waking'; coopPanelDraw(); }
     await new Promise(r => setTimeout(r, 2000));
   }
-  return false;
+  return 'slow';
 }
 async function coopOpen(role, code) {
   coopClose(true);
   const url = coopUrl(); if (!url) return;
-  const my = ++coopTry;
+  const my = ++coopTry, until = performance.now() + COOP_CONNECT_MS;
   COOP.status = 'connecting'; COOP.err = ''; COOP.role = null; COOP.code = ''; COOP.peer = false; coopPanelDraw();
-  if (!(await coopWake(url, my))) { if (my === coopTry) { COOP.status = 'off'; COOP.err = 'The co-op server didn\'t answer. Try again in a minute.'; coopPanelDraw(); } return; }
-  if (my !== coopTry) return;   // closed or restarted while waiting
-  let ws;
-  try { ws = new WebSocket(url); } catch (e) { COOP.status = 'off'; COOP.err = 'Could not reach the co-op server'; coopPanelDraw(); return; }
+  if ((await coopWake(url, my, until)) === 'stop' || my !== coopTry) return;   // closed or restarted while waiting
+  coopConnect(url, role, code, my, until);
+}
+function coopConnect(url, role, code, my, until) {
+  let ws, opened = false;
+  const retry = () => {
+    if (my !== coopTry) return;
+    if (performance.now() < until) { COOP.status = 'waking'; coopPanelDraw(); setTimeout(() => { if (my === coopTry) coopConnect(url, role, code, my, until); }, 3000); }
+    else { COOP.status = 'off'; COOP.err = COOP_NO_SERVER; coopPanelDraw(); }
+  };
+  try { ws = new WebSocket(url); } catch (e) { COOP.status = 'off'; COOP.err = COOP_NO_SERVER; coopPanelDraw(); return; }
   COOP.ws = ws;
-  ws.onopen = () => { coopSend(role === 'host' ? { t: 'host' } : { t: 'join', code }); };
+  ws.onopen = () => { opened = true; coopSend(role === 'host' ? { t: 'host' } : { t: 'join', code }); };
   ws.onmessage = e => { COOP.lastRx = performance.now(); let m; try { m = JSON.parse(e.data); } catch (err) { return; } coopOnMessage(m); };
-  ws.onerror = () => { if (COOP.ws === ws) COOP.err = COOP.err || 'Could not reach the co-op server'; };
+  ws.onerror = () => {};
   ws.onclose = () => {
     if (COOP.ws !== ws) return;
+    if (!opened) { COOP.ws = null; retry(); return; }   // never got through (asleep, or still waking): try again
     const was = COOP.role, hadPeer = COOP.peer;
     COOP.ws = null; COOP.role = null; COOP.peer = false; COOP.status = 'off';
     if (was) coopLost(was, hadPeer);
