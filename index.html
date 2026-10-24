@@ -1009,6 +1009,24 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
   .upcard .pips { padding-top: 2px; }
   #cardKeep { margin-top: 6px; }
 }
+/* difficulty badge (80-hud diffTagHTML): HUD beside the play time, pause card title, run-end screens.
+   Cozy = cream tag + pink heart; Nightmare = navy tag + orange flame, so the two read apart at a glance. */
+.difftag { display: inline-flex; align-items: center; gap: 5px; vertical-align: middle; width: max-content; white-space: nowrap;
+  background: var(--cream); color: var(--navy); border: 2.5px solid var(--navy); border-radius: 999px; padding: 1px 10px 1px 5px;
+  box-shadow: 0 3px 0 var(--navy); font: 400 14px var(--display); letter-spacing: .04em; text-transform: none; }
+.difftag svg { width: 17px; height: 17px; flex: none; fill: #ff8fb0; stroke: var(--navy); stroke-width: 2; stroke-linejoin: round; }
+.difftag[data-d=hard] { background: var(--navy); color: var(--cream); box-shadow: 0 3px 0 rgba(38,49,92,.45); }
+.difftag[data-d=hard] svg { fill: #ff8a3d; stroke: var(--cream); }
+.hudtags { justify-content: flex-end; gap: 8px; }
+.hudtags .difftag { font-size: 15px; border-width: 3px; padding: 2px 11px 2px 6px; }
+.hudtags .difftag svg { width: 18px; height: 18px; }
+#pauseTitle .difftag { margin-left: 4px; font-size: 13px; }
+.donehead { align-self: flex-start; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* game over: the first row of the stat grid (mode + difficulty); co-op mirrors this HTML to the guest */
+.statgrid .runline { grid-column: 1 / -1; margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.statgrid .runline > span:first-child { display: inline-block; font: 400 12px var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--cream); background: var(--navy); border-radius: 999px; padding: 2px 10px; }
+.statgrid .difftag { display: inline-flex; font: 400 14px var(--display); letter-spacing: .04em; text-transform: none; color: var(--navy); }
+.statgrid .difftag[data-d=hard] { color: var(--cream); }
 </style>
 
 <div id="app">
@@ -1046,7 +1064,8 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
     </div>
     <div class="corner tr">
       <div id="sector">Sector 1</div>
-      <div id="runTimer" class="pill runtimer" title="Play time (stops while paused)"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8.5"/><path d="M12 8.5V13l3 2M9.5 2.5h5"/></svg><b>0:00</b></div>
+      <!-- the run's difficulty (80-hud diffTagHTML) beside the play time -->
+      <div class="row hudtags"><span id="diffTag"></span><div id="runTimer" class="pill runtimer" title="Play time (stops while paused)"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8.5"/><path d="M12 8.5V13l3 2M9.5 2.5h5"/></svg><b>0:00</b></div></div>
       <!-- minimap (80-hud): click opens the full map (M); the corner button / N hides it, the pill brings it back (SAVE.minimap) -->
       <div class="mmblock">
         <div id="miniWrap">
@@ -1201,7 +1220,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 
   <div id="levelDone" class="screen mapscreen" hidden>
     <div class="mapcard donecard">
-      <span class="verb" id="doneSub">Level cleared</span>
+      <div class="donehead"><span class="verb" id="doneSub">Level cleared</span><span id="doneDiff"></span></div>
       <h2 id="doneTitle">Level cleared!</h2>
       <div class="statgrid" id="doneStats"></div>
       <p class="donepet" id="donePet"></p>
@@ -2836,6 +2855,21 @@ const canStand = (x, z, r, y, enemy) => walkable(x, z, r) && !blockedAt(x, z, r,
 function moveCircle(e, dx, dz) {
   if (G.room && G.room.hub) return moveHub(e, dx, dz);
   let hit = false; const en = enemyKind(e);
+  // round footprints (bushes, rocks, trees): slide round the curve. The axis-by-axis test below jams against a circle, since
+  // either axis step alone cuts into it, so sideways input along a bush did nothing (2026-10-24 playtest: "stuck on bushes")
+  if ((dx || dz) && !canStand(e.x + dx, e.z + dz, e.r, e.y, en)) {
+    const c = overlapCell(e.x + dx, e.z + dz, e.r, e.y, en);
+    if (c && OB[c.t] && OB[c.t].round) {
+      const nl = Math.hypot(e.x - c.cx, e.z - c.cz) || 1, ux = (e.x - c.cx) / nl, uz = (e.z - c.cz) / nl, into = dx * ux + dz * uz;
+      if (into < 0) {
+        // keep only the part of the move along the rim, then sit exactly on the rim
+        let tx = e.x + dx - into * ux, tz = e.z + dz - into * uz;
+        const R = c.h + e.r + 0.002, d = Math.hypot(tx - c.cx, tz - c.cz) || 1;
+        if (d < R) { tx = c.cx + (tx - c.cx) / d * R; tz = c.cz + (tz - c.cz) / d * R; }
+        if (canStand(tx, tz, e.r, e.y, en)) { e.x = tx; e.z = tz; return true; }
+      }
+    }
+  }
   if (dx) { if (canStand(e.x + dx, e.z, e.r, e.y, en)) e.x += dx; else hit = true; }
   if (dz) { if (canStand(e.x, e.z + dz, e.r, e.y, en)) e.z += dz; else hit = true; }
   return hit;
@@ -5920,6 +5954,7 @@ function swipeAttack(p, s, a0) {
     hitEnemy(e, s.dmg * over * (crit ? 3 : 1), s, { crit, kx: dx, kz: dz, knock: 1 + 0.6 * s.aff('bounce') });
     if (stamps++ < 4) pawStampHit(e);
   }
+  hitCratesInArc(p.x, p.z, a0, reach, half);
   for (let i = G.ebullets.length - 1; i >= 0; i--) {
     const b = G.ebullets[i], dx = b.x - p.x, dz = b.z - p.z, d = Math.hypot(dx, dz);
     if (d < reach + 0.3 && Math.abs(angDiff(a0, Math.atan2(dz, dx))) < half + 0.3) { emit(b.x, b.y, b.z, 6, 0xff8fb1, { speed: 3, size: 0.3, life: 0.25, grav: 0, glow: true }); removeEBullet(i); }
@@ -5948,11 +5983,12 @@ function updateBeam(p, s, firing, dt) {
     // the beam stops at the first tall obstacle
     // (2026-10-18) a foe standing up on the very block that stopped the beam is still hit: bc = that block's cell
     let len = s.range, bc = null;
-    for (let d = 0.5; d < s.range; d += 0.3) { const bx = m.x + Math.cos(a) * d, bz = m.z + Math.sin(a) * d; if (blockedAt(bx, bz, 0.05, m.y)) { len = d; bc = [cellOf(bx), cellOf(bz)]; break; } }
+    for (let d = 0.5; d < s.range; d += 0.3) { const bx = m.x + Math.cos(a) * d, bz = m.z + Math.sin(a) * d; if (blockedAt(bx, bz, 0.05, m.y)) { len = d; bc = [cellOf(bx), cellOf(bz), bx, bz]; break; } }
     const b = G.beams[k], ex = m.x + Math.cos(a) * len, ez = m.z + Math.sin(a) * len;
     b.position.set((m.x + ex) / 2, m.y, (m.z + ez) / 2); b.rotation.y = -a + Math.PI / 2;
     updateLance(b, len, width, dt); lanceImpact(ex, m.y, ez);
     if (tick) {
+      if (bc) hitCrateAt(bc[2], bc[3], m.y);
       for (const e of [...G.enemies]) {
         if (e.spawnT > 0) continue;
         const rx = e.x - m.x, rz = e.z - m.z, along = rx * Math.cos(a) + rz * Math.sin(a);
@@ -5994,7 +6030,7 @@ function thunderAttack(p, s, m, a0) {
   if (!picks.length) {
     // nothing to hit: a short crackle toward the aim, stopped by cover
     let len = reach * 0.6;
-    for (let d = 0.5; d < len; d += 0.35) if (blockedAt(m.x + Math.cos(a0) * d, m.z + Math.sin(a0) * d, 0.05, m.y)) { len = d; break; }
+    for (let d = 0.5; d < len; d += 0.35) if (blockedAt(m.x + Math.cos(a0) * d, m.z + Math.sin(a0) * d, 0.05, m.y)) { len = d; hitCrateAt(m.x + Math.cos(a0) * d, m.z + Math.sin(a0) * d, m.y); break; }
     thunderFx(m.x, m.y, m.z, m.x + Math.cos(a0) * len, m.y - 0.3, m.z + Math.sin(a0) * len, col, 0.6);
     return;
   }
@@ -6157,12 +6193,13 @@ function explodeAt(x, z, radius, dmg, s, isGrenade) {
     const d = Math.hypot(e.x - x, e.z - z);
     if (d < radius + e.r) { const crit = s && rollCrit(s); hitEnemy(e, dmg * (crit ? 3 : 1), s, { crit, kx: e.x - x, kz: e.z - z, knock: 1.4, noCrit: !s }); }
   }
-  if (!isGrenade || !G.room || G.room.hub) return;
-  // crates break apart (a little gold inside)
+  if (!G.room || G.room.hub) return;
+  // crates break apart (a little gold inside); a weapon's blast (lobber bombs) only chips them
   for (let j = 0; j < NC; j++) for (let i = 0; i < NC; i++) {
     if (G.room.obs[j][i] !== 'crate') continue;
-    if (Math.hypot(cellX(i) - x, cellX(j) - z) < radius + 0.9) breakCrate(i, j);
+    if (Math.hypot(cellX(i) - x, cellX(j) - z) < radius + 0.9) { if (isGrenade) breakCrate(i, j); else hitCrate(i, j); }
   }
+  if (!isGrenade) return;
   // a grenade near the cracked fence opens the way to the secret isle
   const sec = G.room.secret;
   if (sec && !sec.open) { const [ax, az] = DIRS[sec.dir]; if (Math.hypot(ax * HALF - x, az * HALF - z) < radius + 1.6) revealSecret(); }
@@ -6174,6 +6211,44 @@ function breakCrate(i, j) {
   emit(x, 0.6, z, 22, theme().wood, { speed: 6, size: 0.5, life: 0.6 });
   for (let k = 0; k < randi(1, 3); k++) spawnPickup('gold', x, z);
   if (Math.random() < 0.12) spawnPickup('bomb', x, z);
+}
+// Weapons break crates too (2026-10-24, the user's request): CRATE_HITS hits, each with a wobble and wood chips; a grenade still
+// smashes one at once. At most one hit per CRATE_HIT_GAP seconds, so streams (flame, beam ticks) take about as long as a few
+// blaster shots. Hooks: shots stopped by a wall (40-bullets), beam end, Paw Stamp arc, thunder's empty crackle, lobber blasts.
+// In co-op only the host's game counts hits (the guest gets the break through breakCrate's 'crate' event).
+const CRATE_HITS = 3, CRATE_HIT_GAP = 0.15, crateWobs = [];
+function hitCrate(i, j) {
+  if (!G.room || G.room.hub || G.room.obs[j][i] !== 'crate' || coopGuest()) return false;
+  const hp = G.room.crateHp || (G.room.crateHp = {}), k = i + ',' + j, c = hp[k] || (hp[k] = { n: 0, t: -9 });
+  if (G.time - c.t < CRATE_HIT_GAP) return true;
+  c.t = G.time;
+  if (++c.n >= CRATE_HITS) { delete hp[k]; breakCrate(i, j); return true; }
+  const x = cellX(i), z = cellX(j), m = G.obsMeshes[k];
+  emit(x, 0.8, z, 6, theme().wood, { speed: 3.5, size: 0.3, life: 0.4 });
+  if (m && !crateWobs.some(w => w.m === m)) crateWobs.push({ m, t: 0.22, s: m.scale.clone() });
+  sfx('crack');
+  return true;
+}
+// the crate (if any) at a point a shot or beam stopped at
+function hitCrateAt(x, z, y) { const c = G.room && !G.room.hub && overlapCell(x, z, 0.05, y); return !!(c && c.t === 'crate' && hitCrate(c.i, c.j)); }
+// Paw Stamp: every crate in the swipe's arc
+function hitCratesInArc(x, z, a0, reach, half) {
+  if (!G.room || G.room.hub) return;
+  const i0 = cellOf(x - reach - 1), i1 = cellOf(x + reach + 1), j0 = cellOf(z - reach - 1), j1 = cellOf(z + reach + 1);
+  for (let j = Math.max(0, j0); j <= Math.min(NC - 1, j1); j++) for (let i = Math.max(0, i0); i <= Math.min(NC - 1, i1); i++) {
+    if (G.room.obs[j][i] !== 'crate') continue;
+    const dx = cellX(i) - x, dz = cellX(j) - z;
+    if (Math.hypot(dx, dz) < reach + OB.crate.half && Math.abs(angDiff(a0, Math.atan2(dz, dx))) < half + 0.35) hitCrate(i, j);
+  }
+}
+// a quick squash-wobble on each chipped crate (called from updateBullets)
+function updateCrateWobs(dt) {
+  for (let n = crateWobs.length - 1; n >= 0; n--) {
+    const w = crateWobs[n]; w.t -= dt;
+    const k = Math.max(0, w.t) / 0.22, s = Math.sin(w.t * 60) * 0.1 * k;
+    w.m.scale.set(w.s.x * (1 + s), w.s.y * (1 - s), w.s.z * (1 + s));
+    if (w.t <= 0) { w.m.scale.copy(w.s); crateWobs.splice(n, 1); }
+  }
 }
 // ---------- projectiles ----------
 const pbGeo = new THREE.SphereGeometry(0.16, 10, 8), ebGeo = new THREE.SphereGeometry(0.24, 12, 10), starGeo = new THREE.OctahedronGeometry(0.16, 0);
@@ -6324,6 +6399,7 @@ function segDist(ax, az, bx, bz, px, pz) {
 }
 function updateBullets(dt) {
   const p = G.player;
+  updateCrateWobs(dt);
   for (let i = G.bullets.length - 1; i >= 0; i--) {
     const b = G.bullets[i]; b.age += dt;
     // arcing bombs and grenades: fly to the target point, then blow up (lobber bombs may hop once first)
@@ -6374,8 +6450,11 @@ function updateBullets(dt) {
     }
     // climbing shots ride the tops of low blocks: up quickly (a hop), down a little slower (dropping off the edge)
     if (b.climb) { const f = climbFloor(b.x, b.z); b.base += (f - b.base) * Math.min(1, dt * (f > b.base ? 16 : 9)); b.y = b.base + (b.kind === 'ball' ? 0.6 : 0.5); }
+    // critters run over crates instead of hitting them: they nibble the one under them
+    if (b.kind === 'critter') hitCrateAt(b.x, b.z, 0.5);
     const wy = b.climb ? b.base + CLIMB_UP : b.y;
     if (wallAt(b.x, b.z, wy)) {
+      hitCrateAt(b.x, b.z, wy);   // weapons chip crates (35-weapons)
       if (b.bounce > 0 || b.kind === 'boomer') {
         if (b.kind === 'boomer' && b.bounce <= 0) { b.outT = 0; b.x = ox; b.z = oz; }
         else {
@@ -6925,8 +7004,20 @@ const TINTED = new Set(['bubble', 'shard', 'petal', 'drop', 'spine', 'leaf', 'ic
 // Readability: every enemy shot sits on a soft dark disc. Glow-only shots (sun, lantern, bubbles, sparks) used to vanish on the
 // reef sand and the peaks' snow; on a dark backing they pop, and on dark ground it barely shows. It is drawn before the shot's
 // own halos (renderOrder) and fails the depth test wherever the shot's body is, so it only darkens the ground around it.
-const BACKER_MAT = new THREE.SpriteMaterial({ map: SPR_TEX.soft, color: 0x1e1428, transparent: true, depthWrite: false, opacity: .85 }); SHARED.add(BACKER_MAT);
-function shotBacker() { const s = new THREE.Sprite(BACKER_MAT); s.scale.setScalar(1.2); s.renderOrder = -1; s.userData.backer = true; return s; }
+// (2026-10-24 playtest: shots still blended in, worst on the peaks' snow, where the soft disc was only a grey smudge round a pale
+// shot.) The backing is now a crisp sticker-style "danger disc": a dark fill (white and pale shots pop on it), a cream inner ring
+// (reads on dark ground) and a navy outer ring (reads on snow and sand). Measured with review/contrast/harness.js.
+const SHOT_DISC_TEX = canvasTex(128, 128, (x, w) => {
+  const c = w / 2;
+  x.fillStyle = 'rgba(38,49,92,.95)'; x.beginPath(); x.arc(c, c, c - 2, 0, Math.PI * 2); x.fill();
+  x.fillStyle = '#fff4dc'; x.beginPath(); x.arc(c, c, c - 10, 0, Math.PI * 2); x.fill();
+  const g = x.createRadialGradient(c, c, 0, c, c, c - 16);
+  g.addColorStop(0, 'rgba(30,20,40,.9)'); g.addColorStop(.7, 'rgba(30,20,40,.82)'); g.addColorStop(1, 'rgba(30,20,40,.72)');
+  x.globalCompositeOperation = 'destination-out'; x.beginPath(); x.arc(c, c, c - 16, 0, Math.PI * 2); x.fill();
+  x.globalCompositeOperation = 'source-over'; x.fillStyle = g; x.beginPath(); x.arc(c, c, c - 16, 0, Math.PI * 2); x.fill();
+});
+const BACKER_MAT = new THREE.SpriteMaterial({ map: SHOT_DISC_TEX, transparent: true, depthWrite: false }); SHARED.add(BACKER_MAT);
+function shotBacker() { const s = new THREE.Sprite(BACKER_MAT); s.scale.setScalar(.82); s.renderOrder = -1; s.userData.backer = true; return s; }
 // -> [look, colour] for a shot, or null for the plain fallback sphere
 function shotLook(src, o) {
   let L = o.look || (src && (src.boss ? BOSS_LOOK[src.id] : SHOOTER_LOOK[src.type]));
@@ -8703,6 +8794,7 @@ function glowPart(obj, re) {
 function bossMove(b, dt) {
   const def = b.def, p = nearestPlayer(b.x, b.z), ph = b.phase, sp = (def.speed || 2) * (1 + 0.1 * (ph - 1)) * (b.slowT > 0 ? 0.6 : 1);
   const L = 8.6 * ISLE_K - b.r * 0.6, K = ISLE_K;   // paths were tuned on the old 22-unit arena; K stretches them to the current one
+  const ox = b.x, oz = b.z;
   switch (def.move) {
     case 'stalk': case 'wander': {
       const dx = p.x - b.x, dz = p.z - b.z, l = Math.hypot(dx, dz) || 1, keep = def.move === 'wander' ? 5 : 2.6;
@@ -8731,6 +8823,19 @@ function bossMove(b, dt) {
       b.mesh.rotation.y = Math.atan2(p.x - b.x, p.z - b.z) * 0.6;
     }
   }
+  bossRejoin(b, ox, oz, dt);
+}
+// Path movers (fly8, glide, strafe, drift, anchors) sit on a curve set by b.t, which keeps running through a charge or a leap.
+// When one ended, the boss snapped straight back onto the curve: the Moon Moth "teleported" into the player's face after its
+// phase-2 charges (2026-10-24 playtest). A jump bigger than any path step now becomes a visible glide back at REJOIN_SP.
+const REJOIN_SP = 7, PATH_STEP_MAX = 9.5;   // units/s; the fastest path (fly8, phase 3) peaks near 7.2 x ISLE_K
+function bossRejoin(b, ox, oz, dt) {
+  if (b.def.move === 'stalk' || b.def.move === 'wander' || !(dt > 0)) return;
+  const mx = b.x - ox, mz = b.z - oz, m = Math.hypot(mx, mz);
+  if (!b.rejoin && m <= PATH_STEP_MAX * ISLE_K * dt) return;
+  const cap = REJOIN_SP * ISLE_K * dt;
+  if (m <= cap) { b.rejoin = false; return; }
+  b.rejoin = true; b.x = ox + mx / m * cap; b.z = oz + mz / m * cap;
 }
 // ---- the fight loop ----
 function updateBoss(b, dt) {
@@ -14745,7 +14850,7 @@ function levelComplete() {
   const next = G.level + 1;
   Hub.emit('levelClear', { level: G.level, difficulty: G.diff, kills: G.kills, pet: pet ? pet.species : null });
   $('#doneTitle').textContent = `Level ${G.level} cleared!`;
-  $('#doneSub').textContent = `${biome().name} · ${DIFF().name}`;
+  $('#doneSub').textContent = biome().name; $('#doneDiff').innerHTML = diffTagHTML();
   $('#doneStats').innerHTML = `<div><span>Knockouts</span><b>${G.runStats.kills}</b></div><div><span>Isles</span><b>${G.runStats.isles}</b></div><div><span>Secrets</span><b>${G.runStats.secrets}</b></div><div><span>Play time</span><b>${fmtTime(playMs())}</b></div>`;
   $('#doneRecords').innerHTML = '';
   $('#donePet').innerHTML = pet ? `${pet.stage > 0 && petPortrait(pet.species, pet.stage) ? `<img alt="" src="${petPortrait(pet.species, pet.stage)}">` : ''}<b>${PETS[pet.species].name}</b> (${PET_STAGES[pet.stage]}) joined your Collectibles!` : 'No pet this time. Find an egg and keep it safe to collect one.';
@@ -15107,7 +15212,7 @@ function modeBlurb(run) {
 function endlessDoneScreen() {
   const wrap = G.level >= STORY_LEVELS, nb = BIOMES[wrap ? 0 : G.level], best = SAVE.endless[G.diff];
   $('#doneTitle').textContent = `Depth ${depth()} cleared!`;
-  $('#doneSub').textContent = `Endless · ${biome().name} · ${DIFF().name}`;
+  $('#doneSub').textContent = `Endless · ${biome().name}`;
   $('#continueBtn').hidden = false;
   $('#continueBtn').innerHTML = `Onward to Depth ${depth() + 1} <small>Keep your build</small>`;
   $('#doneNote').textContent = (wrap ? `The sky loops back to ${nb.name}, and everything hits harder.` : `Next up: ${nb.name}.`) + (best ? ` Best: Depth ${best.depth}.` : '');
@@ -15214,7 +15319,7 @@ function dailyBlurb() {
 function dailyDoneScreen() {
   const last = G.level >= dailyLast();
   $('#doneTitle').textContent = last ? 'Daily Challenge cleared!' : `Level ${G.level} cleared!`;
-  $('#doneSub').textContent = `Daily · ${dailyDateText(G.daily.day)} · ${biome().name} · ${DIFF().name}`;
+  $('#doneSub').textContent = `Daily · ${dailyDateText(G.daily.day)} · ${biome().name}`;
   $('#continueBtn').hidden = last;
   if (!last) $('#continueBtn').innerHTML = `Onward to Level ${G.level + 1} <small>Keep your build</small>`;
   $('#doneNote').textContent = last ? `Every stage of today's challenge in ${fmtTime(playMs())}. A new one opens at ${dailyResetText()}.`
@@ -15279,7 +15384,7 @@ function rushComplete() {
   const pet = recordPetCollectible(), best = SAVE.rush[G.diff];
   Hub.emit('rushClear', { difficulty: G.diff, ms: Math.round(ms), kills: G.kills, pet: pet ? pet.species : null });
   $('#doneTitle').textContent = 'Boss Rush cleared!';
-  $('#doneSub').textContent = `All ${RUSH.length} bosses · ${DIFF().name}`;
+  $('#doneSub').textContent = `All ${RUSH.length} bosses`; $('#doneDiff').innerHTML = diffTagHTML();
   $('#doneStats').innerHTML = `<div><span>Bosses</span><b>${RUSH.length}</b></div><div><span>Knockouts</span><b>${G.runStats.kills}</b></div><div><span>Hits taken</span><b>${G.runStats.hits}</b></div><div><span>Time</span><b>${fmtTime(ms)}</b></div>`;
   $('#donePet').innerHTML = pet ? `<b>${PETS[pet.species].name}</b> (${PET_STAGES[pet.stage]}) joined your Collectibles!` : '';
   $('#continueBtn').hidden = true; $('#continueBtn').innerHTML = '';
@@ -15812,6 +15917,15 @@ const heartSvg = cls => `<svg class="${cls}" viewBox="-2 -2 32 20" aria-hidden="
 const ROOM_ICON = { boss: '#ff6b9a', treasure: '#ffbf2e', shop: '#4fd17a', bonus: '#b98cff', spring: '#7fe0d6', gamble: '#e266ff', altar: '#ff4f6a', challenge: '#ffc93c', miniboss: '#ff7a5c', event: '#9fd98a', secret: '#ffe066', final: '#ff6b9a' };
 const ROOM_LABEL = { start: 'Start', boss: 'Boss', treasure: 'Cache', shop: 'Stall', bonus: 'Vault', spring: 'Spring', gamble: 'Lucky', altar: 'Altar', challenge: 'Challenge', miniboss: 'Rival', event: 'Event', secret: 'Secret', final: 'Final' };
 let hudKey = '';
+// difficulty badge for the HUD, the pause card and every end screen: Cozy = cream pill + heart, Nightmare = navy pill + flame
+const DIFF_ICON = {
+  normal: '<path d="M12 20.5s-8-4.9-8-10.6A4.4 4.4 0 0 1 12 7.3a4.4 4.4 0 0 1 8 2.6c0 5.7-8 10.6-8 10.6z"/>',
+  hard: '<path d="M12 21.5c-4 0-6.8-2.8-6.8-6.5 0-3.2 2.1-5 3.6-6.8.3 1.8 1.1 2.9 2.2 3.4-.4-3.4.9-6.6 3.4-8.6.2 3 1.7 4.6 3 6.3 1 1.4 1.4 2.9 1.4 4.7 0 4-2.8 7.5-6.8 7.5z"/>',
+};
+function diffTagHTML(id = G.diff) {
+  const d = DIFFICULTY[id] || DIFFICULTY.normal;
+  return `<span class="difftag" data-d="${d.id}" title="Difficulty: ${d.name}"><svg viewBox="0 0 24 24" aria-hidden="true">${DIFF_ICON[d.id] || DIFF_ICON.normal}</svg>${d.name}</span>`;
+}
 function sectorLabel() {
   if (G.run === 'rush') return `Boss Rush ${G.rush + 1}/${RUSH.length} · ${theme().name}`;
   const s = G.sector > 5 ? `Level ${G.level} · ${biome().finalName}` : `L${G.level}-${G.sector} · ${theme().name}`;
@@ -15833,6 +15947,8 @@ function updateHUD(force) {
   $('#hearts').classList.toggle('last', p.hp === 1 && p.maxHp > 1);
   $('#crystals').textContent = G.crystals; $('#kills').textContent = G.kills; $('#keys').textContent = G.keys; $('#bombs').textContent = G.bombs;
   $('#sector').textContent = sectorLabel();
+  const dtag = $('#diffTag');
+  if (dtag.dataset.d !== G.diff) { dtag.dataset.d = G.diff; dtag.innerHTML = diffTagHTML(); }
   updateUpPill();
   const pet = G.pet;
   $('#petChip').hidden = !pet;
@@ -18972,7 +19088,7 @@ function togglePause() {
     G.state = 'pause'; mouse.down = false; hideBeams(); keys.clear();
     $('#pause .logo .a').textContent = hub ? 'Menu' : 'Paused';
     $('#pause .card').hidden = hub; $('#unstickBtn').hidden = hub; $('#quitBtn').hidden = hub;
-    if (!hub) { $('#pauseTitle').textContent = sectorLabel(); $('#pauseItems').innerHTML = itemListHTML(); }
+    if (!hub) { $('#pauseTitle').textContent = sectorLabel() + ' '; $('#pauseTitle').insertAdjacentHTML('beforeend', diffTagHTML()); $('#pauseItems').innerHTML = itemListHTML(); }
     $('#resumeBtn').firstChild.textContent = hub ? 'Back to the hub ' : 'Resume ';
     $('#pause').hidden = false; $('#resumeBtn').focus();
   } else if (G.state === 'pause') { G.state = 'play'; $('#pause').hidden = true; }
@@ -19004,7 +19120,9 @@ function gameOver() {
   const rec = recordModeBest();
   const swName = WEAPONS[G.startWeapon] ? ` · ${WEAPONS[G.startWeapon].name}` : '';
   $('#againBtn').innerHTML = (G.run === 'rush' ? 'Try again <small>Boss Rush from the top' : G.run === 'endless' ? 'Try again <small>A fresh Endless run' : G.run === 'daily' ? "Try again <small>Today's Daily from the top" : 'Try again <small>Same level, new sky') + swName + '</small>';
-  $('#overStats').innerHTML = `<div><span>Reached</span><b>${reached}</b></div><div><span>Knockouts</span><b>${G.kills}</b></div><div><span>Play time</span><b>${fmtTime(playMs())}</b></div><div><span>Gadgets</span><b>${total}</b></div><div><span>Weapon</span><b>Lv ${G.weapon ? G.weapon.level : 1}</b></div><div><span>Gold banked</span><b>${banked}</b></div>`;
+  // first row: mode + difficulty badge (co-op sends this HTML to the guest, so both see the host's difficulty)
+  const runLine = `<p class="runline"><span>${typeof COOP !== 'undefined' && COOP.inRun ? 'Co-op · ' : ''}${runModeName(G.run)}</span>${diffTagHTML()}</p>`;
+  $('#overStats').innerHTML = runLine + `<div><span>Reached</span><b>${reached}</b></div><div><span>Knockouts</span><b>${G.kills}</b></div><div><span>Play time</span><b>${fmtTime(playMs())}</b></div><div><span>Gadgets</span><b>${total}</b></div><div><span>Weapon</span><b>Lv ${G.weapon ? G.weapon.level : 1}</b></div><div><span>Gold banked</span><b>${banked}</b></div>`;
   $('#overRecords').innerHTML = recordsResultHTML(rec);
   $('#overRecords').hidden = !(G.run === 'endless' || G.run === 'rush' || G.run === 'daily');
   $('#overItems').innerHTML = itemListHTML();
