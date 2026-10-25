@@ -1402,7 +1402,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 <script src="https://cdn.jsdelivr.net/npm/meshoptimizer@0.20.0/meshopt_decoder.js"></script>
 <script>
 (() => {
-const BUILD_ID = 'b200d78415';
+const BUILD_ID = '638c920b1c';
 // ---------- Schiffy save bridge (shared by Sky Patrol and Skyheart; pasted into both builds, edit only here) ----------
 // Gold earned in Skyheart travels to Sky Patrol's playground savings through one ledger key. Rules (SKYHEART.md):
 // - Skyheart first puts each deposit in its OWN save (an outbox, written together with the run's Heart Shards), then
@@ -16822,7 +16822,7 @@ $('#hePvBuy').addEventListener('click', hpBuy);
 $('#hePvCancel').addEventListener('click', () => { if (HE.pv && !HE.pv.busy) { sfx('door'); hpEnd(true); } });
 // ---- the main hub isle's layout (tidied 2026-10-16) ----
 // Zones as the 55° camera (looking north) sees them, on two straight axes:
-// - north edge: the run portals in one row (PORTAL_ROW: Story Level 1-4 left, Endless / Boss Rush / Daily right) with a
+// - north edge: the run portals in one row (PORTAL_ROW: Story Levels 1-5 left, Endless / Boss Rush / Daily right) with a
 //   promenade in front (WALK_Z) and the avenue arriving in the gap between the two groups;
 // - the avenue (x = PLAZA.x): the How to play board and the bell at the plaza end, the difficulty pads half way up;
 // - the main street (z = PLAZA.z = the Home bridge's z) runs west-east through the plaza (the arrival spot): west to the
@@ -16834,10 +16834,14 @@ $('#hePvCancel').addEventListener('click', () => { if (HE.pv && !HE.pv.busy) { s
 // Prompt circles never overlap (the first interactable in range wins in updateInteract).
 const PLAZA = { x: 0, z: HOME_BRIDGE.z, r: 4.4 };
 const ARRIVE = { x: PLAZA.x, z: PLAZA.z - 1.2 };          // just north of the paw inlay, so wide phone screens show little sky
-// story portals: Levels 1-4 left of the avenue on the row (4.2 apart: the prompt circles, r 1.9, keep 0.4 clear), Level 5 (the last
-// level) in the grand slot at the head of the avenue behind the row (4.22 from Level 4 and from Endless: the same 0.42 margin);
-// mode portals right. A 6th level would need the row rethought (a second row or a wider isle). review/level5/PLAN.md
-const PORTAL_ROW = { z: -10.6, story: [[-16.2, -10.6], [-12.0, -10.6], [-7.8, -10.6], [-3.6, -10.6], [0, -12.8]], modes: [3.6, 9.9, 16.2] };   // modes: Endless, Boss Rush, Daily
+// the portal row (re-laid 2026-10-26, user: "rearrange them more neatly" once Level 5 had squeezed in at the head of the
+// avenue): one straight row, two evenly spaced groups mirrored about the avenue. Story Levels 1-5 centred on x = -PORTAL_GROUP_X,
+// Endless / Boss Rush / Daily centred on +PORTAL_GROUP_X, every portal PORTAL_GAP apart (the prompt circles, r 1.9, keep 0.1
+// clear); the avenue meets the promenade in the open gap between the groups. Each group has a sign over it (buildHub).
+// A 6th level would need the row rethought (a second row or a wider isle).
+const PORTAL_GAP = 3.9, PORTAL_GROUP_X = 9.8;
+const portalGroup = (n, cx) => Array.from({ length: n }, (_, i) => +(cx + (i - (n - 1) / 2) * PORTAL_GAP).toFixed(2));
+const PORTAL_ROW = { z: -10.6, story: portalGroup(5, -PORTAL_GROUP_X).map(x => [x, -10.6]), modes: portalGroup(3, PORTAL_GROUP_X) };   // modes: Endless, Boss Rush, Daily
 if (STORY_LEVELS > PORTAL_ROW.story.length) console.warn(`PORTAL_ROW has ${PORTAL_ROW.story.length} story slots for ${STORY_LEVELS} levels`);
 const WALK_Z = -8.2;                                       // the promenade in front of the portals
 const SHRINE_AT = { dx: 3.6, z: -2.8 };                    // Cozy left, Nightmare right of the avenue
@@ -16847,7 +16851,7 @@ const NOTICE_AT = { x: PLAZA.x - 3.6, z: 4.0 }, BELL_AT = { x: PLAZA.x + 3.6, z:
 // toward the plaza; walk up from the south (its prompt is in front, clear of the Boutique's shadow and the bell)
 const BOARD_AT = { x: 6.9, z: 0.0, rot: -0.24 };
 // path centre lines [x0, z0, x1, z1] (two tiles wide)
-const HUB_PATHS = [[PLAZA.x, PLAZA.z, PLAZA.x, -10.9], [-16.4, WALK_Z, 16.4, WALK_Z], [-7.2, PLAZA.z, PLAZA.x, PLAZA.z], [PLAZA.x, PLAZA.z, HUB_X + 0.2, PLAZA.z]];
+const HUB_PATHS = [[PLAZA.x, PLAZA.z, PLAZA.x, WALK_Z], [-17.9, WALK_Z, PORTAL_GROUP_X + PORTAL_GAP + 1.9, WALK_Z], [-7.2, PLAZA.z, PLAZA.x, PLAZA.z], [PLAZA.x, PLAZA.z, HUB_X + 0.2, PLAZA.z]];
 // [x, z, kind, variant]
 const HUB_NATURE = [
   [-9.9, -13, 'bush', 3], [6.75, -13, 'bush', 3], [-14.1, -13, 'bush', 1], [13.05, -13, 'bush', 1],   // in the gaps behind each portal group
@@ -16965,6 +16969,10 @@ function buildHub() {
         : { icon: PROMPT_ICONS.gate, verb: `${name} · locked`, title: name, desc: 'Clear Level 1 to open this portal.', action: 'Locked' },
       use: () => { if (!modesOpen) { sfx('deny'); return; } startStory(1, run); } });
   });
+  // a plaque in front of each group, on the lawn side of the promenade (above the row it fell off the top of the screen)
+  for (const [text, x] of [['Story Levels', -PORTAL_GROUP_X], ['Game Modes', PORTAL_GROUP_X]]) {
+    const s = textSprite(text, '#ffd34d', 0.6); s.position.set(x, 1.5, WALK_Z + 1.7); G.roomGroup.add(s);
+  }
   buildWeaponRange();   // every weapon on a ring round the practice dummies, west of the plaza (78-range)
   // difficulty shrine: step on a pad to choose (either side of the avenue)
   for (const [id, x, z = SHRINE_AT.z] of [['normal', PLAZA.x - SHRINE_AT.dx], ['hard', PLAZA.x + SHRINE_AT.dx]]) {
