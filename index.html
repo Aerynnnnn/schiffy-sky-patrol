@@ -19436,6 +19436,7 @@ function coopOnMessage(m) {
     case 'hello':
       COOP.partnerV = m.v; COOP.partnerCos = m.cos || null;
       if (m.v !== COOP_PROTO) { toast('Different game versions', 'Both players need the latest page: refresh and try again', '#ff8f8f'); coopClose(); return; }
+      coopDressMate();   // a mate made before this hello arrived wears the partner's look now
       coopPartnerHello();
       return;
   }
@@ -19670,6 +19671,12 @@ function coopMakeMate(hostSide) {
   coopGunLook(p);
   return p;
 }
+// dress the partner's Schiffy again when its look is known or changes (2026-10-25 fix: the host's screen made the mate the
+// moment the relay said 'peer', before the guest's 'hello' carried its outfit, and nothing re-dressed it, so the partner
+// showed plain fur). Also after costumes.glb lands, and when the partner changes outfit mid-session ('look' message).
+function coopDressMate() { if (COOP.mate) { try { cosHeroApply(COOP.mate, coopTryOn(COOP.partnerCos)); } catch (e) {} } }
+COS_LOAD.then(() => coopDressMate());
+cosRefresh = after(cosRefresh, slot => { if (COOP.peer && (slot === 'fur' || COS_WORN.includes(slot))) coopSend({ t: 'look', cos: coopMyCos() }); });
 function coopGunLook(p) { if (p && G.weapon) { try { asPlayer(p, () => setGunLook()); } catch (e) {} } }
 function coopRemoveMate() {
   const m = COOP.mate; if (!m) return;
@@ -20470,7 +20477,33 @@ function coopGuestHubSnap(s) {
   const m = COOP.mate, q = s.P;
   (m.h || (m.h = [])).push([s.ts, q[0], q[1], q[2], q[3]]); if (m.h.length > 12) m.h.shift();
   m.row = [q[0], q[1], q[2], q[3], q[4], 4, 4, 0, 0, q[5], 0, 0, 0, q[6]]; m.down = false;
+  if (s.HP) COOP.petRows = s.HP;
 }
+// the host's playground pets (87-homepets) on the guest's screen (2026-10-25: each side ran its own wandering, so they never
+// matched). The host sends each pet's spot, heading and pose with 'hs'; a visiting guest's pets don't think for themselves,
+// they glide to those spots and play the host's pose. Rows: [id, x, z, want, moving, state, idle anim, speed, hop].
+const COOP_PET_ST = Object.keys(HPET_STATES), COOP_PET_ANIM = ['sit', 'sniff', 'hop', 'wag', 'look'];
+function coopPetRows() {
+  if (!hpetLive() || !HPET.pets.visible) return undefined;
+  return HPET.list.map(pt => [pt.id, cr2(pt.x), cr2(pt.z), cr2(pt.want), pt.moving ? 1 : 0, COOP_PET_ST.indexOf(pt.st), COOP_PET_ANIM.indexOf(pt.anim), cr2(pt.spd || 2), cr2(pt.hopK)]);
+}
+function coopGuestPets(dt) {
+  if (!hpetLive()) return;
+  const rows = COOP.petRows || [];
+  for (const pt of HPET.list) {
+    const r = rows.find(q => q[0] === pt.id);
+    pt.mesh.visible = !!r; if (!r) continue;
+    const d = Math.hypot(r[1] - pt.x, r[2] - pt.z), k = d > 3 ? 1 : 1 - Math.exp(-dt * 12);
+    pt.x += (r[1] - pt.x) * k; pt.z += (r[2] - pt.z) * k;
+    pt.want = r[3]; pt.moving = !!r[4]; pt.spd = r[7];
+    const st = COOP_PET_ST[r[5]] || 'idle'; if (st !== pt.st) { pt.st = st; pt.age = 0; } else pt.age += dt;
+    pt.anim = COOP_PET_ANIM[r[6]] || 'sit';
+    if (r[8] > pt.hopK + 0.2) pt.hopK = r[8];
+    hpetAnim(pt, dt);
+  }
+}
+const _homePetsTick = homePetsTick;
+homePetsTick = wrapFn(homePetsTick, function (dt) { return COOP.visit ? coopGuestPets(dt) : _homePetsTick.call(this, dt); });
 // a guest's writes must never carry the host's borrowed fields into its own save
 const _writeSave = writeSave;
 writeSave = function () {
@@ -20501,6 +20534,7 @@ addInteractable = function (o) {
 // messages + frame
 // ================================================================
 function coopGame(m) {
+  if (m.t === 'look') { COOP.partnerCos = m.cos || null; coopDressMate(); return; }
   if (COOP.role === 'host') coopHostMsg(m);
   else if (COOP.role === 'guest') coopGuestMsg(m);
 }
@@ -20555,7 +20589,7 @@ function coopFrame(now) {
       else if (now - COOP.hubCheckT > 1000) { COOP.hubCheckT = now; if (G.state === 'play') coopSendHub(false); }
       if (now - COOP.hubT >= COOP_HUB_MS) {
         COOP.hubT = now; const p = G.player;
-        coopSend({ t: 'hs', ts: Math.round(now), P: [cr2(p.x), cr2(p.y), cr2(p.z), cr2(p.face), p.onGround && Math.hypot(p.vx, p.vz) > 0.6 ? 1 : 0, p.dashT > 0 ? 1 : 0, p.falling > 0 ? 1 : 0] });
+        coopSend({ t: 'hs', ts: Math.round(now), P: [cr2(p.x), cr2(p.y), cr2(p.z), cr2(p.face), p.onGround && Math.hypot(p.vx, p.vz) > 0.6 ? 1 : 0, p.dashT > 0 ? 1 : 0, p.falling > 0 ? 1 : 0], HP: coopPetRows() });
       }
     }
   } else if (COOP.role === 'guest' || COOP.inRun || COOP.visit) {
