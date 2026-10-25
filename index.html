@@ -1398,6 +1398,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 <script src="https://cdn.jsdelivr.net/npm/meshoptimizer@0.20.0/meshopt_decoder.js"></script>
 <script>
 (() => {
+const BUILD_ID = 'f55a77f96d';
 'use strict';
 // ================================================================
 // Platform contract: the hub can embed this page in an iframe and
@@ -19319,7 +19320,7 @@ window.SchiffySkyPatrol = window.VoltageDescent = { manifest: GAME_MANIFEST, sta
 // snapshots (92-coop). This file is the socket, the room code flow and the Co-op panel in the hub menu.
 // COOP_URL empty = co-op hidden everywhere. `?coop=ws://127.0.0.1:8090` on the page URL overrides it (local relay tests).
 const COOP_URL = 'wss://schiffy-coop.onrender.com';   // Render free web service (coop-server/RENDER.md)
-const COOP_PROTO = 1;   // bump when the messages change: both players need the same build
+const COOP_PROTO = 2;   // bump when the messages change (2: 'look', pets in 'hs', BUILD_ID in 'hello'); BUILD_ID must match too
 const COOP = {
   url: '', ws: null, role: null, code: '', peer: false, status: 'off', err: '', inRun: false, live: false,
   partnerCos: null, partnerV: null, lastRx: 0,
@@ -19373,22 +19374,53 @@ function coopConnect(url, role, code, my, until) {
   let ws, opened = false;
   const retry = () => {
     if (my !== coopTry) return;
-    if (performance.now() < until) { COOP.status = 'waking'; coopPanelDraw(); setTimeout(() => { if (my === coopTry) coopConnect(url, role, code, my, until); }, 3000); }
-    else { COOP.status = 'off'; COOP.err = COOP_NO_SERVER; coopPanelDraw(); }
+    if (performance.now() < until) { COOP.status = 'waking'; coopPanelDraw(); setTimeout(() => { if (my === coopTry) coopConnect(url, role, code, my, until); }, COOP.rejoin ? 1500 : 3000); }
+    else { COOP.status = 'off'; COOP.err = COOP_NO_SERVER; coopPanelDraw(); if (COOP.rejoin) { COOP.rejoin = null; coopLost('guest', true); } }
   };
   try { ws = new WebSocket(url); } catch (e) { COOP.status = 'off'; COOP.err = COOP_NO_SERVER; coopPanelDraw(); return; }
   COOP.ws = ws;
-  ws.onopen = () => { opened = true; coopSend(role === 'host' ? { t: 'host' } : { t: 'join', code }); };
+  ws.onopen = () => { opened = true; COOP.openAt = performance.now(); coopSend(role === 'host' ? { t: 'host' } : { t: 'join', code }); };
   ws.onmessage = e => { COOP.lastRx = performance.now(); let m; try { m = JSON.parse(e.data); } catch (err) { return; } coopOnMessage(m); };
   ws.onerror = () => {};
-  ws.onclose = () => {
+  ws.onclose = ev => {
     if (COOP.ws !== ws) return;
     if (!opened) { COOP.ws = null; retry(); return; }   // never got through (asleep, or still waking): try again
-    const was = COOP.role, hadPeer = COOP.peer;
+    const was = COOP.role, hadPeer = COOP.peer, rejoinCode = COOP.code;
+    if (was && hadPeer) coopNoteDrop({ code: ev.code, reason: ev.reason, clean: ev.wasClean });
     COOP.ws = null; COOP.role = null; COOP.peer = false; COOP.status = 'off'; COOP.rtt = 0;
-    if (was) coopLost(was, hadPeer);
+    // a guest dropped mid-run gets back in by itself (see coopRejoin); anything else ends co-op as before
+    if (COOP.rejoin || (was === 'guest' && COOP.inRun && rejoinCode)) {
+      if (COOP.rejoin && performance.now() >= COOP.rejoin.until) { COOP.rejoin = null; coopLost('guest', hadPeer); }
+      else coopRejoin(url, rejoinCode);
+    } else if (was) coopLost(was, hadPeer);
     coopPanelDraw(); coopPillDraw();
   };
+}
+// Why the last co-op connection ended, in words, kept for the Co-op panel, the event log (bug reports) and the end toast
+// (2026-10-25: "disconnected mid-run abruptly" with no clue why). How long it had been open is the main hint: ~15 min
+// every time points at Render's free server going to sleep; 1006 = cut with no goodbye (network, phone sleep, server gone).
+const COOP_CLOSE_WHY = { 1000: 'closed normally', 1001: 'the server went away', 1006: 'the connection was cut', 1008: 'the server said too many messages', 1009: 'a message was too big', 1011: 'the server hit an error', 1012: 'the server restarted', 1013: 'the server was full' };
+function coopNoteDrop(d) {
+  const now = performance.now();
+  if (COOP.dropAt && now - COOP.dropAt < 5000) return;   // the first sign is the telling one (the socket's close follows a 'peer' off)
+  COOP.dropAt = now;
+  const ms = COOP.openAt ? performance.now() - COOP.openAt : 0, mins = Math.floor(ms / 60000), secs = Math.floor(ms / 1000) % 60;
+  const why = d.why || ((COOP_CLOSE_WHY[d.code] || 'closed') + (d.reason ? ` (${d.reason})` : '') + (d.code ? `, code ${d.code}` : ''));
+  COOP.lastDrop = `${why}, after ${mins}:${String(secs).padStart(2, '0')} connected`;
+  try { logEvent('coop', `co-op dropped as ${COOP.role || 'player'}: ${COOP.lastDrop}${COOP.inRun ? ' (mid-run)' : ''}`); } catch (e) {}
+  console.warn('[coop] dropped:', COOP.lastDrop);
+}
+// A guest whose connection drops mid-run (a network blip, a phone switching networks, the relay restarting) rejoins the same
+// room on its own: the host keeps the room open while a run is on, and a rejoining guest's hello drops it straight back into
+// the run (coopPartnerHello -> coopHostBegin). The guest's world holds meanwhile; it only gives up after COOP_REJOIN_MS.
+// (2026-10-25: before this, any drop sent the guest home and ended the run for both, which looked like co-op "suddenly ending".)
+const COOP_REJOIN_MS = 30000;
+function coopRejoin(url, code) {
+  if (!COOP.rejoin) { COOP.rejoin = { until: performance.now() + COOP_REJOIN_MS }; toast('Connection lost', 'Reconnecting to your partner…', '#ffb84a'); }
+  COOP.code = code; COOP.lostT = performance.now();
+  if (G.state === 'play') G.state = 'coopwait';
+  const my = ++coopTry;
+  setTimeout(() => { if (my === coopTry) coopConnect(url, 'guest', code, my, COOP.rejoin ? COOP.rejoin.until : performance.now()); }, 600);
 }
 function coopClose(quiet) {
   coopTry++;   // stops a wake-up still waiting
@@ -19403,17 +19435,26 @@ function coopClose(quiet) {
 // While paired, each side sends something at least every COOP_KA_MS (a 'ka' when there's no game traffic), and a partner
 // who has said nothing for COOP_SILENT_MS is treated as gone: closing a tab through Render's proxy can leave the relay
 // unaware for up to 20 s, and a lost connection never says goodbye. (Timers run at 1/s in a background tab, so 'ka' keeps
-// going there; after ~5 hidden minutes Chrome slows them to 1/min and the partner may drop: they can rejoin with the code.)
-const COOP_KA_MS = 4000, COOP_SILENT_MS = 30000;
-COOP.lastTx = 0; COOP.lastPeerRx = 0; COOP.rtt = 0; COOP.pingT = 0;
+// going there; after ~5 hidden minutes Chrome slows them to 1/min, which is why the silence limit is 75 s and not 30 s:
+// a partner who only looked at another tab for a while used to count as gone and end the run.)
+const COOP_KA_MS = 4000, COOP_SILENT_MS = 75000;
+// Render's free service sleeps after ~15 min without inbound HTTP requests (🤔 socket traffic may not count), so while paired
+// each side knocks on /health every COOP_AWAKE_MS; a server going to sleep mid-run cuts both players off.
+const COOP_AWAKE_MS = 4 * 60 * 1000;
+COOP.lastTx = 0; COOP.lastPeerRx = 0; COOP.rtt = 0; COOP.pingT = 0; COOP.awakeT = 0;
 setInterval(() => {
   if (!coopConnected() || !COOP.peer) return;
   const now = performance.now();
+  if (now - COOP.awakeT > COOP_AWAKE_MS) {
+    COOP.awakeT = now;
+    try { fetch(coopUrl().replace(/^ws/, 'http').replace(/\/$/, '') + '/health', { cache: 'no-store' }).catch(() => {}); } catch (e) {}
+  }
   // round trip to the partner (through the relay) every 2 s, shown in the co-op pill
   if (now - COOP.pingT > 2000) { COOP.pingT = now; coopSend({ t: 'png', at: Math.round(now) }); }
   if (now - COOP.lastTx > COOP_KA_MS - 500) coopSend({ t: 'ka' });
   if (COOP.lastPeerRx && now - COOP.lastPeerRx > COOP_SILENT_MS) {
-    toast('Lost your partner', 'Nothing heard from them for 30 seconds', '#ff8f8f');
+    toast('Lost your partner', `Nothing heard from them for ${Math.round(COOP_SILENT_MS / 1000)} seconds`, '#ff8f8f');
+    coopNoteDrop({ why: `nothing heard from the partner for ${Math.round(COOP_SILENT_MS / 1000)} s` });
     if (COOP.role === 'guest') coopClose();                              // the host's game is gone: leave and go home
     else { COOP.peer = false; COOP.status = 'waiting'; coopPeerLeft(false); coopPanelDraw(); coopPillDraw(); }   // host keeps the room open for a rejoin
   }
@@ -19426,22 +19467,34 @@ function coopOnMessage(m) {
   if (m.t === 'pog') { const r = performance.now() - m.at; if (r >= 0 && r < 10000) COOP.rtt = COOP.rtt ? COOP.rtt * 0.6 + r * 0.4 : r; return; }
   switch (m.t) {
     case 'room': COOP.role = 'host'; COOP.code = m.code; COOP.status = 'waiting'; coopPanelDraw(); coopPillDraw(); return;
-    case 'joined': COOP.role = 'guest'; COOP.code = m.code; COOP.status = 'paired'; COOP.peer = true; coopSend({ t: 'hello', v: COOP_PROTO, ver: GAME_MANIFEST.version, cos: coopMyCos() }); coopPanelDraw(); coopPillDraw(); return;
+    case 'joined': COOP.lostT = 0; if (COOP.rejoin) { COOP.rejoin = null; toast('Reconnected', 'Back in your partner\'s run', '#8fe3ff'); } COOP.role = 'guest'; COOP.code = m.code; COOP.status = 'paired'; COOP.peer = true; coopSend(coopHelloMsg()); coopPanelDraw(); coopPillDraw(); return;
     case 'peer':
       COOP.peer = !!m.on; COOP.status = m.on ? 'paired' : COOP.role === 'host' ? 'waiting' : 'off';
-      if (m.on) { if (COOP.role === 'host') coopSend({ t: 'hello', v: COOP_PROTO, ver: GAME_MANIFEST.version, cos: coopMyCos() }); }
-      else coopPeerLeft(!!m.closed);
+      if (m.on) { if (COOP.role === 'host') coopSend(coopHelloMsg()); }
+      else { coopNoteDrop({ why: COOP.role === 'guest' ? 'your partner\'s game left the room' : 'your partner\'s connection ended' }); coopPeerLeft(!!m.closed); }
       coopPanelDraw(); coopPillDraw(); return;
-    case 'err': COOP.err = m.why === 'no such room' ? 'No game with that code' : m.why === 'room full' ? 'That game already has two players' : m.why || 'Server error'; coopPanelDraw(); return;
+    case 'err':
+      // rejoining: the relay may still hold my dead socket for up to 20 s ('room full'): close and try again; a room that's
+      // gone (the host left) ends it at once
+      if (COOP.rejoin && COOP.ws) { if (m.why !== 'room full') COOP.rejoin.until = 0; try { COOP.ws.close(); } catch (e) {} return; }
+      COOP.err = m.why === 'no such room' ? 'No game with that code' : m.why === 'room full' ? 'That game already has two players' : m.why || 'Server error'; coopPanelDraw(); return;
     case 'hello':
       COOP.partnerV = m.v; COOP.partnerCos = m.cos || null;
-      if (m.v !== COOP_PROTO) { toast('Different game versions', 'Both players need the latest page: refresh and try again', '#ff8f8f'); coopClose(); return; }
+      // both players must run the same build: the host's game decides everything the guest sees, so an older copy on one
+      // side silently misses fixes (2026-10-25: a cached old page didn't dress the partner or send the pets). The build id
+      // changes with every code change; the protocol number catches builds from before the id existed.
+      if (m.v !== COOP_PROTO || m.b !== BUILD_ID) {
+        coopClose(); COOP.err = 'Your partner\'s game is a different version. Both of you: refresh the page, then try again.'; coopPanelDraw();
+        toast('You\'re on different versions of the game', 'Both of you: refresh the page (Ctrl+Shift+R, or pull down to reload on a phone), then join again', '#ff8f8f');
+        return;
+      }
       coopDressMate();   // a mate made before this hello arrived wears the partner's look now
       coopPartnerHello();
       return;
   }
   coopGame(m);   // everything else is game traffic (92-coop); its message types must not reuse the relay's (room, joined, peer, err, pong)
 }
+const coopHelloMsg = () => ({ t: 'hello', v: COOP_PROTO, b: BUILD_ID, ver: GAME_MANIFEST.version, cos: coopMyCos() });
 // the equipped look this player shows the other one (owned items only)
 function coopMyCos() {
   const out = {};
@@ -19502,7 +19555,7 @@ function coopPanel() {
 }
 function coopPanelDraw() {
   if (!coopEl) return;
-  const b = coopEl.querySelector('.cp-body'), err = COOP.err ? `<p class="cp-msg cp-err">${COOP.err}</p>` : '';
+  const b = coopEl.querySelector('.cp-body'), err = (COOP.err ? `<p class="cp-msg cp-err">${COOP.err}</p>` : '') + (COOP.lastDrop && COOP.status === 'off' ? `<p class="cp-msg">Last co-op ended: ${COOP.lastDrop}.</p>` : '');
   const note = `<p class="cp-note">Each of you has your own weapon, upgrades, passives and gold. Every kill levels up both weapons, gold drops a copy for each of you, and every pedestal can be taken once by each player. You pick your own level-up cards while your partner plays on. The host's pause menu pauses the game for both. Each of you keeps your own outfit and your own run gold.</p>`;
   if (COOP.status === 'connecting') b.innerHTML = `<p class="cp-msg">Connecting…</p>`;
   else if (COOP.status === 'waking') b.innerHTML = `<p class="cp-msg">Waking the co-op server up… This can take up to a minute when nobody has played for a while.</p><button class="bigbtn" type="button" data-coop="leave">Cancel</button>`;
@@ -20133,8 +20186,8 @@ function coopGuestSnap(s) {
   if (s.T && G.room.traps) s.T.forEach((t, i) => { const tr = G.room.traps[i]; if (!tr) return; tr.state = t[0] || tr.state; tr.t = t[1]; if (t[2] && !tr.shake) tr.shake = t[2]; if (t[3]) tr.gone = true; });
   COOP.beams = s.L || [];
   for (const e of s.ev || []) COOP.evq.push([s.ts, e]);
-  // the host's state: menus and overlays on their side pause the world for both
-  const hold = !['play', 'intro'].includes(s.st) && !COOP_VIEWS[s.st];
+  // the host's state: menus, overlays and either player's upgrade pick ('coopwait' while I pick) pause the world for both
+  const hold = !['play', 'intro'].includes(s.st);
   if (hold && G.state === 'play') G.state = 'coopwait';
   else if (!hold && G.state === 'coopwait') G.state = 'play';
 }
@@ -20370,8 +20423,7 @@ function coopGuestUpdate(dt) {
   guard(updateFx, dt); guard(updateDecals, dt); guard(updateTidePools, dt); guard(updateSnow, dt);
   guard(updateInteract, dt);
   guard(updateWaveHud, dt);
-  // my own level-up cards (the host told me how many with 'glevel'): picked here, sent to the host as 'gpick'
-  if (G.pendingCards > 0 && G.state === 'play' && G.weapon) openCards();
+  // (my own level-up cards open from coopFrame, so they also open while the run is held for the host's pick)
   // anything a local effect spawned that isn't a puppet (it would never move) goes
   for (let i = G.enemies.length - 1; i >= 0; i--) { const e = G.enemies[i]; if (!e._pup) { removeObj(e.mesh); removeObj(e.blob); if (e.warp) removeObj(e.warp); G.enemies.splice(i, 1); } }
   updateBossBar(); updateHUD(false);
@@ -20543,9 +20595,12 @@ function coopPartnerHello() {
     coopToast('Your partner joined!', G.mode === 'story' ? 'They drop into your run now' : 'They\'re in your hub now. Either of you can start a run from a portal.', '#8fe3ff');
     if (G.mode === 'story' && G.state !== 'over') { if (!COOP.runId) COOP.runId = Date.now().toString(36); coopHostBegin(); }
     else COOP.hubSentKey = '';   // coopFrame sends the hub
-  } else toast('Joined!', 'Heading to your partner\'s hub…', '#8fe3ff');
+  } else if (!COOP.inRun) toast('Joined!', 'Heading to your partner\'s hub…', '#8fe3ff');
 }
+// the guest finished picking (or left): my run carries on
+function coopMateHoldEnd() { const was = COOP.mateHold; COOP.mateHold = false; if (was && G.state === 'coopwait') G.state = 'play'; coopWaitBanner(false); }
 function coopPeerLeft(closed) {
+  coopMateHoldEnd();
   if (COOP.role === 'host') {
     if (COOP.mate) coopToast('Your partner left', 'You carry on solo', '#ff8f8f');
     COOP.inRun = false;
@@ -20555,15 +20610,18 @@ function coopPeerLeft(closed) {
   } else if (closed) coopLost('guest', true);
 }
 function coopLost(role, hadPeer) {
+  if (role === 'host') coopMateHoldEnd();
   if (role === 'guest' && COOP.visit) { toast('Co-op ended', 'Back to your own hub', '#8fe3ff'); coopVisitEnd(true); }
-  if (role === 'guest' && COOP.inRun) { COOP.hostHome = true; toast('Co-op ended', 'Lost the connection to your partner', '#ff8f8f'); if (G.state !== 'over') goHome(); else coopGuestEndRun(); }
-  if (role === 'host') { if (COOP.mate) coopToast('Co-op ended', 'Lost the connection to the co-op server', '#ff8f8f'); COOP.inRun = false; coopRemoveMate(); }
+  const why = COOP.lastDrop ? ` · ${COOP.lastDrop}` : '';
+  if (role === 'guest' && COOP.inRun) { COOP.hostHome = true; toast('Co-op ended', 'Lost the connection to your partner' + why, '#ff8f8f'); if (G.state !== 'over') goHome(); else coopGuestEndRun(); }
+  if (role === 'host') { if (COOP.mate) coopToast('Co-op ended', 'Lost the connection to the co-op server' + why, '#ff8f8f'); COOP.inRun = false; coopRemoveMate(); }
   COOP.runId = '';
 }
 let coopWaitEl = null;
 function coopWaitBanner(on) {
   if (!coopWaitEl) { if (!on) return; coopWaitEl = document.createElement('div'); coopWaitEl.id = 'coopWait'; ($('#app') || document.body).appendChild(coopWaitEl); }
-  const txt = !on ? '' : COOP.hostSt === 'levelDone' ? 'Level cleared! Waiting for your partner…' : COOP.hostSt === 'over' ? '' : 'Your partner is in a menu…';
+  const st = COOP.role === 'host' ? 'card' : COOP.hostSt;   // the host only ever waits on the guest's upgrade pick
+  const txt = !on ? '' : st === 'levelDone' ? 'Level cleared! Waiting for your partner…' : st === 'over' ? '' : COOP_VIEWS[st] ? 'Your partner is choosing an upgrade…' : COOP.lostT ? 'Waiting for your partner\'s game…' : 'Your partner is in a menu…';
   coopWaitEl.hidden = !on || !txt; if (txt && coopWaitEl.textContent !== txt) coopWaitEl.textContent = txt;
 }
 function coopFrame(now) {
@@ -20573,14 +20631,15 @@ function coopFrame(now) {
     if (coopHost()) {
       if (!COOP.swapMate) COOP.hostP = G.player;
       coopEnsurePlayers();
-      // my own level-up cards / swap prompt / weapon summary don't stop the world: it runs on while I pick (and I can't be hurt)
-      if (COOP_VIEWS[G.state] && G.mode === 'story') {
-        const st = G.state, wdt = Math.min(0.033, dt);
-        COOP.hostPick = true; G.state = 'play';
-        try { update(wdt); updateParticles(wdt); updateSprites(wdt); updatePopTexts(wdt); updateWorld(wdt); }
-        catch (e) { console.error('[coop] world while picking', e); }
-        finally { COOP.hostPick = false; if (G.state === 'play') G.state = st; }
+      // either player choosing an upgrade pauses the run for both (2026-10-25, the user's call: before, the world ran on and
+      // whoever read their cards kept getting hit). My own card / swap / summary screens freeze it as in solo play (the guest
+      // holds on my snapshots' state); the partner's ('pk' in its input) holds mine in 'coopwait' until they've picked.
+      if (G.mode === 'story') {
+        const pk = !!(COOP.gin && COOP.gin.pk);
+        if (pk && G.state === 'play') { G.state = 'coopwait'; COOP.mateHold = true; }
+        else if (!pk && COOP.mateHold) coopMateHoldEnd();
       }
+      coopWaitBanner(COOP.mateHold && G.state === 'coopwait');
       if (now - COOP.snapT >= COOP_SNAP_MS) { COOP.snapT = now; coopSnap(); }
     } else if (coopHubLive() && G.player) {
       // shared hub: the partner's Schiffy here, my hub's makeup (resent when it changes) and where I am, 20x a second
@@ -20594,6 +20653,9 @@ function coopFrame(now) {
     }
   } else if (COOP.role === 'guest' || COOP.inRun || COOP.visit) {
     if (COOP.inRun && G.mode === 'hub') coopGuestEndRun();
+    // my own level-up cards (the host told me how many with 'glevel'): picked here, sent to the host as 'gpick'; they open
+    // while the run is held too (the host may be picking at the same time)
+    if (COOP.inRun && G.pendingCards > 0 && (G.state === 'play' || G.state === 'coopwait') && G.weapon) openCards();
     if (COOP.inRun || COOP.visit) {
       coopGuestPuppets(dt);
       if (now - COOP.inT >= COOP_IN_MS && G.player) {
