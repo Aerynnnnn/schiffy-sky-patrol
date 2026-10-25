@@ -1402,7 +1402,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 <script src="https://cdn.jsdelivr.net/npm/meshoptimizer@0.20.0/meshopt_decoder.js"></script>
 <script>
 (() => {
-const BUILD_ID = '496740d703';
+const BUILD_ID = 'b200d78415';
 // ---------- Schiffy save bridge (shared by Sky Patrol and Skyheart; pasted into both builds, edit only here) ----------
 // Gold earned in Skyheart travels to Sky Patrol's playground savings through one ledger key. Rules (SKYHEART.md):
 // - Skyheart first puts each deposit in its OWN save (an outbox, written together with the run's Heart Shards), then
@@ -23619,8 +23619,9 @@ coopGuestRoom = function (m) {
   try { clockEnter(G.room); } catch (e) {}   // (first-time belt / table / piston / tesla tips; a Magnet pull ends)
   if (COOP.tether) COOP.tether.visible = false;
 };
-// ---------- Schiffy Skyheart: the gate isle north-west of the hub, the trip there and back, gold from Skyheart ----------
-// Skyheart is its own game and page (the Schiffy Starheart project), published next to this page at SKYHEART_URL on the same
+// ---------- Skyheart Mode: the gate isle north-west of the hub, the trip there and back, gold from Skyheart ----------
+// Skyheart is a Sky Patrol game mode (player-facing it's always 'Skyheart Mode' of Schiffy Sky Patrol) that runs as its own page
+// (the Schiffy Starheart project, which brands itself as Sky Patrol's mode there: spbrand.html), published next to this page at SKYHEART_URL on the same
 // origin, so both read the same localStorage (plan + rules: SKYHEART.md). This file only adds the landmark, the transition
 // and the gold claim; everything is wrappers at load (buildHub, updateWorld, updateCamera), like 87-homepets.
 // - Gold earned in Skyheart arrives through Bridge (Games/Schiffy/shared/bridge.js, pasted into both builds): claimed at boot, on
@@ -23735,17 +23736,17 @@ function buildSkyIsle() {
   P.shards.forEach((s, i) => { s.userData.a = i / P.shards.length * Math.PI * 2; });
   const halo = haloSprite(0xff9ee0, 7.5, 0.35); halo.position.set(SKY_GATE.x, 3.7, SKY_GATE.z + 0.25); grp.add(halo); P.halo = halo;
   const ground = haloSprite(0xc9a8ff, 8.5, 0.25); ground.position.set(SKY_GATE.x, 0.9, SKY_GATE.z + 0.4); grp.add(ground); P.ground = ground;
-  const sign = textSprite('Schiffy Skyheart', '#ffb8e6', 0.8); sign.position.set(SKY_GATE.x, 8.2, SKY_GATE.z); grp.add(sign); P.sign = sign;
-  const tag = textSprite('New world!', '#ffd34d', 0.45); tag.position.set(SKY_BRIDGE.xa - 0.8, 2.6, I.z); grp.add(tag); P.tag = tag;
+  const sign = textSprite('Skyheart Mode', '#ffb8e6', 0.8); sign.position.set(SKY_GATE.x, 8.2, SKY_GATE.z); grp.add(sign); P.sign = sign;
+  const tag = textSprite('New mode!', '#ffd34d', 0.45); tag.position.set(SKY_BRIDGE.xa - 0.8, 2.6, I.z); grp.add(tag); P.tag = tag;
   shadows(grp, true, true); under.castShadow = false;
   G.roomGroup.add(grp); SKY.gate = grp;
   addInteractable({ x: SKY_FRONT.x, z: SKY_FRONT.z, r: 1.9, mesh: null, prompt: skyPrompt, use: skyEnter });
 }
 function skyPrompt() {
-  const base = { icon: PROMPT_ICONS.portal, verb: 'New world', title: 'Schiffy Skyheart' };
-  if (SKY.page === false) return { ...base, verb: 'Skyheart · asleep', desc: 'The gate is still waking up. Schiffy Skyheart opens here soon!', action: 'Soon' };
-  if (coopConnected()) return { ...base, desc: 'Skyheart is a solo adventure for now: leave co-op (hub menu) to step through.', action: 'Solo only' };
-  return { ...base, desc: 'Step through into Schiffy Skyheart: a magical-pup adventure with Starheart Form, wand combos and new bosses. Your outfit comes with you, and every bit of gold you bring back lands in your playground savings.', action: 'Enter' };
+  const base = { icon: PROMPT_ICONS.portal, verb: 'New game mode', title: 'Skyheart Mode' };
+  if (SKY.page === false) return { ...base, verb: 'Game mode · asleep', desc: 'The gate is still waking up. Skyheart Mode opens here soon!', action: 'Soon' };
+  if (coopConnected()) return { ...base, desc: 'Skyheart Mode is solo for now: leave co-op (hub menu) to step through.', action: 'Solo only' };
+  return { ...base, desc: 'A new way to play Sky Patrol: Schiffy swaps blasters for the Starheart Wand, with paw combos, Starheart Form and new bosses over three dreamy skies. Your outfit comes along, and the gold you bring back lands in your playground savings.', action: 'Enter' };
 }
 
 // ---------- life: spin, pulse, flap, orbit, motes, hum ----------
@@ -23810,7 +23811,7 @@ function skyEnter() {
   let w = $('#skyWipe');
   if (!w) {
     w = document.createElement('div'); w.id = 'skyWipe';
-    w.innerHTML = '<div class="sw-glow"></div><div class="sw-title">Schiffy <b>Skyheart</b><small>stepping through...</small></div>';
+    w.innerHTML = '<div class="sw-glow"></div><div class="sw-title">Skyheart <b>Mode</b><small>Schiffy Sky Patrol</small></div>';
     document.body.appendChild(w);
     const st = document.createElement('style'); st.textContent = SKY_WIPE_CSS; document.head.appendChild(st);
   }

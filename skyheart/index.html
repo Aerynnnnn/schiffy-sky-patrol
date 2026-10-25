@@ -278,6 +278,29 @@ body.touch #touch { display: block; } body.touch #skills { display: none; } body
   <p class="hint"><b>WASD</b> run · <b>Mouse</b> look · <b>Click</b> paw combo · <b>Right-click</b> Star Bolt<br><b>Space</b> jump · <b>Shift</b> dash · <b>Q</b> Heart Nova · <b>R</b> Treat Jar</p>
 </div>
 <div id="loading"><div class="logo small"><div class="l1">SCHIFFY</div><div class="l2">STARHEART</div></div><div id="loadTxt">Waking up Schiffy...</div></div>
+<!-- Part of Schiffy Sky Patrol (95-skypatrol.js): when this page runs as Sky Patrol's skyheart/ page (or was opened from its
+     gate), it is Sky Patrol's Skyheart mode, so the tab, title screen and loading screen say so. Pasted by build.ps1 right
+     after body.html, before the inlined models, so the loading screen shows the right name while the page downloads.
+     Same test as SP.on in 95-skypatrol.js; the standalone game (artifact, :8771) keeps its own name. -->
+<style>
+.logo .spTop { font-size: clamp(22px, 4.4vw, 46px); color: #fff; -webkit-text-stroke: .09em var(--ink); paint-order: stroke fill; letter-spacing: .05em; margin-bottom: .12em; }
+.logo.small .spTop { font-size: clamp(18px, 4.6vw, 28px); }
+</style>
+<script>
+(() => {
+  let linked = /\/skyheart\/(index\.html)?$/.test(location.pathname);
+  try { linked = linked || new URLSearchParams(location.search).get('from') === 'skypatrol'; } catch (e) {}
+  if (!linked) return;
+  document.title = 'Schiffy Sky Patrol: Skyheart Mode';
+  document.querySelectorAll('.logo').forEach(l => {
+    const l1 = l.querySelector('.l1'), l2 = l.querySelector('.l2'); if (!l1 || !l2) return;
+    const top = document.createElement('div'); top.className = 'spTop'; top.textContent = 'SCHIFFY SKY PATROL';
+    l.insertBefore(top, l1); l1.textContent = 'SKYHEART'; l2.textContent = 'MODE';
+  });
+  const tag = document.querySelector('#title .tag');
+  if (tag) tag.textContent = 'A Sky Patrol mode: the sky isles fell asleep. One tiny pup didn\'t.';
+})();
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script>
@@ -5208,7 +5231,7 @@ $('skTreat').addEventListener('click', () => { if (G.state === 'play') useTreat(
 boot();
 // platform hook (same pattern as Sky Patrol): lets a host page read state
 window.SchiffyStarheart = { G, SAVE };
-// ---------- part of Schiffy Sky Patrol: its outfits on Schiffy, gold home to its savings, the way back ----------
+// ---------- Sky Patrol's Skyheart Mode: its outfits on Schiffy, gold home to its savings, the way back to its hub ----------
 // Skyheart is published next to Sky Patrol (its page at <sky patrol>/skyheart/), on the same origin, and entered through
 // the Skyheart Gate on Sky Patrol's hub (plan + rules: Schiffy Sky Patrol/SKYHEART.md). Everything here switches on only
 // when this page runs there (SP.on); the standalone build (own artifact, :8771) plays exactly as before.
@@ -5387,7 +5410,7 @@ function spWipe() {
   let w = $('spWipe');
   if (!w) {
     w = document.createElement('div'); w.id = 'spWipe';
-    w.innerHTML = '<div class="spw-t">Schiffy <b>Sky Patrol</b><small>flying home...</small></div>';
+    w.innerHTML = '<div class="spw-t">Schiffy <b>Sky Patrol</b><small>back to the hub...</small></div>';
     document.body.appendChild(w);
     const st = document.createElement('style');
     st.textContent = `#spWipe { position: fixed; inset: 0; z-index: 90; pointer-events: none; display: grid; place-items: center; opacity: 0;
@@ -5424,9 +5447,9 @@ if (SP.on) {
   showEnd = function (won, quit) {
     _showEnd.apply(this, arguments);
     const r = G.run, box = $('modalBox'), stats = box && box.querySelector('.endStats');
-    if (stats && r) { const d = document.createElement('div'); d.innerHTML = `<b>💰 ${r.spGold || 0}</b>Gold to Sky Patrol`; stats.appendChild(d); }
+    if (stats && r) { const d = document.createElement('div'); d.innerHTML = `<b>💰 ${r.spGold || 0}</b>Gold to your playground`; stats.appendChild(d); }
     const home = box && box.querySelector('[data-k="home"]');
-    if (home) { const b = document.createElement('button'); b.className = 'btn big ghost spBack'; b.textContent = '☁️ Back to Sky Patrol'; home.after(b); b.addEventListener('click', e => { e.stopPropagation(); if (performance.now() < (UI.armAt || 0)) return; SFX.ui(); spBack(); }); }
+    if (home) { const b = document.createElement('button'); b.className = 'btn big ghost spBack'; b.textContent = '☁️ Sky Patrol Hub'; home.after(b); b.addEventListener('click', e => { e.stopPropagation(); if (performance.now() < (UI.armAt || 0)) return; SFX.ui(); spBack(); }); }
     unstrokeEmoji(box);
   };
   // Heartwood Isle: a Sky Patrol portal beside the arrival path; arriving from Sky Patrol fades in from its pink wipe
@@ -5434,12 +5457,12 @@ if (SP.on) {
   enterHub = function () {
     _enterHub.apply(this, arguments);
     const po = addPortal(-9.2, 11.2, 'skypatrol', null, () => spBack());
-    po.label.material.map = labelSprite('☁️ Back to Sky Patrol', '#8fd8ff').material.map;
+    po.label.material.map = labelSprite('☁️ Sky Patrol Hub', '#8fd8ff').material.map;
     setPortalOpen(po, true);
   };
   // title screen: a second button home
   const pb = $('playBtn');
-  if (pb) { const b = document.createElement('button'); b.className = (pb.className || 'btn') + ' ghost spBack'; b.id = 'spBackBtn'; b.textContent = '☁️ Back to Sky Patrol'; pb.after(b); b.addEventListener('click', () => spBack()); }
+  if (pb) { const b = document.createElement('button'); b.className = (pb.className || 'btn') + ' ghost spBack'; b.id = 'spBackBtn'; b.textContent = '☁️ Sky Patrol Hub'; pb.after(b); b.addEventListener('click', () => spBack()); }
   if (SP.fresh) { const w = spWipe(); w.className = 'arrive'; const go = () => { w.className = 'arrive out'; }; const t = setInterval(() => { if ($('loading').classList.contains('done')) { clearInterval(t); go(); } }, 100); }
   // anything a closed tab left in the outbox
   setTimeout(spSend, 800);
