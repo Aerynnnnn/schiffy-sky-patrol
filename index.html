@@ -1398,7 +1398,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 <script src="https://cdn.jsdelivr.net/npm/meshoptimizer@0.20.0/meshopt_decoder.js"></script>
 <script>
 (() => {
-const BUILD_ID = 'f55a77f96d';
+const BUILD_ID = '20f074e8e6';
 'use strict';
 // ================================================================
 // Platform contract: the hub can embed this page in an iframe and
@@ -20483,8 +20483,32 @@ function coopHubHostTick(dt) {
     m.x += (gi.x - m.x) * k; m.z += (gi.z - m.z) * k; m.y += (gi.y - m.y) * k; m.face = gi.f || 0; m.vx = gi.vx || 0; m.vz = gi.vz || 0;
   }
   m.mesh.position.set(m.x, m.y, m.z); m.mesh.rotation.y = m.face; m.mesh.visible = true; m.mesh.scale.setScalar(gi && gi.fa ? 0.6 : 1);
-  m.animate(dt, !!(gi && gi.mv)); m.body.rotation.x = gi && gi.d ? 0.35 : 0; m.gun.visible = false;
+  m.animate(dt, !!(gi && gi.mv)); m.body.rotation.x = gi && gi.d ? 0.35 : 0;
   m.blob.position.set(m.x, groundAt(m.x, m.z, m.r, m.y) + 0.03, m.z);
+  coopHubMateGun(m, gi && gi.sw, gi && gi.fi, gi && gi.ax, gi && gi.az, dt);
+}
+// the partner's range weapon in the shared hub (2026-10-25, user's request: picking one up and shooting showed on one screen
+// only). On each screen the partner's Schiffy holds it and fires it while they do, as real hub shots: in the hub those only
+// ever hit the practice dummies, so both screens show the shots and the dummy numbers. The Prism Beam only shows in hand (its
+// beam meshes are one shared set, mine).
+function coopHubMateGun(m, wid, firing, ax, az, dt) {
+  if (!m || !m.gun) return;
+  // as the partner, holding their range weapon (a run build left in COOP.mb stays out of it: asPlayer would swap it in)
+  const asMate = fn => {
+    const W = G.weapon, mb = COOP.mb, mg = mouseGround, aim = new THREE.Vector3(m.x + (m.aimX || 0) * 6, 0, m.z + (m.aimZ || 1) * 6);
+    G.weapon = m.hubW; COOP.mb = null; mouseGround = () => aim.clone();
+    try { asPlayer(m, fn); } catch (e) {} finally { G.weapon = W; COOP.mb = mb; mouseGround = mg; }
+  };
+  const id = wid && WEAPONS[wid] ? wid : null;
+  if ((m.hubW ? m.hubW.id : null) !== id) {
+    m.hubW = id ? Object.assign(newWeapon(id), { level: RANGE_LEVEL }) : null; m.fireCd = 0; m.charge = 0;
+    if (m.hubW) asMate(() => setGunLook());
+    else { try { showChargeOrb(m, 0); } catch (e) {} }
+  }
+  m.gun.visible = !!m.hubW;
+  if (!m.hubW || G.state !== 'play' || WEAPONS[m.hubW.id].kind === 'beam') return;
+  if (ax != null) { m.aimX = ax; m.aimZ = az; }
+  asMate(() => _weaponTick(m, !!firing, dt));
 }
 // the guest's side
 function coopVisitStart(m) {
@@ -20530,6 +20554,7 @@ function coopGuestHubSnap(s) {
   (m.h || (m.h = [])).push([s.ts, q[0], q[1], q[2], q[3]]); if (m.h.length > 12) m.h.shift();
   m.row = [q[0], q[1], q[2], q[3], q[4], 4, 4, 0, 0, q[5], 0, 0, 0, q[6]]; m.down = false;
   if (s.HP) COOP.petRows = s.HP;
+  COOP.hostGun = s.W || null;
 }
 // the host's playground pets (87-homepets) on the guest's screen (2026-10-25: each side ran its own wandering, so they never
 // matched). The host sends each pet's spot, heading and pose with 'hs'; a visiting guest's pets don't think for themselves,
@@ -20648,7 +20673,8 @@ function coopFrame(now) {
       else if (now - COOP.hubCheckT > 1000) { COOP.hubCheckT = now; if (G.state === 'play') coopSendHub(false); }
       if (now - COOP.hubT >= COOP_HUB_MS) {
         COOP.hubT = now; const p = G.player;
-        coopSend({ t: 'hs', ts: Math.round(now), P: [cr2(p.x), cr2(p.y), cr2(p.z), cr2(p.face), p.onGround && Math.hypot(p.vx, p.vz) > 0.6 ? 1 : 0, p.dashT > 0 ? 1 : 0, p.falling > 0 ? 1 : 0], HP: coopPetRows() });
+        coopSend({ t: 'hs', ts: Math.round(now), P: [cr2(p.x), cr2(p.y), cr2(p.z), cr2(p.face), p.onGround && Math.hypot(p.vx, p.vz) > 0.6 ? 1 : 0, p.dashT > 0 ? 1 : 0, p.falling > 0 ? 1 : 0], HP: coopPetRows(),
+          W: G.weapon && WEAPONS[G.weapon.id] ? [G.weapon.id, G.state === 'play' && COOP.myFire ? 1 : 0, cr2(p.aimX), cr2(p.aimZ)] : undefined });   // my range weapon
       }
     }
   } else if (COOP.role === 'guest' || COOP.inRun || COOP.visit) {
@@ -20658,6 +20684,7 @@ function coopFrame(now) {
     if (COOP.inRun && G.pendingCards > 0 && (G.state === 'play' || G.state === 'coopwait') && G.weapon) openCards();
     if (COOP.inRun || COOP.visit) {
       coopGuestPuppets(dt);
+      if (COOP.visit && !COOP.inRun) { const hg = COOP.hostGun; coopHubMateGun(COOP.mate, hg && hg[0], hg && hg[1], hg && hg[2], hg && hg[3], dt); }
       if (now - COOP.inT >= COOP_IN_MS && G.player) {
         COOP.inT = now;
         const p = G.player, play = G.state === 'play' && !p.down, h = mouse.active && !TOUCH.on ? mouseGround(0) : null;
@@ -20832,6 +20859,7 @@ function coopCosTick(dt) {
 function coopCosClear() { for (const b of COOP.cosShots) removeObj(b.mesh); COOP.cosShots = []; }
 const _weaponTick = weaponTick;
 weaponTick = function (p, firing, dt) {
+  if (p === G.player && !p.isMate) COOP.myFire = !!firing;   // (the hub sends it too: the partner's screen fires my range weapon)
   if (coopGuest() && p === G.player) {
     COOP.myFire = !!firing;
     if (G.weapon && G.state === 'play' && !p.down && coopPredictable(wStats())) { COOP.cos = true; try { _weaponTick(p, firing, dt); } finally { COOP.cos = false; } }
