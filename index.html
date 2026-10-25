@@ -1398,7 +1398,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 <script src="https://cdn.jsdelivr.net/npm/meshoptimizer@0.20.0/meshopt_decoder.js"></script>
 <script>
 (() => {
-const BUILD_ID = '20f074e8e6';
+const BUILD_ID = '71d5900d3c';
 'use strict';
 // ================================================================
 // Platform contract: the hub can embed this page in an iframe and
@@ -5988,6 +5988,7 @@ function updateBeam(p, s, firing, dt) {
     for (let d = 0.5; d < s.range; d += 0.3) { const bx = m.x + Math.cos(a) * d, bz = m.z + Math.sin(a) * d; if (blockedAt(bx, bz, 0.05, m.y)) { len = d; bc = [cellOf(bx), cellOf(bz), bx, bz]; break; } }
     const b = G.beams[k], ex = m.x + Math.cos(a) * len, ez = m.z + Math.sin(a) * len;
     b.position.set((m.x + ex) / 2, m.y, (m.z + ez) / 2); b.rotation.y = -a + Math.PI / 2;
+    b.userData.len = len; b.userData.width = width;   // (co-op sends these to the partner's screen, 92-coop)
     updateLance(b, len, width, dt); lanceImpact(ex, m.y, ez);
     if (tick) {
       if (bc) hitCrateAt(bc[2], bc[3], m.y);
@@ -11900,8 +11901,7 @@ function onBossDead(b) {
   spawnPickup('heart', b.x, b.z);
   if (!b.mini) { spawnPickup('key', b.x, b.z); spawnPickup('bomb', b.x, b.z); }
   flashScreen(0.6, '#ffffff');
-  SAVE.bosses[b.id] = (SAVE.bosses[b.id] || 0) + 1; writeSave();
-  try { bossTrophyEarned(b.id); } catch (e) { console.error('[trophy]', e); }   // first defeat: its home trophy unlocks (75-hub)
+  recordBossWin(b.id);   // counted (per difficulty) and its home trophies unlock on the first defeat (75-hub)
   petIsleCleared();
   if (b.mini) { makePedestalMesh(addPedestal(r, 0, -3, rollItem({ min: 'rare', noCursed: true }), 0)); toast('Rival defeated!', 'It left something behind'); updateHUD(true); return; }
   Hub.emit('sectorClear', { level: G.level, sector: G.sector, boss: b.id, kills: G.kills });
@@ -13394,6 +13394,16 @@ for (const t of BOSS_TROPHIES) {
   HOME_CAT.push({ id: 't_boss_' + t.id, sec: 'trophy', cur: 'unlock', task: 'boss:' + t.id, boss: t.id, final: t.final, where, name: `${d.name} Trophy`,
     desc: t.final ? `A golden statue of ${d.name}, the ${b.name} final boss, on a plinth with its name plate.` : `A bronze statue of ${d.name}, the ${b.sectors[t.si]} boss of ${b.name}, on a stone plinth.` });
 }
+// Nightmare trophies (2026-10-25, user's request): the same statues, earned by beating that boss on Nightmare
+// (SAVE.bossesN[id] > 0, counted by recordBossWin), and grander: an amethyst plinth with glowing trim, gem spires and a
+// floating ring; the statue keeps its own colours with a violet sheen (gold and a gem crown for final bosses).
+// sku 'home.t_bossn_<boss id>', task 'bossn:<boss id>'. Old saves start with none: Nightmare wins were never counted per boss.
+for (const t of BOSS_TROPHIES) {
+  const d = BOSSES[t.id] || { name: t.id }, b = BIOMES[t.li];
+  const where = (t.final ? `Level ${t.li + 1} final boss, ${b.finalName}` : `Level ${t.li + 1}, sector ${t.si + 1}: ${b.sectors[t.si]}`) + ', on Nightmare';
+  HOME_CAT.push({ id: 't_bossn_' + t.id, sec: 'trophy', cur: 'unlock', task: 'bossn:' + t.id, boss: t.id, final: t.final, nightmare: true, where, name: `${d.name} Nightmare Trophy`,
+    desc: `${d.name} in ${t.final ? 'gold and gems' : 'shimmering colour'} on an amethyst plinth with glowing trim and a floating ring. Only for beating it on Nightmare.` });
+}
 // ---- the boutique's old decorations (moved here 2026-10-17) ----
 // Sold in Bijou's Boutique until 2026-10-17 at fixed hub spots; now ordinary home items on their old Paw Gem prices. They keep
 // their skus ('cos.decor.<id>': owned in SAVE.cosmetics.owned, so purchases carry over) and models (DECOR_MODEL, 84-shop).
@@ -13421,8 +13431,8 @@ const HOME_VARIANTS = {"sofa_blue":{"model":"sofa","tint":{"HSofa":"#7fbfff","HS
 for (const h of HOME_CAT) { const v = HOME_VARIANTS[h.id]; h.model = v ? v.model : h.id; if (v) h.tint = v.tint; HOME_PARTS[h.sku] = HOME_CAT_PARTS[h.model] || HOME_PARTS[h.sku]; }
 // a boss trophy's shape: the plinth, then a box round the statue measured from the boss model (bossTrophyFit)
 for (const h of HOME_CAT) if (h.boss) Object.defineProperty(HOME_PARTS, h.sku, { configurable: true, enumerable: true, get: () => {
-  const f = bossTrophyFit(h), p = f.s * 0.8;
-  return [[0, 0, p, p, 0, f.top], [f.cx, f.cz, Math.max(0.2, f.hx), Math.max(0.2, f.hz), f.top, f.top + f.h]];
+  const f = bossTrophyFit(h), p = f.s * (h.nightmare ? 0.88 : 0.8), ring = h.nightmare ? Math.max(f.hx, f.hz, 0.45) + 0.2 * f.s : 0;   // (the Nightmare ring sticks out)
+  return [[0, 0, p, p, 0, f.top], [f.cx, f.cz, Math.max(0.2, f.hx, ring), Math.max(0.2, f.hz, ring), f.top, f.top + f.h + (h.nightmare && h.final ? 0.3 * f.s : 0)]];
 } });
 const homeFlag = it => { const h = it && HOME_CAT_BY[it.kind]; return h ? h.f || '' : ''; };   // 'floor' | 'small' | 'surface' | ''
 const clearedLevel = l => !!(SAVE.cleared[l] && Object.values(SAVE.cleared[l]).some(n => n > 0));
@@ -13446,14 +13456,26 @@ const HOME_TASKS = {
   bosses: { get text() { return `Beat every one of the ${RUSH.length} bosses`; }, prog: () => [RUSH.filter(r => (SAVE.bosses || {})[r.id] > 0).length, RUSH.length] },
   home20: { text: 'Own 20 things for the playground (bought or earned)', prog: () => [HOME_CAT.filter(h => h.cur !== 'unlock').reduce((n, h) => n + homeIds(h.sku).length, 0), 20] },   // copies count
 };
-for (const h of HOME_CAT) if (h.boss) HOME_TASKS[h.task] = { text: `Defeat ${(BOSSES[h.boss] || {}).name || h.boss} to unlock`, where: h.where, prog: () => [(SAVE.bosses || {})[h.boss] > 0 ? 1 : 0, 1] };
-// a boss just went down (onBossDead, 70-rooms): its trophy unlocks at once (first defeat only) and a toast follows once the
+for (const h of HOME_CAT) if (h.boss) {
+  const wins = () => (h.nightmare ? SAVE.bossesN : SAVE.bosses) || {};
+  HOME_TASKS[h.task] = { text: `Defeat ${(BOSSES[h.boss] || {}).name || h.boss}${h.nightmare ? ' on Nightmare' : ''} to unlock`, where: h.where, prog: () => [wins()[h.boss] > 0 ? 1 : 0, 1] };
+}
+// a boss went down (onBossDead, 70-rooms; a co-op guest's copy in 92-coop): count it, on Nightmare too, then its trophies
+function recordBossWin(id) {
+  SAVE.bosses[id] = (SAVE.bosses[id] || 0) + 1;
+  if (G.diff === 'hard') { SAVE.bossesN = SAVE.bossesN || {}; SAVE.bossesN[id] = (SAVE.bossesN[id] || 0) + 1; }
+  writeSave();
+  try { bossTrophyEarned(id); } catch (e) { console.error('[trophy]', e); }
+}
+// a boss just went down: its trophy (and its Nightmare one) unlocks at once (first defeat only) and a toast follows once the
 // boss-kill toast has had its moment (G.trophyToastT counts down in update(), 90-flow, so menus and cards only delay it)
 function bossTrophyEarned(id) {
-  const h = HOME_CAT_BY['home.t_boss_' + id]; if (!h || Wallet.owned(h.sku) || !((SAVE.bosses || {})[id] > 0)) return;
-  Wallet.grant(h.sku, { via: 'unlock' });
-  (G.trophyToasts = G.trophyToasts || []).push(h); G.trophyToastT = 1.7;
-  try { logEvent('home', `trophy unlocked: ${h.name}`); } catch (e) {}
+  for (const [sku, wins] of [['home.t_boss_' + id, SAVE.bosses], ['home.t_bossn_' + id, SAVE.bossesN]]) {
+    const h = HOME_CAT_BY[sku]; if (!h || Wallet.owned(h.sku) || !((wins || {})[id] > 0)) continue;
+    Wallet.grant(h.sku, { via: 'unlock' });
+    (G.trophyToasts = G.trophyToasts || []).push(h); G.trophyToastT = 1.7;
+    try { logEvent('home', `trophy unlocked: ${h.name}`); } catch (e) {}
+  }
 }
 function bossTrophyToast() {
   const list = (G.trophyToasts || []).splice(0); if (!list.length) return;
@@ -13463,8 +13485,9 @@ function bossTrophyToast() {
 // plinth top. Measured once per boss from the model; builds without boss models (-Lite) get a star (bossTrophyModel).
 const BT_FIT = {};
 function bossTrophyFit(h) {
-  if (BT_FIT[h.boss]) return BT_FIT[h.boss];
-  const s = h.final ? 1.2 : 1, H = h.final ? 2.3 : 1.8, W = h.final ? 1.75 : 1.45, top = 0.76 * s;
+  if (BT_FIT[h.sku]) return BT_FIT[h.sku];
+  // a Nightmare trophy is a size grander, on a taller three-step plinth
+  const s = (h.final ? 1.2 : 1) * (h.nightmare ? 1.12 : 1), H = (h.final ? 2.3 : 1.8) * (h.nightmare ? 1.12 : 1), W = (h.final ? 1.75 : 1.45) * (h.nightmare ? 1.12 : 1), top = (h.nightmare ? 0.98 : 0.76) * s;
   const g = PROPS && STATUE_MODEL[h.boss] ? makeProp(STATUE_MODEL[h.boss]) : null;
   let f = { s, top, k: 0, cx: 0, cz: 0, h: 1.0 * s, hx: 0.5 * s, hz: 0.15 * s };
   if (g) {
@@ -13473,13 +13496,65 @@ function bossTrophyFit(h) {
     const k = Math.min(H / Math.max(0.1, size.y), W / Math.max(0.1, size.x, size.z));
     f = { s, top, k, ox: -c.x * k, oz: -c.z * k, oy: top - box.min.y * k, cx: 0, cz: 0, h: size.y * k, hx: size.x * k / 2 + 0.03, hz: size.z * k / 2 + 0.03 };
   }
-  if (PROPS) BT_FIT[h.boss] = f;
+  if (PROPS) BT_FIT[h.sku] = f;
   return f;
+}
+// the Nightmare trophy: an amethyst three-step plinth with glowing pink trim, gem spires on the corners, a dark name plate
+// lettered in gold, a glowing ring floating round the statue's middle, and the statue itself in its own colours with a violet
+// sheen (final bosses: gold, plus a ring of gem points over its head). Built round the same fit as the Cozy one, bigger.
+function bossTrophyNightmare(h, f) {
+  const s = f.s, g = new THREE.Group(), gold = h.final;
+  const glowMat = (c, e, k = 0.9) => new THREE.MeshToonMaterial({ color: c, gradientMap: toonGrad, emissive: e, emissiveIntensity: k });
+  const ame = toon(0x5a3f8f), ameD = toon(0x3a2a5e), ameL = toon(0x8a6ac8);
+  const trim = glowMat(0xff6fbf, 0xc8287a, 0.5), gem = glowMat(gold ? 0xffc93c : 0xa77bff, gold ? 0x8a5000 : 0x4a1fa0, 0.45);
+  const metal = glowMat(0xffd76b, 0x6a3a00, 0.5);
+  g.add(outline(mesh(new THREE.BoxGeometry(1.72 * s, 0.16 * s, 1.72 * s), ameD, 0, 0.08 * s, 0), 1.03));
+  g.add(outline(mesh(new THREE.BoxGeometry(1.56 * s, 0.18 * s, 1.56 * s), ame, 0, 0.25 * s, 0), 1.03));
+  g.add(outline(mesh(new THREE.BoxGeometry(1.34 * s, 0.54 * s, 1.34 * s), ameL, 0, 0.61 * s, 0), 1.03));
+  g.add(mesh(new THREE.BoxGeometry(1.38 * s, 0.06 * s, 1.38 * s), trim, 0, 0.37 * s, 0));
+  g.add(mesh(new THREE.BoxGeometry(1.38 * s, 0.06 * s, 1.38 * s), trim, 0, 0.85 * s, 0));
+  g.add(outline(mesh(new THREE.BoxGeometry(1.5 * s, 0.1 * s, 1.5 * s), metal, 0, f.top - 0.05 * s, 0), 1.03));
+  // gem spires on the corners of the bottom step, a small gem on each side of the top
+  for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    g.add(outline(mesh(new THREE.CylinderGeometry(0.07 * s, 0.09 * s, 0.32 * s, 6), metal, x * 0.74 * s, 0.32 * s, z * 0.74 * s), 1.1));
+    const sp = outline(mesh(new THREE.OctahedronGeometry(0.13 * s, 0), gem, x * 0.74 * s, 0.6 * s, z * 0.74 * s), 1.12); sp.scale.y = 1.7; g.add(sp);
+  }
+  for (const [x, z] of [[0, -1], [1, 0], [-1, 0]]) g.add(outline(mesh(new THREE.OctahedronGeometry(0.07 * s, 0), gem, x * 0.67 * s, 0.61 * s, z * 0.67 * s), 1.15));
+  const name = (BOSSES[h.boss] || {}).name || h.name, plate = signPlane(name, 1.12 * s, 0.26 * s, '#2a1a44', '#ffd76b');
+  plate.position.set(0, 0.61 * s, 0.67 * s + 0.006); g.add(plate);
+  // the floating ring round the statue's middle
+  const ring = mesh(new THREE.TorusGeometry(Math.max(f.hx, f.hz, 0.45) + 0.18 * s, 0.04 * s, 6, 40), glowMat(gold ? 0xffc93c : 0xff6fbf, gold ? 0x9a5a00 : 0xb0206a, 0.55), f.cx, f.top + f.h * 0.42, f.cz);
+  ring.rotation.x = Math.PI / 2 - 0.18; g.add(ring);
+  const model = f.k ? makeProp(STATUE_MODEL[h.boss]) : null;
+  if (model) {
+    const made = {}, tint = gold ? 0xffc53d : 0xe6d2ff, em = gold ? 0x5a3000 : 0x2a1050;
+    model.traverse(n => {
+      if (!n.isMesh || n.userData.outline) return;
+      const conv = [].concat(n.material).map(m => {
+        if (!m || !m.color) return m;
+        if (!made[m.uuid]) made[m.uuid] = glowMat(mixColor(m.color.getHex(), tint, gold ? 0.45 : 0.12), em, 0.3);
+        return made[m.uuid];
+      });
+      n.material = Array.isArray(n.material) ? conv : conv[0];
+    });
+    model.scale.setScalar(f.k); model.position.set(f.ox, f.oy, f.oz); g.add(model);
+  } else {
+    const st = new THREE.Shape(); for (let q = 0; q < 10; q++) { const a = q / 10 * Math.PI * 2 + Math.PI / 2, r = (q % 2 ? 0.2 : 0.46) * s; q ? st.lineTo(Math.cos(a) * r, Math.sin(a) * r) : st.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
+    const geo = new THREE.ExtrudeGeometry(st, { depth: 0.16 * s, bevelEnabled: true, bevelSize: 0.04, bevelThickness: 0.04, bevelSegments: 1 }); geo.center();
+    g.add(outline(mesh(geo, gem, 0, f.top + f.h / 2, 0), 1.06));
+  }
+  // final bosses: a crown of gem points floating over the statue's head
+  if (gold) for (let q = 0; q < 6; q++) {
+    const a = q / 6 * Math.PI * 2, r = 0.26 * s;
+    const c = outline(mesh(new THREE.ConeGeometry(0.06 * s, 0.2 * s, 5), q % 2 ? gem : metal, f.cx + Math.cos(a) * r, f.top + f.h + 0.16 * s, f.cz + Math.sin(a) * r), 1.12); g.add(c);
+  }
+  return g;
 }
 // a boss trophy: a two-step stone plinth with a bronze (gold for final bosses) band and name plate, the boss on top. The
 // boss model is a fresh clone with its own materials (every part recoloured to the metal, keeping a hint of its own colour),
 // so no statue touches the live bosses' shared materials, and nothing on it moves.
 function bossTrophyModel(h) {
+  if (h.nightmare) return bossTrophyNightmare(h, bossTrophyFit(h));
   const f = bossTrophyFit(h), s = f.s, g = new THREE.Group(), gold = h.final;
   const metal = gold ? 0xffc53d : 0xc98a4b, glow = gold ? 0x5a3800 : 0x2a1200, stone = toon(0xd9d3c7), stoneD = toon(0xb9b1a4);
   const trim = new THREE.MeshToonMaterial({ color: metal, gradientMap: toonGrad, emissive: glow, emissiveIntensity: 0.45 });
@@ -19375,11 +19450,11 @@ function coopConnect(url, role, code, my, until) {
   const retry = () => {
     if (my !== coopTry) return;
     if (performance.now() < until) { COOP.status = 'waking'; coopPanelDraw(); setTimeout(() => { if (my === coopTry) coopConnect(url, role, code, my, until); }, COOP.rejoin ? 1500 : 3000); }
-    else { COOP.status = 'off'; COOP.err = COOP_NO_SERVER; coopPanelDraw(); if (COOP.rejoin) { COOP.rejoin = null; coopLost('guest', true); } }
+    else { COOP.status = 'off'; COOP.err = COOP_NO_SERVER; coopPanelDraw(); if (COOP.rejoin) coopRejoinFail(); }
   };
   try { ws = new WebSocket(url); } catch (e) { COOP.status = 'off'; COOP.err = COOP_NO_SERVER; coopPanelDraw(); return; }
   COOP.ws = ws;
-  ws.onopen = () => { opened = true; COOP.openAt = performance.now(); coopSend(role === 'host' ? { t: 'host' } : { t: 'join', code }); };
+  ws.onopen = () => { opened = true; COOP.openAt = performance.now(); coopSend(role === 'host' ? { t: 'host', code: COOP.rejoin ? code : undefined } : { t: 'join', code }); };
   ws.onmessage = e => { COOP.lastRx = performance.now(); let m; try { m = JSON.parse(e.data); } catch (err) { return; } coopOnMessage(m); };
   ws.onerror = () => {};
   ws.onclose = ev => {
@@ -19388,10 +19463,10 @@ function coopConnect(url, role, code, my, until) {
     const was = COOP.role, hadPeer = COOP.peer, rejoinCode = COOP.code;
     if (was && hadPeer) coopNoteDrop({ code: ev.code, reason: ev.reason, clean: ev.wasClean });
     COOP.ws = null; COOP.role = null; COOP.peer = false; COOP.status = 'off'; COOP.rtt = 0;
-    // a guest dropped mid-run gets back in by itself (see coopRejoin); anything else ends co-op as before
-    if (COOP.rejoin || (was === 'guest' && COOP.inRun && rejoinCode)) {
-      if (COOP.rejoin && performance.now() >= COOP.rejoin.until) { COOP.rejoin = null; coopLost('guest', hadPeer); }
-      else coopRejoin(url, rejoinCode);
+    // either player dropped mid-run gets back in by itself (see coopRejoin); anything else ends co-op as before
+    if (COOP.rejoin || (was && COOP.inRun && rejoinCode && !COOP.partnerQuit)) {
+      if (COOP.rejoin && performance.now() >= COOP.rejoin.until) coopRejoinFail();
+      else coopRejoin(url, rejoinCode, COOP.rejoin ? COOP.rejoin.role : was);
     } else if (was) coopLost(was, hadPeer);
     coopPanelDraw(); coopPillDraw();
   };
@@ -19410,20 +19485,29 @@ function coopNoteDrop(d) {
   try { logEvent('coop', `co-op dropped as ${COOP.role || 'player'}: ${COOP.lastDrop}${COOP.inRun ? ' (mid-run)' : ''}`); } catch (e) {}
   console.warn('[coop] dropped:', COOP.lastDrop);
 }
-// A guest whose connection drops mid-run (a network blip, a phone switching networks, the relay restarting) rejoins the same
-// room on its own: the host keeps the room open while a run is on, and a rejoining guest's hello drops it straight back into
-// the run (coopPartnerHello -> coopHostBegin). The guest's world holds meanwhile; it only gives up after COOP_REJOIN_MS.
-// (2026-10-25: before this, any drop sent the guest home and ended the run for both, which looked like co-op "suddenly ending".)
-const COOP_REJOIN_MS = 30000;
-function coopRejoin(url, code) {
-  if (!COOP.rejoin) { COOP.rejoin = { until: performance.now() + COOP_REJOIN_MS }; toast('Connection lost', 'Reconnecting to your partner…', '#ffb84a'); }
+// A player whose connection drops mid-run (a network blip, a phone switching networks, the relay restarting) gets back in on
+// its own. The guest rejoins the same room; a rejoining guest's hello drops it straight back into the run (coopPartnerHello
+// -> coopHostBegin). The host reopens its room under the same code ('host' with `code`: needs the 2026-10-25 relay), which
+// covers the relay itself restarting (the user's "closed, code 1005, after 7:14": a clean close with no code, which our
+// relay never sends, so Render's side shut it). Both worlds hold meanwhile; each gives up after COOP_REJOIN_MS (a cold
+// start on Render's free plan can take most of a minute). A partner who quits on purpose says 'end' first (partnerQuit).
+const COOP_REJOIN_MS = 90000;
+function coopRejoin(url, code, role) {
+  if (!COOP.rejoin) { COOP.rejoin = { until: performance.now() + COOP_REJOIN_MS, role }; toast('Connection lost', role === 'host' ? 'Reconnecting to the co-op server…' : 'Reconnecting to your partner…', '#ffb84a'); }
   COOP.code = code; COOP.lostT = performance.now();
   if (G.state === 'play') G.state = 'coopwait';
   const my = ++coopTry;
-  setTimeout(() => { if (my === coopTry) coopConnect(url, 'guest', code, my, COOP.rejoin ? COOP.rejoin.until : performance.now()); }, 600);
+  setTimeout(() => { if (my === coopTry) coopConnect(url, role, code, my, COOP.rejoin ? COOP.rejoin.until : performance.now()); }, 600);
+}
+function coopRejoinFail() {
+  const role = (COOP.rejoin && COOP.rejoin.role) || 'guest'; COOP.rejoin = null; COOP.lostT = 0;
+  if (G.state === 'coopwait' && role === 'host') G.state = 'play';   // the host plays on alone
+  coopLost(role, true);
 }
 function coopClose(quiet) {
   coopTry++;   // stops a wake-up still waiting
+  COOP.rejoin = null; COOP.lostT = 0;
+  if (COOP.peer) coopSend({ t: 'end' });   // on purpose: the partner doesn't wait to reconnect
   coopSend('{"t":"bye"}');   // tells the relay at once (through Render's proxy a bare close can take a minute to arrive)
   const ws = COOP.ws; COOP.ws = null;
   const was = COOP.role, hadPeer = COOP.peer;
@@ -19459,24 +19543,38 @@ setInterval(() => {
     else { COOP.peer = false; COOP.status = 'waiting'; coopPeerLeft(false); coopPanelDraw(); coopPillDraw(); }   // host keeps the room open for a rejoin
   }
 }, 1000);
-addEventListener('pagehide', () => coopSend('{"t":"bye"}'));
+addEventListener('pagehide', () => { if (COOP.peer) coopSend({ t: 'end' }); coopSend('{"t":"bye"}'); });
 function coopOnMessage(m) {
   if (m.t !== 'room' && m.t !== 'err' && m.t !== 'pong') COOP.lastPeerRx = performance.now();
   if (m.t === 'ka') return;
+  if (m.t === 'end') { COOP.partnerQuit = true; return; }   // the partner is leaving on purpose: no reconnect wait
   if (m.t === 'png') { coopSend({ t: 'pog', at: m.at }); return; }
   if (m.t === 'pog') { const r = performance.now() - m.at; if (r >= 0 && r < 10000) COOP.rtt = COOP.rtt ? COOP.rtt * 0.6 + r * 0.4 : r; return; }
   switch (m.t) {
-    case 'room': COOP.role = 'host'; COOP.code = m.code; COOP.status = 'waiting'; coopPanelDraw(); coopPillDraw(); return;
-    case 'joined': COOP.lostT = 0; if (COOP.rejoin) { COOP.rejoin = null; toast('Reconnected', 'Back in your partner\'s run', '#8fe3ff'); } COOP.role = 'guest'; COOP.code = m.code; COOP.status = 'paired'; COOP.peer = true; coopSend(coopHelloMsg()); coopPanelDraw(); coopPillDraw(); return;
+    case 'room':
+      COOP.role = 'host'; COOP.code = m.code; COOP.status = 'waiting'; COOP.partnerQuit = false;
+      if (COOP.rejoin) {   // my room is back (same code with the current relay): play on, the guest rejoins by itself
+        COOP.rejoin = null; COOP.lostT = 0; if (G.state === 'coopwait' && !COOP.mateHold) G.state = 'play';
+        toast('Reconnected', 'Your partner rejoins in a moment', '#8fe3ff'); coopWaitBanner(false);
+      }
+      coopPanelDraw(); coopPillDraw(); return;
+    case 'joined': COOP.lostT = 0; COOP.partnerQuit = false; if (COOP.rejoin) { COOP.rejoin = null; toast('Reconnected', 'Back in your partner\'s run', '#8fe3ff'); } COOP.role = 'guest'; COOP.code = m.code; COOP.status = 'paired'; COOP.peer = true; coopSend(coopHelloMsg()); coopPanelDraw(); coopPillDraw(); return;
     case 'peer':
       COOP.peer = !!m.on; COOP.status = m.on ? 'paired' : COOP.role === 'host' ? 'waiting' : 'off';
       if (m.on) { if (COOP.role === 'host') coopSend(coopHelloMsg()); }
-      else { coopNoteDrop({ why: COOP.role === 'guest' ? 'your partner\'s game left the room' : 'your partner\'s connection ended' }); coopPeerLeft(!!m.closed); }
+      else {
+        coopNoteDrop({ why: COOP.role === 'guest' ? 'your partner\'s game left the room' + (COOP.partnerQuit ? '' : ' (connection lost)') : 'your partner\'s connection ended' });
+        // the host's connection dropped mid-run (not a quit): the relay closes my socket next, and onclose waits for the
+        // host to reopen the room instead of sending me home
+        if (COOP.role === 'guest' && m.closed && COOP.inRun && !COOP.partnerQuit) { coopPanelDraw(); coopPillDraw(); return; }
+        coopPeerLeft(!!m.closed);
+      }
       coopPanelDraw(); coopPillDraw(); return;
     case 'err':
       // rejoining: the relay may still hold my dead socket for up to 20 s ('room full'): close and try again; a room that's
       // gone (the host left) ends it at once
-      if (COOP.rejoin && COOP.ws) { if (m.why !== 'room full') COOP.rejoin.until = 0; try { COOP.ws.close(); } catch (e) {} return; }
+      // (2026-10-25: also 'no such room' while the host reopens it, and 'code taken' while my old room still closes)
+      if (COOP.rejoin && COOP.ws) { if (!['room full', 'no such room', 'code taken'].includes(m.why)) COOP.rejoin.until = 0; try { COOP.ws.close(); } catch (e) {} return; }
       COOP.err = m.why === 'no such room' ? 'No game with that code' : m.why === 'room full' ? 'That game already has two players' : m.why || 'Server error'; coopPanelDraw(); return;
     case 'hello':
       COOP.partnerV = m.v; COOP.partnerCos = m.cos || null;
@@ -19734,6 +19832,7 @@ function coopGunLook(p) { if (p && G.weapon) { try { asPlayer(p, () => setGunLoo
 function coopRemoveMate() {
   const m = COOP.mate; if (!m) return;
   removeObj(m.mesh); removeObj(m.blob); if (m.chargeOrb) removeObj(m.chargeOrb); if (m.ring) removeObj(m.ring);
+  if (m.beams) { m.beams.forEach(b => removeObj(b)); m.beams = []; }
   coopDropMateExtras();
   COOP.mate = null;
   if (G.player && G.players.coop) G.players = [G.player];
@@ -19840,7 +19939,8 @@ function coopSnap() {
   for (const b of G.bullets) {
     if (!b.mesh || b._pred) continue;
     const id = coopCid(b), row = [id, cr2(b.x), cr2(b.y), cr2(b.z), cr2(b.mesh.rotation.y)];
-    if (!COOP.sent.has(id)) { COOP.sent.add(id); row.push({ k: b.kind, c: b.color || 0xff7a4d, s: cr2(b.size || 1) }); }
+    // (lobbed bombs and grenades also carry where they land: the guest draws the same landing marker, 2026-10-25)
+    if (!COOP.sent.has(id)) { COOP.sent.add(id); row.push({ k: b.kind, c: b.color || 0xff7a4d, s: cr2(b.size || 1), lt: b.marker ? [cr2(b.tx), cr2(b.tz), cr2(b.radius || 2.6)] : undefined }); }
     B.push(row);
   }
   s.B = B;
@@ -19869,9 +19969,11 @@ function coopSnap() {
   if (ms !== COOP.mapS) { COOP.mapS = ms; s.M = coopMapSummary(); }
   // trap states (pressure plates, crumbling floor) for the guest's copy of the isle
   if (G.room && G.room.traps && G.room.traps.length) s.T = G.room.traps.map(tr => [tr.state || '', cr2(tr.t || 0), cr2(tr.shake || 0), tr.gone ? 1 : 0]);
-  // the Crystal Lance's beams (one shared set of meshes)
-  const bm = (G.beams || []).filter(b => b.visible);
-  if (bm.length) s.L = bm.map(b => [cr2(b.position.x), cr2(b.position.y), cr2(b.position.z), cr2(b.rotation.y), cr2(b.userData.len || b.scale.z || 1), cr2(b.userData.width || 0.35)]);
+  // the Crystal Lance's beams: mine (G.beams) and the guest's own set (m.beams, see the updateBeam wrapper). Before
+  // 2026-10-25 the length wasn't sent (userData.len was never set, so the guest drew a 1-unit stub) and both players shared
+  // one set of meshes, so two Prism Beams fought over it.
+  const bm = [...(G.beams || []), ...((m && m.beams) || [])].filter(b => b.visible);
+  if (bm.length) s.L = bm.map(b => [cr2(b.position.x), cr2(b.position.y), cr2(b.position.z), cr2(b.rotation.y), cr2(b.userData.len || 1), cr2(b.userData.width || 0.35)]);
   if (COOP.sfxSet.size) { for (const k of COOP.sfxSet) COOP.ev.push(['sfx', k]); COOP.sfxSet.clear(); }
   if (COOP.ev.length) { s.ev = COOP.ev; COOP.ev = []; }
   coopSend(s);
@@ -20046,12 +20148,17 @@ function coopAllDown() {
   const h = G.player; h.hp = 0;
   for (const p of [h, COOP.mate]) { p.down = false; coopUpPose(p); coopReviveSpotOff(p); }
   _gameOver();
+  // (2026-10-25 fix: when the guest went down last, the run ended here without telling the guest, whose screen then sat
+  // in a frozen run with the enemies still moving and no result screen)
+  coopSendOver();
 }
+function coopSendOver() { if (COOP.role === 'host' && COOP.peer && COOP.inRun) coopSend({ t: 'over', stats: $('#overStats').innerHTML }); }
 // guest -> host messages
 function coopHostMsg(m) {
   const mate = COOP.mate;
   switch (m.t) {
     case 'in': COOP.gin = m; if (!COOP.inRun) COOP.gStart = m.sw || null; if (mate && !mate.seen) { mate.seen = true; mate.x = m.x; mate.z = m.z; mate.y = m.y; mate.mesh.position.set(m.x, m.y, m.z); } return;
+    case 'again': if (G.mode === 'story' && G.state === 'over') $('#againBtn').click(); return;   // the guest pressed Try again
     case 'rejoin': if (G.mode === 'story' && G.state !== 'over') { if (!COOP.inRun) coopHostBegin(); else coopSendRoom(null); } return;
     case 'go':   // the guest jumped into a portal in my hub: start that run for both
       if (G.mode === 'hub' && G.state === 'play' && !COOP.inRun) startStory(m.level || 1, m.run || 'story');
@@ -20107,6 +20214,7 @@ function coopGuestMsg(m) {
   }
 }
 function coopGuestBegin(m) {
+  if (G.state === 'over' && G.mode === 'story') bankRunGold();   // (already banked on the result screen; a safety net)
   coopVisitEnd(false);   // my own save back before the run (its boss defeats, unlocks and gold are mine)
   for (const id of ['#levelDone', '#over', '#pause', '#mapView', '#invView', '#cardView', '#feedView', '#swapView', '#ctlView', '#collectView']) { const el = $(id); if (el) el.hidden = true; }
   if (coopEl) coopEl.hidden = true;
@@ -20222,6 +20330,12 @@ function coopMakeEnemyPup(u, r) {
 function coopMakeShotPup(u) {
   const f = u.info, m = f.k === 'lob' || f.k === 'grenade' ? projMesh(f.k, 0xff7a4d, 1) : projMesh(f.k, f.c, f.s || 1);
   m.visible = false; scene.add(m); u.obj = m;
+  if (f.lt) {   // the landing marker, as spawnLob draws it (40-bullets)
+    let mk;
+    if (f.k === 'lob') mk = makeLobMarker(f.lt[2]);
+    else { mk = mesh(new THREE.RingGeometry(0.8, 1, 24), new THREE.MeshBasicMaterial({ color: 0xff7a4d, transparent: true, opacity: 0.6, depthWrite: false })); mk.rotation.x = -Math.PI / 2; mk.scale.setScalar(f.lt[2]); }
+    mk.position.set(f.lt[0], 0.06, f.lt[1]); scene.add(mk); u.marker = mk;
+  }
 }
 function coopMakeEShotPup(u) {
   const f = u.info, look = f.l && ESHOT[f.l];
@@ -20262,6 +20376,7 @@ function coopRemovePup(u, fx) {
     if (fx && u.kind !== 'K') { const p = o.position; emit(p.x, p.y, p.z, 5, u.kind === 'S' ? 0xff5fa2 : (u.info.c || 0xffd34d), { speed: 3, size: 0.26, life: 0.22, grav: 0, glow: true }); }
     removeObj(o);
   }
+  if (u.marker) { removeObj(u.marker); u.marker = null; }
   COOP.pup.delete(coopPupKey(u.kind, u.id));
 }
 function coopGuestClear() {
@@ -20362,7 +20477,7 @@ function coopGuestEvent(e) {
     case 'hz': { const f = COOP_HZ[a[0]]; if (f) f.orig(...a[1]); break; }
     case 'flash': flashScreen(a[0], a[1]); break;
     case 'boss': {   // a boss went down: it counts in my save too (Bosses tab, Playground trophy), and gets the same white flash
-      SAVE.bosses[a[0]] = (SAVE.bosses[a[0]] || 0) + 1; writeSave(); try { bossTrophyEarned(a[0]); } catch (er) {}
+      try { recordBossWin(a[0]); } catch (er) {}   // (G.diff is the host's here, so a Nightmare win counts as one)
       flashScreen(0.6, '#ffffff');
       break;
     }
@@ -20381,11 +20496,23 @@ function coopGuestHurt(m) {
 function coopGuestOver(m) {
   G.state = 'over'; hideBeams(); setPrompt(null); $('#bossbar').hidden = true;
   if (G.player) G.player.mesh.visible = false;
+  // my own run gold goes to my savings now (2026-10-25: it was only banked on Go home, so the host's Try again, which
+  // starts the next run straight away, threw it away), and the stats show my number, not the host's
+  const banked = bankRunGold();
   $('#overStats').innerHTML = m.stats || '';
+  const gb = [...$('#overStats').querySelectorAll('div')].find(d => /Gold banked/.test(d.textContent)); if (gb && gb.querySelector('b')) gb.querySelector('b').textContent = banked;
   $('#overRecords').hidden = true; $('#overItems').innerHTML = itemListHTML(); $('#overPet').textContent = '';
-  $('#againBtn').hidden = true;
-  setTimeout(() => { if (G.state === 'over') { $('#over').hidden = false; $('#hud').hidden = true; $('#titleBtn').focus(); } }, 900);
+  // Try again asks the host's game to restart the run for both ('again'); Go home leaves it
+  $('#againBtn').hidden = false; $('#againBtn').innerHTML = 'Try again <small>Together, from the start of the run</small>';
+  setTimeout(() => { if (G.state === 'over') { $('#over').hidden = false; $('#hud').hidden = true; $('#againBtn').focus(); } }, 900);
 }
+// the guest's Try again: the host's game starts the new run (and brings us in with 'start'); a capture listener, so the
+// solo handler (a local run) never runs for a guest
+$('#againBtn').addEventListener('click', e => {
+  if (!(COOP.role === 'guest' && COOP.inRun)) return;
+  e.stopImmediatePropagation();
+  coopSend({ t: 'again' }); toast('Asking your partner\'s game to restart…', 'The new run starts for both of you', '#8fe3ff');
+}, true);
 function coopGuestDone(m) {
   // a Story level cleared together: it unlocks the next level in my save too, if I'd already reached this one
   if (G.run === 'story' && !G.loop && SAVE.unlocked >= G.level) {
@@ -20456,7 +20583,7 @@ function coopGuestEndRun() {
 // is never touched: the borrowed fields are swapped back in for every write, and out again when the visit ends (a run
 // starting, leaving co-op, the host going away). Editing the host's playground, its difficulty, its pet bed or the
 // boutique is the host's alone.
-const COOP_VISIT_KEYS = ['home', 'bosses', 'unlocked', 'cleared', 'rush', 'endless', 'pets', 'weapons', 'runs', 'records', 'daily'];
+const COOP_VISIT_KEYS = ['home', 'bosses', 'bossesN','unlocked', 'cleared', 'rush', 'endless', 'pets', 'weapons', 'runs', 'records', 'daily'];
 const COOP_VISIT_BLOCK = /^(Blueprint table|Difficulty|Schiffy's Playground|Boutique)/;
 const COOP_HUB_MS = 50;
 COOP.visit = false; COOP.own = null; COOP.hubSentKey = ''; COOP.hubT = 0; COOP.hubCheckT = 0;
@@ -20489,8 +20616,8 @@ function coopHubHostTick(dt) {
 }
 // the partner's range weapon in the shared hub (2026-10-25, user's request: picking one up and shooting showed on one screen
 // only). On each screen the partner's Schiffy holds it and fires it while they do, as real hub shots: in the hub those only
-// ever hit the practice dummies, so both screens show the shots and the dummy numbers. The Prism Beam only shows in hand (its
-// beam meshes are one shared set, mine).
+// ever hit the practice dummies, so both screens show the shots and the dummy numbers. (The Prism Beam fires its own beam
+// meshes for the partner: the updateBeam wrapper.)
 function coopHubMateGun(m, wid, firing, ax, az, dt) {
   if (!m || !m.gun) return;
   // as the partner, holding their range weapon (a run build left in COOP.mb stays out of it: asPlayer would swap it in)
@@ -20502,11 +20629,12 @@ function coopHubMateGun(m, wid, firing, ax, az, dt) {
   const id = wid && WEAPONS[wid] ? wid : null;
   if ((m.hubW ? m.hubW.id : null) !== id) {
     m.hubW = id ? Object.assign(newWeapon(id), { level: RANGE_LEVEL }) : null; m.fireCd = 0; m.charge = 0;
+    if (m.beams) m.beams.forEach(b => { b.visible = false; });
     if (m.hubW) asMate(() => setGunLook());
     else { try { showChargeOrb(m, 0); } catch (e) {} }
   }
   m.gun.visible = !!m.hubW;
-  if (!m.hubW || G.state !== 'play' || WEAPONS[m.hubW.id].kind === 'beam') return;
+  if (!m.hubW || G.state !== 'play') return;
   if (ax != null) { m.aimX = ax; m.aimZ = az; }
   asMate(() => _weaponTick(m, !!firing, dt));
 }
@@ -20646,11 +20774,13 @@ let coopWaitEl = null;
 function coopWaitBanner(on) {
   if (!coopWaitEl) { if (!on) return; coopWaitEl = document.createElement('div'); coopWaitEl.id = 'coopWait'; ($('#app') || document.body).appendChild(coopWaitEl); }
   const st = COOP.role === 'host' ? 'card' : COOP.hostSt;   // the host only ever waits on the guest's upgrade pick
-  const txt = !on ? '' : st === 'levelDone' ? 'Level cleared! Waiting for your partner…' : st === 'over' ? '' : COOP_VIEWS[st] ? 'Your partner is choosing an upgrade…' : COOP.lostT ? 'Waiting for your partner\'s game…' : 'Your partner is in a menu…';
+  const txt = !on ? '' : COOP.lostT ? (COOP.role === 'host' || (COOP.rejoin && COOP.rejoin.role === 'host') ? 'Reconnecting to the co-op server…' : 'Waiting for your partner\'s game…')
+    : st === 'levelDone' ? 'Level cleared! Waiting for your partner…' : st === 'over' ? '' : COOP_VIEWS[st] ? 'Your partner is choosing an upgrade…' : 'Your partner is in a menu…';
   coopWaitEl.hidden = !on || !txt; if (txt && coopWaitEl.textContent !== txt) coopWaitEl.textContent = txt;
 }
 function coopFrame(now) {
   const dt = Math.min(0.05, Math.max(0, (now - (COOP.lastFrame || now)) / 1000)); COOP.lastFrame = now;
+  if (COOP.rejoin && COOP.rejoin.role === 'host') { coopWaitBanner(G.state === 'coopwait'); coopPillDraw(); return; }   // my room is reopening
   if (COOP.role === 'host') {
     if (COOP.inRun && G.mode === 'hub') { COOP.inRun = false; coopRemoveMate(); COOP.hubSentKey = ''; if (COOP.peer) coopSend({ t: 'hub' }); }
     if (coopHost()) {
@@ -20736,7 +20866,7 @@ const _gameOver = gameOver;
 gameOver = function () {
   if (coopHost() && G.player === COOP.hostP && COOP.mate && !COOP.mate.down && COOP.mate.hp > 0) { coopDown(G.player); return; }
   _gameOver();
-  if (COOP.role === 'host' && COOP.peer && COOP.inRun) coopSend({ t: 'over', stats: $('#overStats').innerHTML });
+  coopSendOver();
 };
 const _startStory = startStory;
 startStory = function (level, run, startId) {
@@ -20867,6 +20997,15 @@ weaponTick = function (p, firing, dt) {
   }
   _weaponTick(p, firing, dt);
 };
+// each Schiffy fires its own Prism Beam meshes: the partner's run in its own set (p.beams), swapped in for the call
+const _updateBeam = updateBeam;
+updateBeam = function (p, s, firing, dt) {
+  if (!p || !p.isMate) return _updateBeam(p, s, firing, dt);
+  const own = G.beams; G.beams = p.beams || (p.beams = []);
+  try { return _updateBeam(p, s, firing, dt); } finally { p.beams = G.beams; G.beams = own; }
+};
+const _hideBeams = hideBeams; hideBeams = function () { _hideBeams(); const m = COOP.mate; if (m && m.beams) m.beams.forEach(b => { b.visible = false; }); };
+const _clearBeams = clearBeams; clearBeams = function () { _clearBeams(); const m = COOP.mate; if (m && m.beams) { m.beams.forEach(b => removeObj(b)); m.beams = []; } };
 const COOP_DUMMY_SHOT = () => ({ hit: new Set(), x: 0, y: 0, z: 0, vx: 0, vz: 0, mesh: null });
 const _spawnProj = spawnProj;
 spawnProj = function (kind, x, y, z, a, s, o) {
