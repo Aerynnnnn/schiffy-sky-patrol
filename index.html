@@ -180,8 +180,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #ffc8a6; col
   .he-pvtext p { font-size: 12px; }
   .he-pvbtns .smallbtn { padding: 3px 12px; font-size: 13px; }
   .he-bar.pv .he-pose { gap: 2px 14px; }
-  /* a short screen keeps the preview bar to two lines of controls: Turn + Hover (tilt / roll are on the keys) */
-  .he-bar.pv .he-row:has(#he_pitch), .he-bar.pv .he-row:has(#he_roll), .he-bar.pv .he-quick { display: none; }
+  /* a short screen keeps the preview bar to two lines of controls: Turn + Hover (tilt / roll / size are on the keys) */
+  .he-bar.pv .he-row:has(#he_pitch), .he-bar.pv .he-row:has(#he_roll), .he-bar.pv .he-row:has(#he_size), .he-bar.pv .he-quick { display: none; }
   .he-bar.pv { padding: 6px 12px; gap: 4px 12px; }
   .he-bar.pv .he-pvbtns { flex-direction: row; }
 }
@@ -1288,6 +1288,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
       <div class="he-row"><b>Tilt</b><button class="smallbtn" id="he_pitch_m" type="button" title="Tilt back 15° (R)" aria-label="Tilt back">⤺</button><input type="range" id="he_pitch" min="-180" max="180" step="1" aria-label="Tilt"><button class="smallbtn" id="he_pitch_p" type="button" title="Tilt forward 15° (F)" aria-label="Tilt forward">⤻</button><span id="he_pitch_v"></span></div>
       <div class="he-row"><b>Roll</b><button class="smallbtn" id="he_roll_m" type="button" title="Roll left 15° (Z)" aria-label="Roll left">↶</button><input type="range" id="he_roll" min="-180" max="180" step="1" aria-label="Roll"><button class="smallbtn" id="he_roll_p" type="button" title="Roll right 15° (C)" aria-label="Roll right">↷</button><span id="he_roll_v"></span></div>
       <div class="he-row"><b>Hover</b><button class="smallbtn" id="he_lift_m" type="button" title="Lower (Page Down)" aria-label="Lower">▼</button><input type="range" id="he_lift" min="0" max="12" step="0.25" aria-label="Hover height"><button class="smallbtn" id="he_lift_p" type="button" title="Raise (Page Up)" aria-label="Raise">▲</button><span id="he_lift_v"></span></div>
+      <div class="he-row"><b>Size</b><button class="smallbtn" id="he_size_m" type="button" title="Smaller (-)" aria-label="Smaller">−</button><input type="range" id="he_size" min="0.5" max="1.5" step="0.05" aria-label="Size"><button class="smallbtn" id="he_size_p" type="button" title="Bigger (=)" aria-label="Bigger">+</button><span id="he_size_v"></span></div>
       <div class="he-row he-quick"><button class="smallbtn" id="heFlip" type="button" title="Upside down and back (X)">Flip over</button><button class="smallbtn" id="heUpright" type="button" title="No tilt, no roll, back on the ground">Upright</button><button class="smallbtn" id="heStore" type="button" title="Back into storage">Put away</button></div>
     </div>
     <div class="he-btns"><button class="smallbtn he-cat" id="heCat" type="button">Catalogue</button><button class="smallbtn" id="heClear" type="button">Clear it</button><button class="smallbtn" id="heReset" type="button">Reset layout</button><button class="smallbtn he-done" id="heDone" type="button">Done · Esc</button></div>
@@ -13563,7 +13564,7 @@ function homeMigrateDecor() {
   for (const h of mine) {
     if (shown[h.sku] === false || (S.items[h.sku] && S.items[h.sku].out)) continue;
     const v = S.items[h.sku] || {}, d = HOME_DECOR_SPOT[h.sku] || { dx: 0, dz: 0 };
-    const it = { id: h.sku, kind: h.sku, cat: true, dx: v.dx != null ? v.dx : d.dx, dz: v.dz != null ? v.dz : d.dz, rot: v.rot || 0, pitch: v.pitch || 0, roll: v.roll || 0, lift: v.lift || 0 };
+    const it = { id: h.sku, kind: h.sku, cat: true, dx: v.dx != null ? v.dx : d.dx, dz: v.dz != null ? v.dz : d.dz, rot: v.rot || 0, pitch: v.pitch || 0, roll: v.roll || 0, lift: v.lift || 0, size: v.size || 1 };
     let r = homePlace(it, placed);
     if (!r.ok || r.b > it.lift + 0.01) { const f = homeFree(it, placed); if (!f) continue; [it.dx, it.dz] = f; r = homePlace(it, placed); }
     it.y = r.b; it.box = r.box; it.low = r.low; placed.push(it);
@@ -13587,14 +13588,21 @@ function homeSave() {
 // an item's turn as a matrix: roll, then tilt, then the turn about the vertical ('YXZ' euler), the same the models get
 const HM = new THREE.Matrix4(), HQ = new THREE.Euler(), HV = new THREE.Vector3();
 function homeEuler(it, e = HQ) { return e.set((it.pitch || 0) * D2R, -(it.rot || 0) * D2R, (it.roll || 0) * D2R, 'YXZ'); }
-// the item's boxes after turning, relative to its spot and with its lowest point at height 0
+// size (2026-10-25, user's request): any placed item can shrink or grow within HOME_SIZE, model and boxes alike; the
+// lookout and jump pad stay 1 (the pad's reach and the telescope are tuned to them). Saved as SAVE.home.items[id].size.
+const HOME_SIZE = { min: 0.5, max: 1.5 };
+const homeSize = it => HOME_FIXED[it.kind] ? 1 : clamp(+it.size || 1, HOME_SIZE.min, HOME_SIZE.max);
+// the pose fields a save keeps (only the ones off their default: 0, or size 1)
+const HOME_POSE_KEYS = ['rot', 'pitch', 'roll', 'lift', 'size'];
+const homePoseSaved = (k, x) => !!x && !(k === 'size' && x === 1);
+// the item's boxes after sizing and turning, relative to its spot and with its lowest point at height 0
 function homeTurned(it) {
   HM.makeRotationFromEuler(homeEuler(it));
-  const out = []; let low = Infinity;
+  const out = [], s = homeSize(it); let low = Infinity;
   for (const [cx, cz, hx, hz, y0, y1] of HOME_PARTS[it.kind]) {
     const b = { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity, z0: Infinity, z1: -Infinity };
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) for (const y of [y0, y1]) {
-      HV.set(cx + sx * hx, y, cz + sz * hz).applyMatrix4(HM);
+      HV.set((cx + sx * hx) * s, y * s, (cz + sz * hz) * s).applyMatrix4(HM);
       b.x0 = Math.min(b.x0, HV.x); b.x1 = Math.max(b.x1, HV.x); b.y0 = Math.min(b.y0, HV.y); b.y1 = Math.max(b.y1, HV.y); b.z0 = Math.min(b.z0, HV.z); b.z1 = Math.max(b.z1, HV.z);
     }
     out.push(b); low = Math.min(low, b.y0);
@@ -13647,13 +13655,13 @@ function homeFree(it, others) {
 // bottom-up; one that doesn't fit moves to the nearest free spot (not saved).
 function homeLayout() {
   const saved = homeSave().items, list = [];
-  const make = (id, kind, extra, def, defRot) => { const v = saved[id]; return { id, kind, ...extra, dx: v ? v.dx : def.dx, dz: v ? v.dz : def.dz, rot: v && v.rot != null ? v.rot : defRot, pitch: v && v.pitch || 0, roll: v && v.roll || 0, lift: v && v.lift || 0, y: v && v.y || 0, off: !!(v && v.off), saved: !!v }; };
+  const make = (id, kind, extra, def, defRot) => { const v = saved[id]; return { id, kind, ...extra, dx: v ? v.dx : def.dx, dz: v ? v.dz : def.dz, rot: v && v.rot != null ? v.rot : defRot, pitch: v && v.pitch || 0, roll: v && v.roll || 0, lift: v && v.lift || 0, size: v && v.size || 1, y: v && v.y || 0, off: !!(v && v.off), saved: !!v }; };
   for (const n of HOME_NATURE) list.push(make(n.id, n.kind, { v: n.v, nature: true, name: HOME_NAMES[n.kind] }, n, (+n.id.slice(1) * 137) % 360));
   for (const h of HOME_CAT) for (const id of homeIds(h.sku)) if (homeIsOut(id)) list.push(make(id, h.sku, { nature: false, cat: true, name: h.name }, { dx: 0, dz: 0 }, 0));
   // the lookout and the jump pad: always out, flat on the grass, the lookout squared to a quarter turn
   for (const id in HOME_FIXED) {
     const f = HOME_FIXED[id], it = make(id, id, { nature: false, fixed: true, name: f.name }, f, 0);
-    it.pitch = it.roll = it.lift = it.y = 0; it.off = false; if (f.step) it.rot = wrapDeg(Math.round((it.rot || 0) / f.step) * f.step);
+    it.pitch = it.roll = it.lift = it.y = 0; it.size = 1; it.off = false; if (f.step) it.rot = wrapDeg(Math.round((it.rot || 0) / f.step) * f.step);
     list.push(it);
   }
   const placed = [];
@@ -13667,14 +13675,16 @@ function homeLayout() {
   return list;
 }
 // pose a model: o = a nature model built at its spot's origin (base null), or a structure group whose children were built at
-// absolute world spots around base. It turns about the spot and its bottom sits at height b: world = T + R * p, so
-// T = spot + (0, b - low, 0) - R * base.
+// absolute world spots around base. It turns about the spot and its bottom sits at height b: world = T + R * s * p, so
+// T = spot + (0, b - low, 0) - R * s * base.
 function homePose(o, base, it, b, low) {
   homeEuler(it, o.rotation);
   HM.makeRotationFromEuler(o.rotation);
-  const tx = HOME.x + it.dx, tz = HOME.z + it.dz, ty = b - low;
+  const s = homeSize(it), tx = HOME.x + it.dx, tz = HOME.z + it.dz, ty = b - low;
+  if (!o.userData.homeScale) o.userData.homeScale = o.scale.clone();
+  o.scale.copy(o.userData.homeScale).multiplyScalar(s);
   if (!base) { o.position.set(tx, ty, tz); return; }
-  HV.set(base[0], 0, base[1]).applyMatrix4(HM);
+  HV.set(base[0] * s, 0, base[1] * s).applyMatrix4(HM);
   o.position.set(tx - HV.x, ty - HV.y, tz - HV.z);
 }
 // an item's boxes as hub colliders (75-hub collision reads y0 so Schiffy walks under what hovers; perch lets him land on top)
@@ -13898,7 +13908,8 @@ const HOME_ANIM = {
       cabs.forEach((cb, i) => { const x = rest[i].x - hub.x, y = rest[i].y - hub.y; cb.position.set(hub.x + x * c - y * s, hub.y + x * s + y * c, rest[i].z); });
     };
   },
-  'home.carousel': o => { const r = o.getObjectByName('Home_carousel_ride'); return dt => { if (r) r.rotation.y += dt * 0.5; }; },
+  // the pups face their -rotation.y direction (home_more.py: heads along the +angle tangent), so it turns that way, nose first
+  'home.carousel': o => { const r = o.getObjectByName('Home_carousel_ride'); return dt => { if (r) r.rotation.y -= dt * 0.5; }; },
   'home.blossom': o => () => homePuff(o, 0.08, [rand(-1.2, 1.2), 2.2, rand(-1.2, 1.2)], 0.1, 0xffc6dc, null, -0.6),
   // Ember Volcano set (2026-10-17)
   'home.lavalamp': o => {
@@ -13977,7 +13988,7 @@ const HE = { sel: null, drag: null, L: [], rings: null, keep: null, zoom: 1, cz:
 const heItem = id => HE.L.find(i => i.id === id);
 const heRay = new THREE.Raycaster(), heNdc = new THREE.Vector2(), hePlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), heHit = new THREE.Vector3();
 // the bar's angle and height controls: key in the item, slider range, step for the - / + buttons
-const HE_CTL = { rot: { min: -180, max: 180, step: 15, unit: '°' }, pitch: { min: -180, max: 180, step: 15, unit: '°' }, roll: { min: -180, max: 180, step: 15, unit: '°' }, lift: { min: 0, max: HOME_TOP, step: 0.5, unit: '' } };
+const HE_CTL = { rot: { min: -180, max: 180, step: 15, unit: '°' }, pitch: { min: -180, max: 180, step: 15, unit: '°' }, roll: { min: -180, max: 180, step: 15, unit: '°' }, lift: { min: 0, max: HOME_TOP, step: 0.5, unit: '' }, size: { min: HOME_SIZE.min, max: HOME_SIZE.max, step: 0.1, unit: '×' } };
 // frame the whole isle (and its tallest trees) in the screen space above the edit bar: the smallest zoom that fits, with the
 // camera target slid so the isle sits in the middle of that space. Uses the same pose as updateCamera; sets G.zoom and HE.cz.
 // In the purchase preview (HE.pv) it frames the item and Schiffy beside it instead, closer in (HE.cx follows the item).
@@ -14092,7 +14103,8 @@ function heMarks(on) {
   }
   scene.add(g); HE.keep = g;
 }
-const heFmt = (k, v) => k === 'lift' ? `${(+v).toFixed(1)} m` : `${Math.round(v)}°`;
+const heFmt = (k, v) => k === 'lift' ? `${(+v).toFixed(1)} m` : k === 'size' ? `${(+v || 1).toFixed(1)}×` : `${Math.round(v)}°`;
+const heDef = k => k === 'size' ? 1 : 0;   // a control's value when the item has none saved
 function hePanel() {
   const it = HE.sel && heItem(HE.sel), off = HE.L.filter(i => i.off), tap = TOUCH.on ? 'Tap' : 'Click', fx = it && HOME_FIXED[it.kind];
   $('#heInfo').innerHTML = !it ? `${tap} anything on the isle (the lookout and its jump pad too) and drag it to move it, or onto something else to stack it. Select it to turn, flip or raise it.`
@@ -14101,12 +14113,12 @@ function hePanel() {
   $('#heClear').disabled = !(it && it.nature);
   $('#hePose').hidden = !it; $('#heStore').hidden = !(it && !it.nature && !fx);
   // fixtures only turn (the lookout in quarter turns): no tilt, roll, hover or flip
-  for (const k of ['pitch', 'roll', 'lift']) $(`#he_${k}`).closest('.he-row').hidden = !!fx;
+  for (const k of ['pitch', 'roll', 'lift', 'size']) $(`#he_${k}`).closest('.he-row').hidden = !!fx;
   $('#heFlip').closest('.he-row').hidden = !!fx;
   $('#he_rot').step = fx && fx.step ? fx.step : 1;
   $('#he_rot_m').title = `Turn left ${fx && fx.step ? fx.step : 15}° (Q)`; $('#he_rot_p').title = `Turn right ${fx && fx.step ? fx.step : 15}° (E)`;
   const st = homeStored().length; $('#heCat').innerHTML = `Catalogue${st ? ` <i>${st} in storage</i>` : ''}`;
-  if (it) for (const k in HE_CTL) { $(`#he_${k}`).value = it[k] || 0; $(`#he_${k}_v`).textContent = heFmt(k, it[k] || 0); }
+  if (it) for (const k in HE_CTL) { $(`#he_${k}`).value = it[k] || heDef(k); $(`#he_${k}_v`).textContent = heFmt(k, it[k] || heDef(k)); }
   heWarn();
   $('#heCleared').innerHTML = off.length ? `<span>Cleared:</span>` + off.map(i => `<button type="button" class="smallbtn" data-restore="${i.id}">${i.name} · Put back</button>`).join('') : '';
   $('#homeEditBar').classList.toggle('pv', !!HE.pv); $('#hePv').hidden = !HE.pv;
@@ -14121,7 +14133,7 @@ function heCommit() {
     if (i.ghost) continue;   // the purchase preview is never saved
     const v = { dx: i.dx, dz: i.dz };
     if (i.cat) v.out = true;
-    for (const k of ['rot', 'pitch', 'roll', 'lift']) if (i[k]) v[k] = i[k];
+    for (const k of HOME_POSE_KEYS) if (homePoseSaved(k, i[k])) v[k] = i[k];
     if (i.y) v.y = +i.y.toFixed(2);
     if (i.off) v.off = true;
     items[i.id] = v;
@@ -14159,8 +14171,8 @@ function hePadFix() {
 function heSet(changes, commit) {
   const it = HE.sel && heItem(HE.sel); if (!it) return;
   const fx = HOME_FIXED[it.kind];   // fixtures only turn, the lookout in quarter turns
-  if (fx) { delete changes.pitch; delete changes.roll; delete changes.lift; if (changes.rot != null && fx.step) changes.rot = wrapDeg(Math.round(changes.rot / fx.step) * fx.step); if (!Object.keys(changes).length) return; }
-  if (!HE.from) HE.from = { rot: it.rot, pitch: it.pitch, roll: it.roll, lift: it.lift };
+  if (fx) { delete changes.pitch; delete changes.roll; delete changes.lift; delete changes.size; if (changes.rot != null && fx.step) changes.rot = wrapDeg(Math.round(changes.rot / fx.step) * fx.step); if (!Object.keys(changes).length) return; }
+  if (!HE.from) HE.from = { rot: it.rot, pitch: it.pitch, roll: it.roll, lift: it.lift, size: it.size };
   Object.assign(it, changes);
   HE.bad = !heShow(it); heRings();
   for (const k in changes) { $(`#he_${k}`).value = it[k]; $(`#he_${k}_v`).textContent = heFmt(k, it[k]); }
@@ -14174,10 +14186,10 @@ function heSettle(commit) {
   Object.assign(it, from); HE.bad = false; heShow(it); heRings(); hePanel();
   if (commit) { sfx('deny'); toast('No room for that', 'It would poke out of the isle or into a keep-clear spot', '#ff8f8f'); }
 }
-const heNudge = (k, d) => { const it = HE.sel && heItem(HE.sel); if (!it) return; const fx = HOME_FIXED[it.kind]; if (fx && fx.step && k === 'rot') d = Math.sign(d) * fx.step; heSet({ [k]: k === 'lift' ? clamp(Math.round(((it.lift || 0) + d) * 4) / 4, 0, HOME_TOP) : wrapDeg((it[k] || 0) + d) }, true); };
+const heNudge = (k, d) => { const it = HE.sel && heItem(HE.sel); if (!it) return; const fx = HOME_FIXED[it.kind]; if (fx && fx.step && k === 'rot') d = Math.sign(d) * fx.step; heSet({ [k]: k === 'lift' ? clamp(Math.round(((it.lift || 0) + d) * 4) / 4, 0, HOME_TOP) : k === 'size' ? clamp(Math.round(((it.size || 1) + d) * 10) / 10, HOME_SIZE.min, HOME_SIZE.max) : wrapDeg((it[k] || 0) + d) }, true); };
 for (const k in HE_CTL) {
   const c = HE_CTL[k];
-  $(`#he_${k}`).addEventListener('input', e => heSet({ [k]: k === 'lift' ? +e.target.value : wrapDeg(+e.target.value) }, false));
+  $(`#he_${k}`).addEventListener('input', e => heSet({ [k]: k === 'lift' || k === 'size' ? +e.target.value : wrapDeg(+e.target.value) }, false));
   $(`#he_${k}`).addEventListener('change', () => heSettle(true));
   $(`#he_${k}_m`).addEventListener('click', () => heNudge(k, -c.step));
   $(`#he_${k}_p`).addEventListener('click', () => heNudge(k, c.step));
@@ -14225,10 +14237,12 @@ $('#heCleared').addEventListener('click', e => {
 $('#heReset').addEventListener('click', () => { homeSave().items = {}; writeSave(); refreshDecor(); HE.L = G.homeLayout; HE.sel = null; HE.from = null; heRings(); hePanel(); sfx('door'); });
 $('#heDone').addEventListener('click', endHomeEdit);
 $('#hePadFix').addEventListener('click', hePadFix);
-// keys: Q / E turn, R / F tilt, Z / C roll (15°, Shift for 1°), X flips, PageUp / PageDown raise and lower, Delete clears
+// keys: Q / E turn, R / F tilt, Z / C roll (15°, Shift for 1°), X flips, PageUp / PageDown raise and lower, - / = shrink
+// and grow, Delete clears
 window.addEventListener('keydown', e => {
   if (G.state !== 'homeEdit' || (e.target.matches && e.target.matches('input')) || !$('#catView').hidden) return;
-  const n = e.shiftKey ? 1 : 15, K = { KeyQ: ['rot', -n], KeyE: ['rot', n], KeyR: ['pitch', -n], KeyF: ['pitch', n], KeyZ: ['roll', -n], KeyC: ['roll', n], PageUp: ['lift', 0.5], PageDown: ['lift', -0.5] }[e.code];
+  const n = e.shiftKey ? 1 : 15, K = { KeyQ: ['rot', -n], KeyE: ['rot', n], KeyR: ['pitch', -n], KeyF: ['pitch', n], KeyZ: ['roll', -n], KeyC: ['roll', n], PageUp: ['lift', 0.5], PageDown: ['lift', -0.5],
+    Minus: ['size', -0.1], NumpadSubtract: ['size', -0.1], Equal: ['size', 0.1], NumpadAdd: ['size', 0.1] }[e.code];
   if (e.code === 'Delete' || e.code === 'Backspace') { e.preventDefault(); heClear(); }
   else if (K) { e.preventDefault(); heNudge(K[0], K[1]); }
   else if (e.code === 'KeyX') { e.preventDefault(); $('#heFlip').click(); }
@@ -14249,11 +14263,11 @@ function homePlaceFromStorage(x) {
   const saved = homeSave().items[id], name = (HOME_CAT_BY[sku] || COS_BY[sku]).name;
   // a copy that has never stood anywhere starts beside one already out (homeFree finds the nearest free spot to it)
   const near = !saved && (G.homeLayout || []).find(i => i.kind === sku && !i.off);
-  const it = { id, kind: sku, nature: false, cat: !!HOME_CAT_BY[sku], name, dx: saved ? saved.dx : near ? near.dx : 0, dz: saved ? saved.dz : near ? near.dz : 0, rot: saved ? saved.rot || 0 : near ? near.rot || 0 : 0, pitch: saved && saved.pitch || 0, roll: saved && saved.roll || 0, lift: saved && saved.lift || 0 };
+  const it = { id, kind: sku, nature: false, cat: !!HOME_CAT_BY[sku], name, dx: saved ? saved.dx : near ? near.dx : 0, dz: saved ? saved.dz : near ? near.dz : 0, rot: saved ? saved.rot || 0 : near ? near.rot || 0 : 0, pitch: saved && saved.pitch || 0, roll: saved && saved.roll || 0, lift: saved && saved.lift || 0, size: saved && saved.size || 1 };
   const others = HE.L.filter(i => !i.off);
   const r = homePlace(it, others);
   if (!r.ok || r.b > it.lift + 0.01) { if (!saved && !near) { it.dx = 0; it.dz = 0; } const f = homeFree(it, others); if (!f) { sfx('deny'); toast('No room on the isle', 'Put something away or clear a tree first', '#ff8f8f'); return false; } [it.dx, it.dz] = f; }
-  const v = { dx: it.dx, dz: it.dz }; for (const k of ['rot', 'pitch', 'roll', 'lift']) if (it[k]) v[k] = it[k];
+  const v = { dx: it.dx, dz: it.dz }; for (const k of HOME_POSE_KEYS) if (homePoseSaved(k, it[k])) v[k] = it[k];
   if (it.cat) v.out = true;
   homeSave().items[id] = v; homeSetOut(id, true);
   refreshDecor(); HE.L = G.homeLayout; HE.sel = id; HE.bad = false; heRings(); hePanel();
@@ -14531,7 +14545,7 @@ async function hpBuy() {
   if (!r || !r.ok) { sfx('deny'); toast('Not bought', (r && r.error) || 'Purchase cancelled', '#ff8f8f'); if (HE.pv === P) hpPanel(); return; }
   // bought: it is saved exactly where the preview stands, already out on the isle
   const it = P.it, v = { dx: it.dx, dz: it.dz, out: true };
-  for (const k of ['rot', 'pitch', 'roll', 'lift']) if (it[k]) v[k] = it[k];
+  for (const k of HOME_POSE_KEYS) if (homePoseSaved(k, it[k])) v[k] = it[k];
   if (it.y) v.y = +it.y.toFixed(2);
   const id = r.id || h.sku;
   homeSave().items[id] = v; writeSave();
