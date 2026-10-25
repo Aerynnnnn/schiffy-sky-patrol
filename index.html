@@ -1393,6 +1393,8 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 <script type="application/octet-stream" id="schiffyGlb" data-src="models/schiffy_v2.glb?v=01b69dd975"></script>
 <!-- Playground catalogue items Home_<id> (blender/build_home.py) -->
 <script type="application/octet-stream" id="homeGlb" data-src="models/home.glb?v=2a864bab17"></script>
+<!-- The Skyheart Gate isle north-west of the hub (blender/build_skygate.py; 93-skyheart.js has stand-ins) -->
+<script type="application/octet-stream" id="skygateGlb" data-src="models/skygate.glb?v=757ef69bbd"></script>
 <script>window.__glb = {}; document.querySelectorAll('script[data-src]').forEach(e => { window.__glb[e.id] = fetch(e.getAttribute('data-src')).then(r => (r.ok ? r.arrayBuffer() : null)).catch(() => null); });</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
@@ -1400,7 +1402,66 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 <script src="https://cdn.jsdelivr.net/npm/meshoptimizer@0.20.0/meshopt_decoder.js"></script>
 <script>
 (() => {
-const BUILD_ID = '69368b70f3';
+const BUILD_ID = '496740d703';
+// ---------- Schiffy save bridge (shared by Sky Patrol and Skyheart; pasted into both builds, edit only here) ----------
+// Gold earned in Skyheart travels to Sky Patrol's playground savings through one ledger key. Rules (SKYHEART.md):
+// - Skyheart first puts each deposit in its OWN save (an outbox, written together with the run's Heart Shards), then
+//   send() copies the outbox into the ledger and only then clears the outbox.
+// - Sky Patrol's claim() adds the ledger's gold, records every claimed id in its own save (one write), checks that
+//   write really landed, and only then empties the ledger. Ids already claimed are dropped without paying again.
+// - Both run inside one cross-tab lock, so two tabs can never pay or send the same entry at once.
+// A crash between any two writes leaves an entry that is either still waiting or already marked claimed, never both
+// paid twice nor gone.
+const Bridge = (() => {
+  const KEY = 'schiffy-bridge-v1', LOCK = 'schiffy-bridge', MAX = 1e6;
+  const empty = () => ({ v: 1, gold: [] });
+  const valid = e => e && typeof e.id === 'string' && e.id.length >= 8 && Number.isInteger(e.n) && e.n > 0 && e.n <= MAX;
+  function read() {
+    try { const l = JSON.parse(localStorage.getItem(KEY) || 'null'); if (l && Array.isArray(l.gold)) return l; } catch (e) {}
+    return empty();
+  }
+  // throws if the browser refuses the write: callers depend on that to keep their own copy
+  const write = l => localStorage.setItem(KEY, JSON.stringify(l));
+  const locked = fn => (typeof navigator !== 'undefined' && navigator.locks && navigator.locks.request)
+    ? navigator.locks.request(LOCK, () => fn()) : Promise.resolve().then(fn);
+  function newId() {
+    const b = new Uint8Array(9);
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(b); else for (let i = 0; i < 9; i++) b[i] = Math.random() * 256;
+    return 'g' + Date.now().toString(36) + Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
+  }
+  // a deposit record for the sender's outbox
+  const entry = (n, why) => ({ id: newId(), n: Math.floor(n), why: String(why || ''), at: Date.now() });
+  // Skyheart: outbox = its saved list of entries; cleared(ids) must remove them from the outbox and save.
+  // Resolves to the number of entries now in the ledger (0 = nothing to send).
+  function send(outbox, cleared) {
+    return locked(() => {
+      const list = (outbox || []).filter(valid);
+      if (!list.length) return 0;
+      const l = read(), have = new Set(l.gold.map(e => e && e.id));
+      for (const e of list) if (!have.has(e.id)) l.gold.push({ id: e.id, n: e.n, why: e.why, at: e.at });
+      write(l);
+      cleared(list.map(e => e.id));
+      return list.length;
+    });
+  }
+  // Sky Patrol: isClaimed(id) -> bool, read from the SAVED copy of its save (not memory: a claim whose save failed must
+  // not count); apply(entries) adds the gold of entries its memory hasn't seen yet + records the ids + saves, and returns
+  // true only when that save is confirmed. Resolves to the gold in the entries handed over (0 when nothing new).
+  function claim(isClaimed, apply) {
+    return locked(() => {
+      const l = read();
+      if (!l.gold.length) return 0;
+      const fresh = l.gold.filter(e => valid(e) && !isClaimed(e.id));
+      const total = fresh.reduce((s, e) => s + e.n, 0);
+      if (fresh.length && !apply(fresh.map(e => ({ id: e.id, n: e.n })))) return 0;
+      write(empty());
+      return total;
+    });
+  }
+  // gold still waiting in the ledger (for a "+N on the way" note)
+  const pending = () => read().gold.filter(valid).reduce((s, e) => s + e.n, 0);
+  return { KEY, entry, send, claim, pending, read };
+})();
 'use strict';
 // ================================================================
 // Platform contract: the hub can embed this page in an iframe and
@@ -15693,7 +15754,9 @@ function bankRunGold() {
   if (n > 0) { homeBank(n); writeSave(); }
   return n;
 }
-function homeBank(n) { if (!(n > 0) || G.mode !== 'story') return; SAVE.homeGoldAll = homeGoldAll() + n; SAVE.homeGold = (SAVE.homeGold || 0) + n; G.homeGain = (G.homeGain || 0) + n; }
+function homeBank(n) { if (!(n > 0) || G.mode !== 'story') return; homeAdd(n); G.homeGain = (G.homeGain || 0) + n; }
+// the savings and the lifetime total grow together; also how gold from Skyheart lands (93-skyheart, skyClaim)
+function homeAdd(n) { if (!(n > 0)) return; SAVE.homeGoldAll = homeGoldAll() + n; SAVE.homeGold = (SAVE.homeGold || 0) + n; }
 // grant any trophy whose task is now done; returns the new ones
 function homeCheckUnlocks() {
   const fresh = [];
@@ -16814,6 +16877,7 @@ function buildHub() {
   const under = lumpyUnderside(D / 2 - 0.4, 16, th.rock, mixColor(th.rock, th.dirt, 0.5), { seed: 11, square: 0.4 }); under.position.y = -10.6; under.scale.x = W / D; grp.add(under);
   const lips = []; for (let t = -W / 2; t <= W / 2; t += 1.05) lips.push([t, -D / 2], [t, D / 2]); for (let t = -D / 2; t <= D / 2; t += 1.05) lips.push([-W / 2, t], [W / 2, t]);
   lips.splice(0, lips.length, ...lips.filter(([x, z]) => !(x > 0 && Math.abs(x - W / 2) < 0.01 && Math.abs(z - HOME_BRIDGE.z) < HOME_BRIDGE.w + 0.9)));   // the bridge to the home isle leaves here
+  if (SKY.on) lips.splice(0, lips.length, ...lips.filter(([x, z]) => !(x < 0 && Math.abs(x + W / 2) < 0.01 && Math.abs(z - SKY_ISLE.z) < SKY_BRIDGE.w + 0.9)));   // and the one to the Skyheart Gate (93-skyheart)
   const lip = new THREE.InstancedMesh(new THREE.SphereGeometry(0.62, 14, 10), toon(th.grass), lips.length);
   lips.forEach(([x, z], i) => { dm.position.set(x, -0.42, z); dm.scale.set(1, 0.62, 1); dm.updateMatrix(); lip.setMatrixAt(i, dm.matrix); });
   grp.add(lip, instOutline(lip, 1.07));
@@ -23555,5 +23619,340 @@ coopGuestRoom = function (m) {
   try { clockEnter(G.room); } catch (e) {}   // (first-time belt / table / piston / tesla tips; a Magnet pull ends)
   if (COOP.tether) COOP.tether.visible = false;
 };
+// ---------- Schiffy Skyheart: the gate isle north-west of the hub, the trip there and back, gold from Skyheart ----------
+// Skyheart is its own game and page (the Schiffy Starheart project), published next to this page at SKYHEART_URL on the same
+// origin, so both read the same localStorage (plan + rules: SKYHEART.md). This file only adds the landmark, the transition
+// and the gold claim; everything is wrappers at load (buildHub, updateWorld, updateCamera), like 87-homepets.
+// - Gold earned in Skyheart arrives through Bridge (Games/Schiffy/shared/bridge.js, pasted into both builds): claimed at boot, on
+//   coming back through the gate and when the tab comes back into view; added with homeAdd (75-hub), so the savings,
+//   lifetime total and Save-5,000 trophy all see it.
+// - Skyheart reads SAVE.cosmetics from this page's save (read only) and dresses its Schiffy the same way.
+// - Hidden where the bridge can't work: claude.ai hosts (the artifact sandbox has its own storage) and file:// pages.
+//   Shown but asleep ("Opening soon") when no Skyheart page answers at SKYHEART_URL.
+const SKYHEART_URL = 'skyheart/';
+const SKY_ISLE = { x: -35, z: WALK_Z, r: 9, hw: 6.3 };          // round isle; walkable square of half-width hw inside it
+// the gate stands at the back of the isle facing south, toward the hub camera (like the run portals: from the east the
+// heart is edge-on); the stepping stones curve from the bridge to its front steps (SKY_FRONT, where the prompt is)
+const SKY_GATE = { x: SKY_ISLE.x - 0.4, z: SKY_ISLE.z - 3.0, dais: 3.7 };
+const SKY_FRONT = { x: SKY_GATE.x, z: SKY_GATE.z + SKY_GATE.dais + 1.0 };
+const SKY_BRIDGE = { xa: -(HUB_X + 0.6), xb: SKY_ISLE.x + SKY_ISLE.r - 0.3, w: 1.5 };   // deck from the lawn's west edge to the isle's rim
+const SKY_ENTER_S = 2.6;                                          // the walk-in + star wipe, then the page changes
+const skyHost = () => !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname || '') && location.protocol !== 'file:';
+const SKY = { on: skyHost(), page: null, map: null, gate: null, parts: {}, cine: null, near: 0, hum: null, arrive: false, motes: 0, rng: 1 };
+// its own random stream: building the isle must not move the hub's Math.random rolls (flowers, planks) or anything after
+const skyRand = (a = 1, b) => { SKY.rng = (SKY.rng * 16807) % 2147483647; const u = (SKY.rng - 1) / 2147483646; return b === undefined ? u * a : a + u * (b - a); };
+try { SKY.arrive = new URLSearchParams(location.search).get('from') === 'skyheart'; } catch (e) {}
+
+if (SKY.on) {
+  // walkable: the bridge deck (running a little into both isles) and the isle's square
+  const lawnW = -HUB_X, isleE = SKY_ISLE.x + SKY_ISLE.hw;
+  HUB_AREAS.push(
+    { x: (lawnW + isleE) / 2, z: SKY_ISLE.z, hx: (lawnW - isleE) / 2 + 1.5, hz: SKY_BRIDGE.w },
+    { x: SKY_ISLE.x, z: SKY_ISLE.z, hx: SKY_ISLE.hw, hz: SKY_ISLE.hw });
+  // the bridge leaves the lawn where the promenade ends: the north-west rock that sat there moves 2.6 m south
+  const rock = HUB_NATURE.find(n => n[0] === -18.3 && n[1] === -7.6 && n[2] === 'rock'); if (rock) rock[1] = -5.0;
+  // does a Skyheart page answer? (one quiet HEAD request; the gate sleeps until it does)
+  try { fetch(SKYHEART_URL + 'index.html', { method: 'HEAD', cache: 'no-store' }).then(r => { SKY.page = r.ok; }, () => { SKY.page = false; }); } catch (e) { SKY.page = false; }
+}
+const SKY_LOAD = SKY.on ? loadGlbMap('skygateGlb').then(m => { SKY.map = Object.keys(m).length ? m : null; return SKY.map; }) : Promise.resolve(null);
+// a skygate.glb model through makeProp's material rules (Glow* unlit, toon otherwise, ink shells)
+function skyProp(name, opts) { if (!SKY.map || !SKY.map[name]) return null; const keep = PROPS; PROPS = SKY.map; try { return makeProp(name, opts); } finally { PROPS = keep; } }
+
+// ---------- the isle ----------
+const SKY_COL = { grass: 0xcfb8ff, grassL: 0xe6d8ff, dirt: 0xb48bc8, rock: 0xc7a7c9, plank: 0xfff1e0, rail: 0xffc93c, stone: 0xf3e8ff, pink: 0xff9ec8 };
+function buildSkyIsle() {
+  const grp = new THREE.Group(), room = G.room, I = SKY_ISLE, dm = new THREE.Object3D();
+  SKY.rng = 20261026;
+  SKY.parts = {}; grp.name = 'skyIsle';
+  // the round lawn over a lumpy underside, scalloped lips round the rim (open where the bridge lands)
+  const top = mesh(new THREE.CylinderGeometry(I.r, I.r, 0.5, 48), toon(SKY_COL.grass), I.x, -0.25, I.z); top.receiveShadow = true; grp.add(top);
+  grp.add(mesh(new THREE.CylinderGeometry(I.r - 0.3, I.r - 0.6, 2.2, 40), toon(SKY_COL.dirt), I.x, -1.5, I.z));
+  const under = lumpyUnderside(I.r - 0.5, 11, SKY_COL.rock, mixColor(SKY_COL.rock, SKY_COL.pink, 0.4), { seed: 31, square: 0 }); under.position.set(I.x, -8.2, I.z); grp.add(under);
+  const lips = [];
+  for (let a = 0; a < Math.PI * 2; a += 1.0 / I.r) { const x = I.x + Math.cos(a) * I.r, z = I.z + Math.sin(a) * I.r; if (!(x > I.x && Math.abs(z - I.z) < SKY_BRIDGE.w + 0.9)) lips.push([x, z]); }
+  const lip = new THREE.InstancedMesh(new THREE.SphereGeometry(0.62, 14, 10), toon(SKY_COL.grass), lips.length);
+  lips.forEach(([x, z], i) => { dm.position.set(x, -0.42, z); dm.scale.set(1, 0.62, 1); dm.updateMatrix(); lip.setMatrixAt(i, dm.matrix); });
+  grp.add(lip, instOutline(lip, 1.07));
+  // the star bridge: cream planks that dip a little in the middle, gold rails, posts topped with glowing stars
+  const bx0 = SKY_BRIDGE.xa, bx1 = SKY_BRIDGE.xb, bw = SKY_BRIDGE.w, bz = I.z, starMat = basic(0xfff1a8);
+  const col = c => { c.sky = true; room.colliders.push(c); };
+  for (let x = bx0; x > bx1; x -= 0.95) {
+    const k = (bx0 - x) / (bx0 - bx1), plank = mesh(new THREE.BoxGeometry(0.8, 0.22, bw * 2 + 0.4), toon(skyRand() < 0.5 ? SKY_COL.plank : mixColor(SKY_COL.plank, SKY_COL.pink, 0.25)), x, -0.12 - Math.sin(k * Math.PI) * 0.12, bz);
+    plank.rotation.x = skyRand(-0.03, 0.03); plank.receiveShadow = true; grp.add(plank);
+  }
+  for (let x = bx0 - 0.4; x > bx1; x -= 2.4) for (const sz of [-1, 1]) {
+    const pz = bz + sz * (bw + 0.25);
+    grp.add(outline(mesh(new THREE.CylinderGeometry(0.1, 0.12, 1.1, 8), toon(SKY_COL.rail), x, 0.4, pz), 1.12));
+    const st = mesh(new THREE.OctahedronGeometry(0.17, 0), starMat, x, 1.08, pz); grp.add(st); (SKY.parts.beads = SKY.parts.beads || []).push(st);
+  }
+  for (const sz of [-1, 1]) { const rope = mesh(new THREE.CylinderGeometry(0.045, 0.045, bx0 - bx1, 6), toon(SKY_COL.rail), (bx0 + bx1) / 2, 0.85, bz + sz * (bw + 0.25)); rope.rotation.z = Math.PI / 2; grp.add(rope); }
+  // the promenade runs on to the bridge, and stepping stones cross the isle to the gate's stairs
+  const tiles = [];
+  for (let x = -16.4 - 0.9; x > bx0 - 0.2; x -= 0.92) for (const s of [-0.46, 0.46]) tiles.push([x, WALK_Z + s, 0]);
+  const sa = [bx1 - 0.5, I.z], sb = [SKY_FRONT.x + 0.6, SKY_FRONT.z - 0.2], sl = Math.hypot(sb[0] - sa[0], sb[1] - sa[1]), sn = Math.round(sl / 1.05);
+  for (let k = 0; k <= sn; k++) { const u = k / sn, bend = Math.sin(u * Math.PI) * 0.6; tiles.push([lerp(sa[0], sb[0], u) + skyRand(-0.06, 0.06), lerp(sa[1], sb[1], u) + bend + skyRand(-0.08, 0.08), skyRand(-0.3, 0.3)]); }
+  const offPath = (x, z, m) => { const u = clamp(((x - sa[0]) * (sb[0] - sa[0]) + (z - sa[1]) * (sb[1] - sa[1])) / (sl * sl), 0, 1); return Math.hypot(x - lerp(sa[0], sb[0], u), z - lerp(sa[1], sb[1], u) - Math.sin(u * Math.PI) * 0.6) > m; };
+  const tileM = new THREE.InstancedMesh(new THREE.BoxGeometry(0.82, 0.05, 0.82), toon(mixColor(SKY_COL.stone, SKY_COL.grass, 0.35)), tiles.length);
+  tiles.forEach(([x, z, r], i) => { dm.position.set(x, 0.03, z); dm.rotation.set(0, r, 0); dm.scale.set(1, 1, 1); dm.updateMatrix(); tileM.setMatrixAt(i, dm.matrix); });
+  tileM.receiveShadow = true; grp.add(tileM);
+  // pink and lilac flowers scattered on the lawn, clear of the path and the dais
+  const fl = new THREE.InstancedMesh(new THREE.SphereGeometry(0.13, 8, 6), (() => { const m = toonU(0xffffff); m.emissive.setHex(0xffffff); m.emissiveIntensity = 0.3; return m; })(), 90);
+  const fcols = [0xff9ec8, 0xffd1e6, 0xc9a8ff, 0xfff1a8, 0xffffff].map(c => new THREE.Color(c)); let fn = 0;
+  for (let i = 0; i < 400 && fn < 90; i++) {
+    const a = skyRand(0, Math.PI * 2), r = Math.sqrt(skyRand()) * (I.r - 0.9), x = I.x + Math.cos(a) * r, z = I.z + Math.sin(a) * r;
+    if (!offPath(x, z, 1.1)) continue;
+    if (Math.hypot(x - SKY_GATE.x, z - SKY_GATE.z) < SKY_GATE.dais + 0.6) continue;
+    dm.position.set(x, 0.12, z); dm.rotation.set(0, 0, 0); dm.scale.set(1, 0.55, 1); dm.updateMatrix(); fl.setMatrixAt(fn, dm.matrix); fl.setColorAt(fn++, fcols[Math.floor(skyRand(0, fcols.length))]);
+  }
+  fl.count = fn; grp.add(fl);
+  // decor round the rim: heartwood trees behind the gate, crystal clusters, star lamps along the path
+  const deco = [['SkyGate_Tree', -6.3, -4.6, 0.6], ['SkyGate_Tree', 5.2, -5.4, -0.4], ['SkyGate_Tree', -7.0, 3.0, 1.2], ['SkyGate_Crystal', -2.6, 7.4, 1.7],
+    ['SkyGate_Crystal', 2.6, -7.8, 0.3], ['SkyGate_Crystal', 7.2, -2.0, 2.0], ['SkyGate_Crystal', -8.0, -0.8, 1.1], ['SkyGate_Crystal', -5.4, 6.4, 2.6], ['SkyGate_Crystal', 3.6, 7.2, 0.8]];
+  for (const [name, dx, dz, rot] of deco) {
+    const x = I.x + dx, z = I.z + dz, o = skyProp(name) || skyFallbackDeco(name); o.position.set(x, 0, z); o.rotation.y = rot; grp.add(o);
+    col({ x, z, r: name === 'SkyGate_Tree' ? 0.6 : 0.7, h: 2.5 });
+  }
+  // star lamps either side of the stepping stones; each one's star (its local +x) hangs in over the path
+  for (const u of [0.25, 0.62]) for (const s of [-1, 1]) {
+    const px = lerp(sa[0], sb[0], u), pz = lerp(sa[1], sb[1], u) + Math.sin(u * Math.PI) * 0.6, nx = -(sb[1] - sa[1]) / sl, nz = (sb[0] - sa[0]) / sl;
+    const x = px + nx * s * 1.6, z = pz + nz * s * 1.6, lamp = skyProp('SkyGate_Lamp') || skyFallbackDeco('SkyGate_Lamp');
+    lamp.position.set(x, 0, z); aimLamp(lamp, px - x, pz - z); grp.add(lamp);
+    const h = haloSprite(0xfff1a8, 1.6, 0.6); h.position.set(0.66, 2.38, 0); lamp.add(h);
+    col({ x, z, r: 0.3, h: 3 });
+  }
+  // the gate itself (its front is the model's +z)
+  const gate = skyProp('SkyGate') || skyFallbackGate();
+  gate.position.set(SKY_GATE.x, 0, SKY_GATE.z); grp.add(gate);
+  col({ x: SKY_GATE.x, z: SKY_GATE.z, r: SKY_GATE.dais, h: 7 });
+  const P = SKY.parts, find = n => gate.getObjectByName(n);
+  gate.userData.real = !!(SKY.map && SKY.map.SkyGate);
+  Object.assign(P, { gate, swirl: find('SkyGate_swirl'), pool: find('SkyGate_pool'), crest: find('SkyGate_crest'), veil: find('SkyGate_veil'),
+    wingL: find('SkyGate_wingL'), wingR: find('SkyGate_wingR'), rings: [find('SkyGate_ring0'), find('SkyGate_ring1')].filter(Boolean),
+    shards: [0, 1, 2, 3, 4, 5].map(i => find('SkyGate_shard' + i)).filter(Boolean) });
+  // the veil gets its own see-through glow so it can pulse; wings and crest remember their rest pose
+  if (P.veil) P.veil.traverse(n => { if (n.isMesh) { n.material = new THREE.MeshBasicMaterial({ color: 0xffb8e6, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false, toneMapped: false }); n.renderOrder = 3; } });
+  for (const k of ['wingL', 'wingR', 'crest']) if (P[k]) P[k].userData.rest = { r: P[k].rotation.clone(), y: P[k].position.y };
+  P.shards.forEach((s, i) => { s.userData.a = i / P.shards.length * Math.PI * 2; });
+  const halo = haloSprite(0xff9ee0, 7.5, 0.35); halo.position.set(SKY_GATE.x, 3.7, SKY_GATE.z + 0.25); grp.add(halo); P.halo = halo;
+  const ground = haloSprite(0xc9a8ff, 8.5, 0.25); ground.position.set(SKY_GATE.x, 0.9, SKY_GATE.z + 0.4); grp.add(ground); P.ground = ground;
+  const sign = textSprite('Schiffy Skyheart', '#ffb8e6', 0.8); sign.position.set(SKY_GATE.x, 8.2, SKY_GATE.z); grp.add(sign); P.sign = sign;
+  const tag = textSprite('New world!', '#ffd34d', 0.45); tag.position.set(SKY_BRIDGE.xa - 0.8, 2.6, I.z); grp.add(tag); P.tag = tag;
+  shadows(grp, true, true); under.castShadow = false;
+  G.roomGroup.add(grp); SKY.gate = grp;
+  addInteractable({ x: SKY_FRONT.x, z: SKY_FRONT.z, r: 1.9, mesh: null, prompt: skyPrompt, use: skyEnter });
+}
+function skyPrompt() {
+  const base = { icon: PROMPT_ICONS.portal, verb: 'New world', title: 'Schiffy Skyheart' };
+  if (SKY.page === false) return { ...base, verb: 'Skyheart · asleep', desc: 'The gate is still waking up. Schiffy Skyheart opens here soon!', action: 'Soon' };
+  if (coopConnected()) return { ...base, desc: 'Skyheart is a solo adventure for now: leave co-op (hub menu) to step through.', action: 'Solo only' };
+  return { ...base, desc: 'Step through into Schiffy Skyheart: a magical-pup adventure with Starheart Form, wand combos and new bosses. Your outfit comes with you, and every bit of gold you bring back lands in your playground savings.', action: 'Enter' };
+}
+
+// ---------- life: spin, pulse, flap, orbit, motes, hum ----------
+function skyTick(dt) {
+  const P = SKY.parts; if (!SKY.gate || !P.gate || G.mode !== 'hub') return;
+  const p = G.player, d = p ? Math.hypot(p.x - SKY_GATE.x, p.z - SKY_GATE.z) : 99, awake = SKY.page !== false;
+  SKY.near += ((d < 12 ? 1 - Math.max(0, d - 4) / 8 : 0) - SKY.near) * Math.min(1, dt * 3);
+  const cine = SKY.cine ? Math.min(1, SKY.cine.t / SKY_ENTER_S) : 0, k = (awake ? 1 : 0.25) * (1 + SKY.near * 0.8 + cine * 5), t = G.time;
+  if (P.swirl) P.swirl.rotateY(-dt * 1.4 * k);
+  if (P.pool) P.pool.rotateY(dt * 0.5 * k);
+  for (let i = 0; i < P.rings.length; i++) P.rings[i].rotateY(dt * (i ? -0.5 : 0.35) * k);
+  if (P.crest) { const r = P.crest.userData.rest; P.crest.position.y = r.y + Math.sin(t * 1.6) * 0.12; P.crest.rotation.y = r.r.y + Math.sin(t * 0.8) * 0.5; }
+  const flap = Math.sin(t * (awake ? 2.1 : 0.9)) * (0.1 + SKY.near * 0.06 + cine * 0.2);
+  if (P.wingL) P.wingL.rotation.z = P.wingL.userData.rest.r.z - flap;
+  if (P.wingR) P.wingR.rotation.z = P.wingR.userData.rest.r.z + flap;
+  for (const s of P.shards) { const a = s.userData.a + t * 0.35 * k; s.position.set(Math.cos(a) * 3.5, 3.65 + Math.sin(a) * 2.4, 0.7 + Math.sin(a * 2) * 0.3); s.rotation.y += dt * 2; }
+  const pulse = 0.5 + 0.5 * Math.sin(t * 2.4);
+  if (P.veil) P.veil.traverse(n => { if (n.isMesh) { n.material.opacity = awake ? 0.62 + 0.22 * pulse + cine * 0.2 : 0.35; n.material.color.setHex(0xffb8e6).lerp(new THREE.Color(0xd9b8ff), 0.5 + 0.5 * Math.sin(t * 0.7)); } });
+  if (P.halo) { P.halo.material.opacity = (awake ? 0.22 + 0.16 * pulse + SKY.near * 0.12 : 0.08) + cine * 0.5; P.halo.scale.setScalar(7.5 + cine * 6); }
+  if (P.ground) P.ground.material.opacity = (awake ? 0.18 + 0.1 * pulse : 0.06) + cine * 0.3;
+  if (P.beads) P.beads.forEach((b, i) => { b.rotation.y += dt * 1.5; b.scale.setScalar(0.85 + 0.25 * Math.sin(t * 3 + i)); });
+  if (P.tag) P.tag.visible = !SKY.cine;
+  // star motes rising off the pool and the veil (more as you come close)
+  if (awake) {
+    SKY.motes += dt * (6 + SKY.near * 14 + cine * 60);
+    for (; SKY.motes >= 1; SKY.motes--) {
+      const veil = skyRand() < 0.45, a = skyRand(0, Math.PI * 2), r = veil ? skyRand(0, 1.6) : skyRand(0.6, 3.2);
+      const x = SKY_GATE.x + Math.cos(a) * r, y = veil ? 2.2 + skyRand(0, 3) : 0.7, z = SKY_GATE.z + (veil ? 0.35 : Math.sin(a) * r);
+      emit(x, y, z, 1, [0xffb8e6, 0xd9b8ff, 0xfff1a8, 0xffffff][Math.floor(skyRand(0, 4))], { speed: 0.5, size: skyRand(0.25, 0.45), life: 1.4, grav: -1.1, glow: true, shape: skyRand() < 0.5 ? 'star' : undefined, twinkle: 12 });
+    }
+  }
+  skyHum(dt);
+}
+// the gate's song: a soft shimmering fifth that swells as Schiffy walks up, a twinkle now and then (no samples). Off when
+// muted, on a hidden tab, away from the hub, or while the gate sleeps.
+function skyHum(dt) {
+  const want = SKY.on && SKY.page !== false && actx && !muted && !document.hidden && G.mode === 'hub' ? SKY.near * SKY.near : 0;
+  if (!SKY.hum && want > 0.01) {
+    try {
+      const out = actx.createGain(), lp = actx.createBiquadFilter(), lfo = actx.createOscillator(), lg = actx.createGain();
+      out.gain.value = 0; lp.type = 'lowpass'; lp.frequency.value = 1800; lp.connect(out); out.connect(bus());
+      const oscs = [329.63, 493.88, 659.25].map((f, i) => { const o = actx.createOscillator(), g = actx.createGain(); o.type = i === 2 ? 'triangle' : 'sine'; o.frequency.value = f; o.detune.value = (i - 1) * 6; g.gain.value = [0.5, 0.35, 0.12][i]; o.connect(g); g.connect(lp); o.start(); return o; });
+      lfo.frequency.value = 0.35; lg.gain.value = 0.3; lfo.connect(lg); lg.connect(out.gain); lfo.start();
+      SKY.hum = { out, oscs: [...oscs, lfo], tw: 1.5 };
+    } catch (e) { SKY.hum = null; }
+  }
+  const H = SKY.hum; if (!H) return;
+  const v = want * 0.022 + (SKY.cine ? 0.02 : 0);
+  H.out.gain.setTargetAtTime(v, actx.currentTime, 0.25);
+  if (want > 0.2 && !SKY.cine && (H.tw -= dt) <= 0) { H.tw = skyRand(0.8, 2.2); const n = [659.25, 783.99, 880, 987.77, 1174.66][Math.floor(skyRand(0, 5))]; if (!muted) tone('sine', n, n * 1.002, 0.5, 0.014 * want); }
+  if (want <= 0.001 && !SKY.cine && H.out.gain.value < 0.0005) { for (const o of H.oscs) try { o.stop(); } catch (e) {} H.out.disconnect(); SKY.hum = null; }
+}
+
+// ---------- the trip: walk in, star wipe, page change ----------
+function skyEnter() {
+  if (SKY.cine) return;
+  if (SKY.page === false || coopConnected()) { sfx('deny'); return; }
+  initAudio(); writeSave();
+  G.state = 'skyGate'; setPrompt(null); showHubUI(false);
+  const p = G.player; SKY.cine = { t: 0, x0: p.x, z0: p.z, pos: camera.position.clone(), look: new THREE.Vector3(G.cam.x, 0, G.cam.z + 0.5), went: false };
+  if (!muted && actx) { [392, 523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone('triangle', f, f * 1.01, 0.5, 0.04, i * 0.09)); tone('sine', 220, 880, 1.6, 0.05); }
+  let w = $('#skyWipe');
+  if (!w) {
+    w = document.createElement('div'); w.id = 'skyWipe';
+    w.innerHTML = '<div class="sw-glow"></div><div class="sw-title">Schiffy <b>Skyheart</b><small>stepping through...</small></div>';
+    document.body.appendChild(w);
+    const st = document.createElement('style'); st.textContent = SKY_WIPE_CSS; document.head.appendChild(st);
+  }
+  w.className = ''; void w.offsetWidth; w.className = 'go';
+}
+const SKY_WIPE_CSS = `
+#skyWipe { position: fixed; inset: 0; z-index: 60; pointer-events: none; opacity: 0; display: grid; place-items: center; }
+#skyWipe .sw-glow { position: absolute; inset: -20%; background: radial-gradient(circle at 50% 46%, #fff 0, #ffe3f4 18%, #ffb8e6 38%, #b9a2f0 62%, #6b5bc7 100%); transform: scale(0.2); border-radius: 50%; }
+#skyWipe .sw-title { position: relative; font-family: 'Lilita One', system-ui, sans-serif; font-size: clamp(34px, 7vw, 84px); color: #fff; text-align: center; line-height: 1;
+  -webkit-text-stroke: 0.06em #3a2420; paint-order: stroke fill; opacity: 0; transform: translateY(12px) scale(0.92); }
+#skyWipe .sw-title b { color: #ffb8e6; font-weight: 400; }
+#skyWipe .sw-title small { display: block; margin-top: 0.5em; font: 600 clamp(13px, 1.8vw, 18px) system-ui, sans-serif; -webkit-text-stroke: 0; color: #5a3f8a; letter-spacing: 0.04em; }
+#skyWipe.go { opacity: 1; transition: opacity 0.9s ease 0.9s; }
+#skyWipe.go .sw-glow { transform: scale(2.2); transition: transform 1.5s cubic-bezier(.6,.05,.4,1) 0.9s; }
+#skyWipe.go .sw-title { opacity: 1; transform: none; transition: opacity 0.5s ease 1.6s, transform 0.6s cubic-bezier(.2,1.4,.4,1) 1.6s; }
+#skyWipe.back { opacity: 1; }
+#skyWipe.back .sw-glow { transform: scale(2.2); }
+#skyWipe.back.out { opacity: 0; transition: opacity 1.1s ease 0.2s; }
+@media (prefers-reduced-motion: reduce) { #skyWipe.go .sw-glow { transition-duration: 0.01s; } }`;
+// the walk-in: Schiffy trots up the stairs into the veil and shrinks into it while the camera leans in; then the page changes
+function skyCineTick(rdt) {
+  const C = SKY.cine, p = G.player; C.t += rdt;
+  const u = Math.min(1, C.t / 1.4), e = u * u * (3 - 2 * u), tx = SKY_GATE.x, tz = SKY_GATE.z + 0.4;
+  p.x = lerp(C.x0, tx, e); p.z = lerp(C.z0, tz, e); p.y = Math.sin(Math.min(1, u * 1.2) * Math.PI) * 0.6 + e * 0.62;
+  p.face += angDiff(p.face, Math.PI) * Math.min(1, rdt * 10); p.vx = 0; p.vz = -6;
+  p.mesh.position.set(p.x, p.y, p.z); p.mesh.rotation.y = p.face; p.mesh.scale.setScalar(Math.max(0.05, 1 - Math.max(0, u - 0.7) / 0.3));
+  try { p.animate(rdt, u < 1); } catch (e) {}
+  if (u > 0.8 && skyRand() < 0.6) FX.twinkle(tx + skyRand(-1, 1), 2 + skyRand(0, 2), tz, 0xffb8e6, 2);
+  if (C.t >= SKY_ENTER_S && !C.went) { C.went = true; skyGo(); }
+  // still here long after the page should have changed (offline, blocked): give the hub back
+  if (C.t >= SKY_ENTER_S + 6) skyAbort("Couldn't open Skyheart", 'Check your connection and try the gate again');
+}
+function skyAbort(t1, t2) {
+  const p = G.player; SKY.cine = null; p.mesh.scale.setScalar(1);
+  p.x = SKY_FRONT.x; p.z = SKY_FRONT.z + 0.3; p.y = 0; p.vx = p.vz = 0;
+  const w = $('#skyWipe'); if (w) w.className = '';
+  G.state = 'play'; showHubUI(true); snapCamera(); toast(t1, t2, '#ff8f8f');
+}
+function skyGo() {
+  const q = new URLSearchParams({ from: 'skypatrol' });
+  // the costume models Skyheart should load: this page's own copy, with its cache-busting version
+  const cs = document.getElementById('costumesGlb'), src = cs && cs.getAttribute('data-src');
+  if (src && /^models\/costumes\.(glb|wasm)\?v=[\w-]+$/.test(src)) q.set('cos', src);
+  if (muted) q.set('mute', '1');
+  location.href = SKYHEART_URL + '?' + q.toString();
+}
+// the camera swings down from the hub view to just behind Schiffy, low and a little to the bridge side, into the veil
+const SKY_CAM_END = { pos: new THREE.Vector3(SKY_GATE.x + 2.2, 3.6, SKY_GATE.z + 9.5), look: new THREE.Vector3(SKY_GATE.x, 3.4, SKY_GATE.z) };
+function skyCamera() {
+  const C = SKY.cine, u = Math.min(1, C.t / 1.9), e = u * u * (3 - 2 * u);
+  camera.position.lerpVectors(C.pos, SKY_CAM_END.pos, e);
+  camera.lookAt(new THREE.Vector3().lerpVectors(C.look, SKY_CAM_END.look, e));
+}
+
+// ---------- back from Skyheart, and the gold it sent ----------
+// homeAdd (75-hub) is the one place savings grow outside a run; claimed ids are kept forever (a few bytes per run) so a
+// re-sent deposit can never pay twice
+function skyClaim(why) {
+  if (!SKY.on) return Promise.resolve(0);
+  SAVE.bridge = SAVE.bridge || { claimed: [] };
+  const saved = () => { try { const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); return (s && s.bridge && s.bridge.claimed) || []; } catch (e) { return []; } };
+  return Bridge.claim(id => saved().includes(id), list => {
+    let n = 0;
+    for (const e of list) if (!SAVE.bridge.claimed.includes(e.id)) { SAVE.bridge.claimed.push(e.id); n += e.n; }
+    if (n > 0) homeAdd(n);
+    writeSave();
+    const back = saved(); return list.every(e => back.includes(e.id));
+  }).then(n => {
+    if (n > 0) { sfx('coin'); toast(`+${n.toLocaleString()} gold from Skyheart`, 'Added to your playground savings', '#ffd34d'); if (G.mode === 'hub') hubGoldPill(); try { logEvent('skyheart', { gold: n, why }); } catch (e) {} }
+    return n;
+  }).catch(e => { console.warn('[skyheart] claim', e); return 0; });
+}
+function skyArrive() {
+  const p = G.player, x = SKY_FRONT.x, z = SKY_FRONT.z + 0.3;
+  p.x = x; p.z = z; p.face = 0; p.mesh.position.set(x, 0, z); p.mesh.rotation.y = p.face; snapCamera();
+  for (let i = 0; i < 3; i++) FX.twinkle(x, 1 + i * 0.6, z - 0.6, [0xffb8e6, 0xd9b8ff, 0xfff1a8][i], 10);
+  emit(x, 1, z - 0.6, 26, 0xffb8e6, { speed: 4, size: 0.4, life: 0.9, glow: true, grav: -0.5, shape: 'star' });
+  let w = $('#skyWipe');
+  if (!w) { w = document.createElement('div'); w.id = 'skyWipe'; w.innerHTML = '<div class="sw-glow"></div>'; document.body.appendChild(w); const st = document.createElement('style'); st.textContent = SKY_WIPE_CSS; document.head.appendChild(st); }
+  w.className = 'back'; void w.offsetWidth; w.className = 'back out';
+  toast('Welcome back, Skyheart hero!', 'Your playground missed you', '#ffb8e6');
+  try { const u = new URL(location.href); u.searchParams.delete('from'); history.replaceState(null, '', u.pathname + (u.search || '') + u.hash); } catch (e) {}
+}
+
+// ---------- hooks ----------
+if (SKY.on) {
+  const _buildHub = buildHub;
+  buildHub = function () {
+    _buildHub.apply(this, arguments);
+    if (SKY.cine) { SKY.cine = null; G.player.mesh.scale.setScalar(1); const w = $('#skyWipe'); if (w) w.className = ''; }
+    SKY.gate = null;
+    try { buildSkyIsle(); } catch (e) { console.error('[skyheart] isle', e); }
+    if (!SKY.map) SKY_LOAD.then(m => { if (m && G.mode === 'hub' && SKY.gate && !SKY.parts.gate.userData.real) skyRebuildGate(); });
+    if (SKY.arrive) { SKY.arrive = false; try { skyArrive(); } catch (e) { console.error('[skyheart] arrive', e); } }
+  };
+  const _updateWorld = updateWorld;
+  updateWorld = function (dt) { _updateWorld.apply(this, arguments); if (G.mode === 'hub') guard(skyTick, dt, 'skyheart'); };
+  // walking up to the gate, the hub camera leans toward it and pulls back a little so the whole 7 m arch is in view (the same
+  // hooks the Leaderboard uses; SKY.near is 0 more than 12 m away, 1 within 4 m)
+  const _ldbCamZoom = ldbCamZoom, _ldbCamTarget = ldbCamTarget;
+  ldbCamZoom = function () { return _ldbCamZoom.apply(this, arguments) * (1 + 0.3 * SKY.near); };
+  ldbCamTarget = function (px, pz) { const [x, z] = _ldbCamTarget(px, pz), k = 0.45 * SKY.near; return [x + (SKY_GATE.x - x) * k, z + (SKY_GATE.z + 0.4 - z) * k]; };
+  const _updateCamera = updateCamera;
+  updateCamera = function (dt, rdt = dt) {
+    if (SKY.cine && G.state === 'skyGate') { skyCineTick(rdt); skyCamera(); return; }
+    return _updateCamera.apply(this, arguments);
+  };
+  // gold left in the ledger by an earlier Skyheart visit (or another tab), and whenever this tab comes back into view
+  const claimSoon = why => setTimeout(() => skyClaim(why), 1200);
+  claimSoon(SKY.arrive ? 'back' : 'boot');
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) skyClaim('focus'); });
+  // coming back with the Back button after the page changed: the old page may be restored from the bfcache mid-wipe
+  window.addEventListener('pageshow', ev => { if (!ev.persisted) return; if (SKY.cine) buildHub(); skyClaim('back'); });
+}
+// the model landed after the hub was built (slow parse): swap the stand-in gate and decor for the real ones
+function skyRebuildGate() {
+  if (!SKY.gate) return;
+  removeObj(SKY.gate); SKY.gate = null;
+  // drop the colliders and interactable the first build added, then build again
+  G.room.colliders = G.room.colliders.filter(c => !c.sky);
+  G.interactables = G.interactables.filter(o => o.prompt !== skyPrompt);
+  buildSkyIsle();
+}
+
+// ---------- stand-ins (-Lite builds / model missing): same footprint, primitive toon shapes ----------
+function skyFallbackGate() {
+  const g = new THREE.Group(), gold = toon(0xffc93c), stone = toon(0xf3e8ff), pink = toon(0xff9ec8);
+  g.add(outline(mesh(new THREE.CylinderGeometry(3.95, 3.95, 0.32, 40), toon(0xc7b4ee), 0, 0.16, 0), 1.02));
+  g.add(outline(mesh(new THREE.CylinderGeometry(3.55, 3.55, 0.32, 40), stone, 0, 0.46, 0), 1.02));
+  const hs = new THREE.Shape(); for (let i = 0; i <= 48; i++) { const t = i / 48 * Math.PI * 2, x = 16 * Math.sin(t) ** 3 * 0.155, y = (13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) * 0.19 + 3.95; i ? hs.lineTo(x, y) : hs.moveTo(x, y); }
+  const frame = outline(mesh(new THREE.ExtrudeGeometry(hs, { depth: 0.3, bevelEnabled: true, bevelSize: 0.12, bevelThickness: 0.1, bevelSegments: 2 }), gold, 0, 0, -0.15), 1.03); g.add(frame);
+  const veil = new THREE.Group(); veil.name = 'SkyGate_veil'; const vm = mesh(new THREE.ShapeGeometry(hs), basic(0xffb8e6), 0, 0, 0.2); vm.scale.set(0.85, 0.85, 1); vm.position.y = 0.55; veil.add(vm); g.add(veil);
+  for (const s of [-1, 1]) { g.add(outline(mesh(new THREE.CylinderGeometry(0.32, 0.32, 3.6, 16), stone, s * 3.05, 2.7, 0), 1.06)); g.add(outline(mesh(new THREE.OctahedronGeometry(0.4, 0), basic(0xb7f2ff), s * 3.05, 5.15, 0), 1.08)); g.add(mesh(new THREE.TorusGeometry(0.36, 0.07, 6, 16), pink, s * 3.05, 2.7, 0)); }
+  const crest = new THREE.Group(); crest.name = 'SkyGate_crest'; crest.position.y = 6.15; crest.add(outline(mesh(new THREE.OctahedronGeometry(0.5, 0), basic(0xfff1a8)), 1.08)); g.add(crest);
+  return g;
+}
+function skyFallbackDeco(name) {
+  const g = new THREE.Group();
+  if (name === 'SkyGate_Tree') { g.add(outline(mesh(new THREE.CylinderGeometry(0.25, 0.35, 2.4, 8), toon(0xa9786a), 0, 1.2, 0), 1.08)); g.add(outline(mesh(new THREE.SphereGeometry(1.25, 14, 10), toon(0xffb3d1), 0, 3.1, 0), 1.04)); }
+  else if (name === 'SkyGate_Lamp') { g.add(outline(mesh(new THREE.CylinderGeometry(0.09, 0.09, 2.6, 8), toon(0x2a2442), 0, 1.3, 0), 1.1)); g.add(mesh(new THREE.OctahedronGeometry(0.22, 0), basic(0xfff1a8), 0.66, 2.38, 0)); }
+  else { g.add(outline(mesh(new THREE.OctahedronGeometry(0.5, 0), basic(0xb7f2ff), 0, 0.7, 0), 1.08)); g.children[0].scale.set(0.7, 1.6, 0.7); }
+  return g;
+}
 })();
 </script>
