@@ -72,6 +72,9 @@ b { font-weight: 700; }
 #prompt b { background: var(--ink); color: #fff; border-radius: 7px; padding: 1px 8px; margin-right: 7px; font-size: 15px; }
 #cross { position: fixed; left: 50%; top: 46%; width: 22px; height: 22px; transform: translate(-50%, -50%); pointer-events: none; }
 #cross i { position: absolute; inset: 7px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 2px rgba(58,36,32,.6); }
+/* shown while the mouse isn't captured mid-play (a refused re-lock after a pause); the next click takes it back */
+#lockHint { position: fixed; left: 50%; top: 56%; transform: translate(-50%, 0); padding: 8px 16px; border-radius: 999px; background: rgba(42,36,66,.78); color: #fff; font: 600 16px/1.2 var(--f-body); pointer-events: none; opacity: 0; transition: opacity .25s; z-index: 6; }
+#lockHint.on { opacity: 1; } #lockHint b { margin-right: 4px; } body.touch #lockHint { display: none; }
 #hud.form .bar.hp > div { background: linear-gradient(#fff3a0, #ff9ed8); }
 
 /* floating combat text */
@@ -223,11 +226,86 @@ body.touch #touch { display: block; } body.touch #skills { display: none; } body
   .bagItem { width: 92px; height: 92px; } .item { gap: 10px; padding: 8px 10px; }
   .endStats div { min-width: 0; padding: 6px 10px 4px; } .endStats b { font-size: 21px; }
 }
+
+/* ---------- readability pass (2026-10-26, the user: "too many words", colours tiring to read) ----------
+   Follows Sky Patrol's DESIGN.md roles so the mode feels like the same game: cream panels with one ink, display type
+   (Luckiest Guy) for titles and buttons only, everything you read in plain Fredoka at 15-17px with room to breathe, one
+   accent per element (sun = the primary action, pink = a prize or a pick), secondary text a calm warm grey. */
+:root { --text: #3d2b36; --text-2: #6c5a66; --well: #f6ecdf; --accent: #d9497f; }
+#modalBox { padding: 24px 28px; color: var(--text); }
+#modalBox p, .sub { font-size: 16px; line-height: 1.5; color: var(--text-2); }
+.sub { margin: 0 0 16px; font-weight: 500; }
+#modalBox h2 { color: #ffb347; } #modalBox h3 { font-family: var(--f-body); font-weight: 700; letter-spacing: .02em; font-size: 14px; text-transform: uppercase; color: var(--text-2); }
+/* names you read are body type, not display type */
+.cn, .card .cn, .item .cn { font-family: var(--f-body); font-weight: 700; letter-spacing: 0; color: var(--text); }
+.card .cn { font-size: 19px; margin: 10px 0 6px; } .item .cn { font-size: 17px; }
+.cd { font-size: 15px; line-height: 1.4; color: var(--text-2); }
+.card { background: #fff; padding: 20px 14px 16px; min-height: 0; box-shadow: 0 5px 0 rgba(58,36,32,.3); }
+.card.relic, .card.promise { background: #fff; }
+.card:hover { background: #fffaf0; }
+.ck { top: 8px; left: 10px; border: 0; background: var(--well); color: var(--text-2); font-size: 13px; line-height: 22px; padding: 0 6px; }
+.ri { font-size: 34px; }
+.card.promise .cd { text-align: left; display: flex; gap: 8px; align-items: baseline; margin-top: 8px; color: var(--text); }
+.card.promise .lbl { flex: none; font: 700 11px/1.7 var(--f-body); text-transform: uppercase; letter-spacing: .05em; padding: 0 7px; border-radius: 6px; background: var(--well); color: var(--text-2); }
+.card.promise .rew .lbl { background: #ffe1ec; color: var(--accent); } .cd.rew { color: var(--text); }
+.item { background: #fff; padding: 12px 16px; border-width: 2.5px; }
+.item .cd { margin-top: 2px; } .item small { color: var(--text-2); font-size: 12px; }
+.money { color: var(--text); white-space: nowrap; }
+.toast { font-size: 16px; color: var(--text); } .toast b { color: var(--text); }
+/* key caps: one look everywhere (guide, prompts, buttons) */
+.kc { display: inline-block; min-width: 26px; padding: 2px 8px 1px; border-radius: 8px; background: #fff; border: 2px solid var(--ink); box-shadow: 0 2px 0 var(--ink); color: var(--ink); font: 700 13px/1.4 var(--f-body); font-stretch: 75%; letter-spacing: .03em; text-align: center; white-space: nowrap; vertical-align: 1px; }
+.btn .kc { margin-left: 6px; font-size: 12px; padding: 0 6px; box-shadow: none; }
+ul.steps { list-style: none; padding: 0; margin: 4px 0 14px; text-align: left; display: flex; flex-direction: column; gap: 8px; }
+ul.steps li { font-size: 16px; line-height: 1.45; color: var(--text); background: var(--well); border-radius: 12px; padding: 9px 14px; }
+.stats { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; color: var(--text-2); } .stats b { color: var(--text); }
+.chn { font-size: 14px; } .chd { font-size: 12px; color: var(--text-2); }
+.endStats div { color: var(--text-2); font-size: 13px; }
+#prompt { font-size: 17px; color: var(--text); } #prompt b { font-family: var(--f-body); }
+#modal.info #modalBox { max-width: 620px; }
+
+/* controls guide (72-guide.js) */
+#modal.guide #modalBox { max-width: 720px; text-align: left; padding-top: 16px; padding-bottom: 16px; } #modal.guide h2 { text-align: center; }
+.gQuest { text-align: center; margin: 0 0 12px; color: var(--text) !important; }
+.gTabs { display: flex; justify-content: center; gap: 8px; margin: 0 0 10px; }
+.gTab { font: 700 15px var(--f-body); padding: 7px 16px; border-radius: 999px; border: 2.5px solid var(--ink); background: #fff; color: var(--text); cursor: pointer; }
+.gTab.on { background: var(--sun); box-shadow: inset 0 2px 0 rgba(58,36,32,.25); }
+.gGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } .gCol { display: flex; flex-direction: column; gap: 10px; }
+.gGroup { background: var(--well); border-radius: 14px; padding: 10px 12px; }
+.gGroup h3 { margin: 0 0 8px !important; }
+.gRow { display: flex; align-items: center; gap: 10px; padding: 2px 0; font-size: 15px; line-height: 1.25; color: var(--text); }
+.gRow .kc { flex: none; min-width: 74px; }
+.gFoot { text-align: center; margin: 12px 0 4px !important; font-size: 14px !important; }
+.gEnd { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
+.gOff { display: flex; gap: 8px; align-items: center; font-size: 14px; color: var(--text-2); cursor: pointer; }
+
+/* action bar: key cap on top, icon, name underneath, cooldown sweep with seconds, tooltip */
+#skills { gap: 8px; bottom: 14px; }
+#skills .sk { pointer-events: auto; width: 70px; height: 76px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 6px; }
+.sk .kc { position: relative; z-index: 2; font-size: 11px; padding: 0 6px; line-height: 1.5; box-shadow: none; border-width: 1.5px; min-width: 0; }
+.sk i { margin: 3px 0 0; font-size: 24px; line-height: 1; position: relative; z-index: 2; }
+.sk .nm { position: relative; z-index: 2; margin-top: 4px; font: 700 12px/1.1 var(--f-body); color: var(--text); white-space: nowrap; }
+.sk .cdt { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; padding-top: 10px; text-decoration: none; font: 700 20px var(--f-body); color: #fff; -webkit-text-stroke: 4px var(--ink); paint-order: stroke fill; pointer-events: none; }
+/* the slot's class 'board' also matches the Chip Board grid's .board rule (it painted this slot navy): undo that here */
+#skills .sk.board { background: var(--cream); background-image: none; border-width: 3px; border-radius: 16px; overflow: hidden; }
+#skForm.ready .nm { color: #b05a00; }
+.sk.ready .cdt:empty { display: none; }
+.sk em { top: 3px; right: 4px; }
+.sk.guide { background: #fff; }
+#skTip { position: absolute; bottom: calc(100% + 10px); transform: translateX(-50%); padding: 7px 12px; border-radius: 12px; background: var(--cream); border: 2.5px solid var(--ink); box-shadow: 0 3px 0 rgba(58,36,32,.35); font: 600 14px/1.3 var(--f-body); color: var(--text); white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .12s; }
+#skTip.on { opacity: 1; }
+/* touch buttons carry their names */
+.tb { flex-direction: column; } .tb .tl { position: absolute; bottom: -17px; left: 50%; transform: translateX(-50%); font: 700 11px var(--f-body); color: #fff; -webkit-text-stroke: 3px var(--ink); paint-order: stroke fill; white-space: nowrap; letter-spacing: .02em; }
+.tb.sm .tl { bottom: -15px; font-size: 10px; } .tb[data-a="board"] .tl, .tb[data-a="pause"] .tl { bottom: -15px; }
+@media (max-width: 760px) { #skills .sk { width: 56px; height: 66px; } .sk .nm { font-size: 10.5px; } .sk i { font-size: 20px; } .gGrid { display: flex; flex-direction: column; } .gCol { display: contents; } .gFoot { display: none; } }
+@media (max-width: 520px) { .chn { font-size: 12px; } .chd { font-size: 11px; } #modalBox { padding: 18px 14px; } #modalBox p, .sub, ul.steps li { font-size: 15px; } .card .cn { font-size: 17px; } .cd { font-size: 14px; } .gRow .kc { min-width: 64px; } }
+@media (max-height: 520px) { #skills .sk { width: 54px; height: 60px; padding-top: 4px; } .sk .nm { font-size: 10px; } }
+.opts label { font-size: 15px; color: var(--text); } .opts label.chk { justify-content: flex-start; gap: 10px; } .opts input[type=checkbox] { width: 18px; height: 18px; accent-color: #ffb347; }
 </style>
 <body>
 <canvas id="c"></canvas>
 <div id="nums"></div>
 <div id="cross"><i></i></div>
+<div id="lockHint"><b>🖱️</b> Click to look around</div>
 <div id="hud">
   <div id="vitals">
     <div id="meter" title="Starheart meter: fill it by bonking, then press F to transform!"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="27" class="track"/><circle cx="32" cy="32" r="27" class="fill"/></svg><span>★</span></div>
@@ -241,16 +319,18 @@ body.touch #touch { display: block; } body.touch #skills { display: none; } body
   <div id="roomLbl"></div>
   <div id="relics"></div>
   <div id="bossBar"><div id="bossName"></div><div class="bb"><div id="bossFill"></div></div></div>
+  <!-- action bar (2026-10-26): key cap, icon, name, cooldown sweep + seconds; hover (or long-press on the bar) shows data-tip -->
   <div id="skills">
-    <div class="sk ready" title="Paw Combo (left click)"><i>🐾</i><b>LMB</b></div>
-    <div class="sk" id="skBolt" title="Star Bolt (hold right click, uses Sparkle)"><i>⭐</i><b>RMB</b></div>
-    <div class="sk" id="skNova" title="Heart Nova (Q, uses Sparkle)"><i>💗</i><b>Q</b></div>
-    <div class="sk" id="skDash" title="Dash (Shift; dash backwards for a barrel roll)"><i>💨</i><b>Shift</b></div>
-    <div class="sk treat" id="skTreat" title="Treat Jar: munch one to heal (R)"><i>🍯</i><b>R</b><em id="treatCount">2</em></div>
-    <div class="sk" id="skForm" title="Starheart Form (F, when the meter is full)"><i>🌟</i><b>F</b></div>
-    <div class="sk board" id="skBoard" title="Chip Board (Tab)"><i>🔷</i><b>Tab</b><em id="bagDot"></em></div>
-  </div>
-  <div id="prompt"></div>
+    <div class="sk ready" data-tip="Paw combo · hold for Star Smash"><span class="kc">Click</span><i>🐾</i><span class="nm">Combo</span></div>
+    <div class="sk" id="skBolt" data-tip="Star Bolt · hold to keep firing · uses Sparkle"><span class="kc">R-Click</span><i>⭐</i><span class="nm" id="boltNm">Star Bolt</span><s class="cdt"></s></div>
+    <div class="sk" id="skNova" data-tip="Heart Nova · knocks foes back · uses Sparkle"><span class="kc">Q</span><i>💗</i><span class="nm">Nova</span><s class="cdt"></s></div>
+    <div class="sk" id="skDash" data-tip="Dash · dash backwards to roll"><span class="kc">Shift</span><i>💨</i><span class="nm">Dash</span><s class="cdt"></s></div>
+    <div class="sk treat" id="skTreat" data-tip="Treat Jar · heal 35%"><span class="kc">R</span><i>🍯</i><span class="nm">Treat</span><em id="treatCount">2</em></div>
+    <div class="sk" id="skForm" data-tip="Starheart Form · fills as you bonk foes"><span class="kc">F</span><i>🌟</i><span class="nm" id="formPct">Form</span></div>
+    <div class="sk board" id="skBoard" data-tip="Chip Board · slot your chips"><span class="kc">Tab</span><i>🔷</i><span class="nm">Chips</span><em id="bagDot"></em></div>
+    <div class="sk guide" id="skGuide" data-tip="Controls guide"><span class="kc">H</span><i>🎮</i><span class="nm">Guide</span></div>
+    <div id="skTip"></div>
+  </div>  <div id="prompt"></div>
 </div>
 <div id="toasts"></div>
 <div id="banner"></div>
@@ -260,22 +340,22 @@ body.touch #touch { display: block; } body.touch #skills { display: none; } body
 <div id="modal"><div id="modalBox"></div></div>
 <div id="touch">
   <div id="tBase"><div id="tKnob"></div></div>
-  <div class="tb big" data-a="attack" title="Paw Combo">🐾</div>
-  <div class="tb" data-a="bolt" title="Star Bolt">⭐</div>
-  <div class="tb" data-a="jump" title="Jump">⤒</div>
-  <div class="tb" data-a="dash" title="Dash">💨</div>
-  <div class="tb" data-a="nova" title="Heart Nova">💗</div>
-  <div class="tb" data-a="form" title="Starheart Form">🌟</div>
-  <div class="tb sm" data-a="use" title="Use">E</div>
-  <div class="tb sm" data-a="treat" title="Treat Jar">🍯</div>
-  <div class="tb sm" data-a="board" title="Chip Board">☰</div>
-  <div class="tb sm" data-a="pause" title="Pause">⏸</div>
+  <div class="tb big" data-a="attack" title="Paw Combo">🐾<span class="tl">Combo</span></div>
+  <div class="tb" data-a="bolt" title="Star Bolt">⭐<span class="tl">Bolt</span></div>
+  <div class="tb" data-a="jump" title="Jump">⤒<span class="tl">Jump</span></div>
+  <div class="tb" data-a="dash" title="Dash">💨<span class="tl">Dash</span></div>
+  <div class="tb" data-a="nova" title="Heart Nova">💗<span class="tl">Nova</span></div>
+  <div class="tb" data-a="form" title="Starheart Form">🌟<span class="tl">Form</span></div>
+  <div class="tb sm" data-a="use" title="Use">E<span class="tl">Use</span></div>
+  <div class="tb sm" data-a="treat" title="Treat Jar">🍯<span class="tl">Treat</span></div>
+  <div class="tb sm" data-a="board" title="Chip Board">☰<span class="tl">Chips</span></div>
+  <div class="tb sm" data-a="pause" title="Pause">⏸<span class="tl">Pause</span></div>
 </div>
 <div id="title">
   <div class="logo"><div class="l1">SCHIFFY</div><div class="l2">STARHEART</div></div>
   <p class="tag">The sky isles fell asleep. One tiny pup didn't.</p>
   <button id="playBtn" class="btn big">✨ Let's Go!</button>
-  <p class="hint"><b>WASD</b> run · <b>Mouse</b> look · <b>Click</b> paw combo · <b>Right-click</b> Star Bolt<br><b>Space</b> jump · <b>Shift</b> dash · <b>Q</b> Heart Nova · <b>R</b> Treat Jar</p>
+  <p class="hint"><b>WASD</b> run · <b>Mouse</b> look · <b>Click</b> attack · <b>H</b> all controls</p>
 </div>
 <div id="loading"><div class="logo small"><div class="l1">SCHIFFY</div><div class="l2">STARHEART</div></div><div id="loadTxt">Waking up Schiffy...</div></div>
 <!-- Part of Schiffy Sky Patrol (95-skypatrol.js): when this page runs as Sky Patrol's skyheart/ page (or was opened from its
@@ -611,11 +691,11 @@ const CHIPS = {
   lick: { name: 'Lick It Better', tier: 2, col: 'mint', ports: 'ew', desc: 'Heal 0.7 HP every second', st: { regen: 0.7 } },
   pounce: { name: 'Sky Pounce', tier: 2, col: 'pink', ports: 'ns', desc: '+30% damage while in the air', st: { airDmg: 0.3 } },
   bouncy: { name: 'Bouncy Paws', tier: 2, col: 'lilac', ports: 'sw', desc: 'Mid-air hits refresh your double jump', st: { bouncy: 1 } },
-  lastwag: { name: 'Last Wag', tier: 3, col: 'mint', ports: 'new', desc: 'Once per isle, shrug off a KO and stay at 1 HP', st: { lastWag: 1 } },
+  lastwag: { name: 'Last Wag', tier: 3, col: 'mint', ports: 'new', desc: 'Once per isle, survive a KO at 1 HP', st: { lastWag: 1 } },
   zoom: { name: 'Zoomies', tier: 2, col: 'pink', ports: 'es', desc: 'Dashes leave a trail of stinging stars', st: { zoom: 10 } },
   goodpup: { name: 'Good Pup', tier: 1, col: 'lilac', ports: 'n', desc: '+25% Stardust (XP)', st: { xpMul: 0.25 } },
   sniffer: { name: 'Kibble Sniffer', tier: 1, col: 'mint', ports: 'e', desc: '+25% Kibble', st: { coinMul: 0.25 } },
-  sparkle: { name: 'Glitter Tank', tier: 2, col: 'lilac', ports: 'ns', desc: '+30% Sparkle and faster Sparkle regen', st: { sparkleMul: 0.3 } },
+  sparkle: { name: 'Glitter Tank', tier: 2, col: 'lilac', ports: 'ns', desc: '+30% Sparkle, faster regen', st: { sparkleMul: 0.3 } },
   fetch: { name: 'Fetch!', tier: 2, col: 'pink', ports: 'nw', desc: 'Star Bolts chase down enemies', st: { homing: 1 } },
   nom: { name: 'Nom Nom', tier: 1, col: 'mint', ports: 'w', desc: 'Heal 2 HP for every foe you bonk', st: { nom: 2 } },
   coolnose: { name: 'Cool Nose', tier: 2, col: 'lilac', ports: 'ew', desc: 'Spell cooldowns 18% shorter', st: { spellCd: 0.18 } },
@@ -625,27 +705,27 @@ const CHIP_PRICE = { 1: 55, 2: 90, 3: 140 };
 
 // Relics ("Keepsakes"): one-off passives, no slots. Hooks are checked by id in the code that needs them.
 const RELICS = {
-  floof: { name: 'Angel Floof', icon: '🪶', desc: '+1 mid-air jump. Basically flying!' },
-  clock: { name: 'Sleepy Clock', icon: '⏰', desc: 'Enemies move and attack 12% slower. Yaaawn...' },
-  fireflies: { name: 'Jar of Fireflies', icon: '✨', desc: 'Every 5 s, a firefly zaps the nearest enemy' },
-  squeaky: { name: 'Squeaky Ball', icon: '🎾', desc: 'Every 4th paw swipe flings a bouncy ball. Squeak!' },
-  tiara: { name: 'Tiny Tiara', icon: '👑', desc: '+22% damage while above 80% HP. Fabulous.' },
+  floof: { name: 'Angel Floof', icon: '🪶', desc: '+1 mid-air jump' },
+  clock: { name: 'Sleepy Clock', icon: '⏰', desc: 'Enemies are 12% slower' },
+  fireflies: { name: 'Jar of Fireflies', icon: '✨', desc: 'A firefly zaps a foe every 5 s' },
+  squeaky: { name: 'Squeaky Ball', icon: '🎾', desc: 'Every 4th swipe throws a ball' },
+  tiara: { name: 'Tiny Tiara', icon: '👑', desc: '+22% damage above 80% HP' },
   plush: { name: 'Static Plush', icon: '⚡', desc: 'Dash through enemies to zap them' },
-  jelly: { name: 'Jelly Bean', icon: '🫘', desc: 'Heal 12% every time you reach a new isle' },
-  glass: { name: 'Glass Star', icon: '⭐', desc: '+35% damage, but -25% max HP. Fierce and fragile!' },
-  buddy: { name: 'Wind-up Buddy', icon: '🤖', desc: 'A tiny robot pal orbits you and goes pew-pew' },
-  snack: { name: 'Mystery Snack', icon: '🍪', desc: '+1 Treat Jar, and Treats heal 30% more' },
-  crane: { name: 'Paper Crane', icon: '🕊️', desc: 'Your first hit on each enemy deals triple damage' },
-  whims: { name: 'Bag of Whims', icon: '🎁', desc: '+12% crit chance, and crits burst for splash damage' },
+  jelly: { name: 'Jelly Bean', icon: '🫘', desc: 'Heal 12% on each new isle' },
+  glass: { name: 'Glass Star', icon: '⭐', desc: '+35% damage, -25% max HP' },
+  buddy: { name: 'Wind-up Buddy', icon: '🤖', desc: 'A robot pal orbits and shoots' },
+  snack: { name: 'Mystery Snack', icon: '🍪', desc: '+1 Treat Jar, treats heal +30%' },
+  crane: { name: 'Paper Crane', icon: '🕊️', desc: 'First hit on each foe: x3 damage' },
+  whims: { name: 'Bag of Whims', icon: '🎁', desc: '+12% crit, crits splash' },
 };
 
 // Level-up cards (Stardust fills the XP bar). w = weight.
 const CARDS = [
-  { id: 'dmg', name: 'Bigger Bites', desc: '+9% damage. Chomp harder!', w: 10, st: { dmg: 0.09 } },
-  { id: 'hp', name: 'Extra Fluffy', desc: '+16 max HP, and you heal it right away', w: 10, st: { hp: 16 }, heal: 16 },
+  { id: 'dmg', name: 'Bigger Bites', desc: '+9% damage', w: 10, st: { dmg: 0.09 } },
+  { id: 'hp', name: 'Extra Fluffy', desc: '+16 max HP (healed now)', w: 10, st: { hp: 16 }, heal: 16 },
   { id: 'crit', name: 'Lucky Sniff', desc: '+5% crit chance', w: 8, st: { crit: 0.05 } },
-  { id: 'spd', name: 'Zoom Zoom', desc: '+6% move speed. Nyoom!', w: 6, st: { speedMul: 0.06 } },
-  { id: 'atkspd', name: 'Flurry Paws', desc: '+10% attack speed. Pap-pap-pap!', w: 8, st: { atkSpd: 0.1 } },
+  { id: 'spd', name: 'Zoom Zoom', desc: '+6% move speed', w: 6, st: { speedMul: 0.06 } },
+  { id: 'atkspd', name: 'Flurry Paws', desc: '+10% attack speed', w: 8, st: { atkSpd: 0.1 } },
   { id: 'boltn', name: 'Star Shower', desc: 'Star Bolt fires +1 star', w: 4, st: { boltN: 1 }, max: 3 },
   { id: 'boltdmg', name: 'Twinkle Power', desc: '+25% Star Bolt damage', w: 7, st: { boltDmgMul: 0.25 } },
   { id: 'novar', name: 'Bigger Hugs', desc: 'Heart Nova radius +20%', w: 6, st: { novaRMul: 0.2 } },
@@ -659,22 +739,22 @@ const CARDS = [
 
 // Promises at the Promise Shrine: accept a vow (curse or challenge) for a reward.
 const PROMISES = [
-  { id: 'brave', name: 'Brave Promise', vow: 'Enemies get +30% HP for the next 2 isles.', reward: 'A Keepsake, right now!', give: 'relic', curse: { hpMul: 0.3, rooms: 2 } },
-  { id: 'grace', name: 'Graceful Promise', vow: 'Clear the next fight isle without getting hit. Not even once!', reward: 'A tier-3 chip and 3 Heart Shards.', give: 'grace', test: 'nohit' },
-  { id: 'haste', name: 'Speedy Promise', vow: 'Clear the next fight isle in under 50 seconds.', reward: 'A tier-2 chip and 120 Kibble.', give: 'haste', test: 'fast' },
-  { id: 'feast', name: 'Crumbly Promise', vow: 'All healing is halved for the next 3 isles.', reward: 'Two chips, right now!', give: 'chips2', curse: { healMul: 0.5, rooms: 3 } },
-  { id: 'greed', name: 'Greedy Promise', vow: 'Give up one Treat Jar for the rest of the run.', reward: '200 Kibble, right now!', give: 'coins200', curse: { treats: -1, rooms: 99 } },
+  { id: 'brave', name: 'Brave Promise', vow: 'Enemies +30% HP for 2 isles', reward: 'A Keepsake now', give: 'relic', curse: { hpMul: 0.3, rooms: 2 } },
+  { id: 'grace', name: 'Graceful Promise', vow: 'Clear the next fight without a hit', reward: 'Tier-3 chip + 3 Heart Shards', give: 'grace', test: 'nohit' },
+  { id: 'haste', name: 'Speedy Promise', vow: 'Clear the next fight in 50 s', reward: 'Tier-2 chip + 120 Kibble', give: 'haste', test: 'fast' },
+  { id: 'feast', name: 'Crumbly Promise', vow: 'Healing halved for 3 isles', reward: 'Two chips now', give: 'chips2', curse: { healMul: 0.5, rooms: 3 } },
+  { id: 'greed', name: 'Greedy Promise', vow: '-1 Treat Jar for this run', reward: '200 Kibble now', give: 'coins200', curse: { treats: -1, rooms: 99 } },
   // only offered in its biome (offerPromises)
-  { id: 'stars', name: 'Starry Promise', vow: 'Enemies move 20% faster for the next 2 isles.', reward: 'A Keepsake and a Treat Jar, right now!', give: 'starsGift', curse: { spdMul: 0.2, rooms: 2 }, biome: 3 },
+  { id: 'stars', name: 'Starry Promise', vow: 'Enemies 20% faster for 2 isles', reward: 'Keepsake + Treat Jar now', give: 'starsGift', curse: { spdMul: 0.2, rooms: 2 }, biome: 3 },
 ];
 
 // Kernel Tree (hub): permanent upgrades bought with Heart Shards.
 const TREE = [
-  { id: 'hp', name: 'Sturdy Roots', desc: '+10 max HP. Tough little pup!', max: 5, cost: l => 4 + l * 3, st: { hp: 10 } },
-  { id: 'dmg', name: 'Thorny Leaves', desc: '+5% damage. Pointy!', max: 5, cost: l => 5 + l * 3, st: { dmg: 0.05 } },
-  { id: 'treat', name: 'Honey Sap', desc: '+1 Treat Jar. Sticky and sweet.', max: 2, cost: l => 10 + l * 8, st: { treats: 1 } },
-  { id: 'chip', name: 'Seed Chip', desc: 'Start every run with a random tier-1 chip', max: 1, cost: () => 8, st: {} },
-  { id: 'coin', name: 'Golden Pollen', desc: '+10% Kibble. Cha-ching!', max: 3, cost: l => 4 + l * 4, st: { coinMul: 0.1 } },
+  { id: 'hp', name: 'Sturdy Roots', desc: '+10 max HP', max: 5, cost: l => 4 + l * 3, st: { hp: 10 } },
+  { id: 'dmg', name: 'Thorny Leaves', desc: '+5% damage', max: 5, cost: l => 5 + l * 3, st: { dmg: 0.05 } },
+  { id: 'treat', name: 'Honey Sap', desc: '+1 Treat Jar', max: 2, cost: l => 10 + l * 8, st: { treats: 1 } },
+  { id: 'chip', name: 'Seed Chip', desc: 'Start runs with a tier-1 chip', max: 1, cost: () => 8, st: {} },
+  { id: 'coin', name: 'Golden Pollen', desc: '+10% Kibble', max: 3, cost: l => 4 + l * 4, st: { coinMul: 0.1 } },
 ];
 
 // Enemies. ai: chase | caster | slam | flyer
@@ -1162,7 +1242,7 @@ const keys = new Set(), pressed = new Set();
 const mouse = { down: [false, false, false], pressed: [false, false, false], dx: 0, dy: 0, locked: false };
 const TOUCH = { on: false, mx: 0, mz: 0, look: null, btn: new Set() };
 const BIND = { up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
-  jump: ['Space'], dash: ['ShiftLeft', 'ShiftRight'], nova: ['KeyQ'], form: ['KeyF'], use: ['KeyE'], treat: ['KeyR'], board: ['Tab', 'KeyC'], pause: ['Escape', 'KeyP'] };
+  jump: ['Space'], dash: ['ShiftLeft', 'ShiftRight'], nova: ['KeyQ'], form: ['KeyF'], use: ['KeyE'], treat: ['KeyR'], board: ['Tab', 'KeyC'], pause: ['Escape', 'KeyP'], guide: ['KeyH'] };
 const held = a => BIND[a].some(k => keys.has(k)) || TOUCH.btn.has(a + ':held');
 const tapped = a => BIND[a].some(k => pressed.has(k)) || TOUCH.btn.has(a);
 addEventListener('keydown', e => {
@@ -1177,8 +1257,9 @@ addEventListener('blur', () => { keys.clear(); mouse.down = [false, false, false
 canvas.addEventListener('mousedown', e => {
   audio();
   if (TOUCH.on && e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
-  // the first click only grabs the mouse; it doesn't swing
-  if (G.state === 'play' && !mouse.locked && !mouse.noLock && canvas.requestPointerLock) { lockMouse(true); return; }
+  // the very first click of a session only grabs the mouse (it doesn't swing); a click that takes it back after a pause both
+  // grabs it and acts, so a player clicking to attack doesn't lose the swing
+  if (G.state === 'play' && !mouse.locked && !mouse.noLock && canvas.requestPointerLock) { const first = !mouse.everLocked; lockMouse(true); if (first) return; }
   mouse.down[e.button] = true; mouse.pressed[e.button] = true;
 });
 addEventListener('mouseup', e => { mouse.down[e.button] = false; });
@@ -1191,14 +1272,25 @@ addEventListener('mousemove', e => { if (mouse.locked || (mouse.noLock && G.stat
 function lockMouse(gesture = false) {
   if (mouse.noLock || TOUCH.on || mouse.locked) return;
   mouse.lockGesture = gesture;
-  const fail = () => { if (gesture && !mouse.everLocked) mouse.noLock = true; };
+  if (gesture) lockTries = 0;
+  const fail = () => { if (gesture && !mouse.everLocked) mouse.noLock = true; else lockRetry(); };
   try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(fail); } catch (e) { fail(); }
 }
-document.addEventListener('pointerlockerror', () => { if (mouse.lockGesture && !mouse.everLocked) mouse.noLock = true; });
+// Resuming after a pause (2026-10-26, "the cursor doesn't reconnect"): the browser refuses a new lock for about a second after
+// Esc let go of the mouse, and Esc itself never counts as a user gesture. So a refused re-lock tries again at 0.45 / 1.1 /
+// 1.7 s (a click or other key still counts as a gesture for a few seconds), and until the lock is back the
+// "Click to look around" hint (#lockHint, updateHud) shows; the next click takes the mouse and still acts (mousedown above).
+let lockTries = 0;
+const LOCK_RETRY_MS = [450, 1100, 1700];
+function lockRetry() {
+  if (lockTries >= LOCK_RETRY_MS.length) return;
+  setTimeout(() => { if (G.state === 'play' && !mouse.locked && !mouse.noLock && !TOUCH.on) lockMouse(false); }, LOCK_RETRY_MS[lockTries++]);
+}
+document.addEventListener('pointerlockerror', () => { if (mouse.lockGesture && !mouse.everLocked) mouse.noLock = true; else if (mouse.everLocked) lockRetry(); });
 document.addEventListener('pointerlockchange', () => {
   const was = mouse.locked;
   mouse.locked = document.pointerLockElement === canvas;
-  if (mouse.locked) { mouse.everLocked = true; if (G.state !== 'play') { document.exitPointerLock(); return; } }   // a late lock while a menu is open: let go again
+  if (mouse.locked) { mouse.everLocked = true; lockTries = 0; if (G.state !== 'play') { document.exitPointerLock(); return; } }   // a late lock while a menu is open: let go again
   // losing the lock mid-fight (Esc) opens the pause menu
   if (was && !mouse.locked && G.state === 'play' && !TOUCH.on) openPause();
 });
@@ -1439,13 +1531,55 @@ function buildIsle(R, biome, opts = {}) {
   }
   return W;
 }
+// Raised platforms (2026-10-26 redesign, the user saw gaps under and between the old ones): a chunky mesa that clearly sits
+// in the ground. Its body sinks PLAT_SINK below the floor and widens toward a flared foot ringed with stones, so no isle bump
+// or dune ripple can show a gap under it; the top is a lipped cap; colours per biome (PLAT_LOOK). Collision is unchanged:
+// a disc of radius r at height h (groundAt / collide / shots).
+const PLAT_SINK = 0.5;
+const PLAT_LOOK = {
+  meadow: { top: 0x8ccf6c, lip: 0x6fb95a, side: 0xd2a48c, band: 0xecc9ae, foot: 0xb48aba },
+  hub: { top: 0x94d276, lip: 0x7cc463, side: 0xd8ac96, band: 0xf0d2b8, foot: 0xbc94c0 },
+  moon: { top: 0xb8acf4, lip: 0x9a8ee0, side: 0x8a76bc, band: 0xb4a2e4, foot: 0x6e5c9e },
+  dunes: { top: 0xfde2b6, lip: 0xf4c48e, side: 0xeea48e, band: 0xf9c9ae, foot: 0xd88a9a },
+  temple: { top: 0xfbd8ac, lip: 0xf0b888, side: 0xe0909a, band: 0xf2b8ae, foot: 0xc87a8e },
+  stars: { top: 0x857ee0, lip: 0xffc93c, side: 0x4f4a9a, band: 0x6d66c4, foot: 0x3d3980, studs: 0xfff1a8 },
+  observatory: { top: 0x7c74d6, lip: 0xffc93c, side: 0x48438e, band: 0x655ebc, foot: 0x37337a, studs: 0xfff1a8 },
+};
+// a new platform whose edge would stop just short of another's (a sliver of floor between them, which read as a crack) is
+// moved: apart to a clear walkway, or in until the two overlap as one terrace, whichever is the smaller move
+function platSpot(x, z, r) {
+  for (let pass = 0; pass < 3; pass++) for (const p of W.plats) {
+    let dx = x - p.x, dz = z - p.z, d = Math.hypot(dx, dz);
+    if (d < 0.001) { dx = 1; dz = 0; d = 1e-3; }
+    const gap = d - r - p.r; if (gap <= -0.8 || gap >= 1.6) continue;
+    const far = r + p.r + 1.6, near = r + p.r - 0.8, ux = dx / d, uz = dz / d;
+    const fits = Math.hypot(p.x + ux * far, p.z + uz * far) < W.R - r - 1.2;
+    const t = fits && far - d < d - near ? far : near;
+    x = p.x + ux * t; z = p.z + uz * t;
+  }
+  return [x, z];
+}
 function addPlat(x, z, r, h) {
-  const b = W.b;
-  const top = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.9, h, 28), toonU(b.grass)); top.position.set(x, h / 2, z);
-  top.castShadow = true; top.receiveShadow = true; addOutline(top, 0.04);
-  const cap = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.02, r * 1.02, 0.18, 28), toonU(b.grass2)); cap.position.y = h / 2 - 0.05; top.add(cap);
-  const rim = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.92, r * 0.8, h * 0.6, 28), toonU(b.rock)); rim.position.y = -h * 0.25; top.add(rim);
-  W.group.add(top); W.plats.push({ x, z, r, h });
+  [x, z] = platSpot(x, z, r);
+  const L = PLAT_LOOK[W.biome] || PLAT_LOOK.meadow, g = new THREE.Group(); g.position.set(x, 0, z);
+  const part = (geo, col, y, ink = 0.04) => { const m = new THREE.Mesh(geo, toonU(col)); m.position.y = y; m.castShadow = true; m.receiveShadow = true; if (ink) addOutline(m, ink); g.add(m); return m; };
+  const body = h + PLAT_SINK - 0.1;
+  part(new THREE.CylinderGeometry(r * 0.99, r * 1.07, body, 30), L.side, h - 0.1 - body / 2);
+  if (h > 0.9) part(new THREE.CylinderGeometry(r * 1.015, r * 1.035, 0.2, 30), L.band, h * 0.42, 0);
+  part(new THREE.CylinderGeometry(r * 1.03, r * 0.99, 0.26, 30), L.top, h - 0.13);
+  const lip = new THREE.Mesh(new THREE.TorusGeometry(r * 1.015, 0.1, 6, 36), toonU(L.lip)); lip.rotation.x = Math.PI / 2; lip.position.y = h - 0.02; g.add(lip);
+  // the foot: a flared skirt into the ground and a ring of stones round it
+  part(new THREE.CylinderGeometry(r * 1.1, r * 1.24, 0.42, 30), L.foot, -0.06);
+  // the stones' jitter has its own stream (seeded by the spot), so adding them doesn't move any later Math.random roll
+  let sd = (Math.floor(x * 73.1 + z * 19.7) >>> 0) || 1; const jr = (lo, hi) => { sd = (sd * 16807) % 2147483647; return lo + (sd / 2147483647) * (hi - lo); };
+  const n = Math.round(r * 4.2), stone = toonU(new THREE.Color(L.foot).lerp(new THREE.Color(0xffffff), 0.18).getHex());
+  for (let i = 0; i < n; i++) {
+    const a = i / n * TAU + jr(-0.15, 0.15), rr = r * 1.2 + jr(-0.08, 0.1), s = jr(0.2, 0.34);
+    const st = new THREE.Mesh(new THREE.DodecahedronGeometry(s, 0), stone); st.position.set(Math.cos(a) * rr, s * 0.35, Math.sin(a) * rr);
+    st.rotation.set(jr(0, TAU), jr(0, TAU), 0); st.scale.y = 0.7; st.castShadow = true; addOutline(st, 0.03); g.add(st);
+  }
+  if (L.studs) for (let i = 0; i < 6; i++) { const a = i / 6 * TAU + 0.3, s = new THREE.Mesh(new THREE.OctahedronGeometry(0.11, 0), glowMat(L.studs)); s.position.set(Math.cos(a) * r * 1.04, h * 0.62, Math.sin(a) * r * 1.04); g.add(s); }
+  W.group.add(g); W.plats.push({ x, z, r, h });
 }
 // h = how tall the solid is (player shots fly over anything lower); sr = radius player shots see (defaults to r)
 function addCol(x, z, r, h = 3, sr) { const c = { x, z, r, h }; if (sr != null) c.sr = sr; W.cols.push(c); return c; }
@@ -1465,9 +1599,34 @@ function collide(e) {
   }
   for (const p of W.plats) {
     if (e.y >= p.h - 0.3) continue;
-    const dx = e.x - p.x, dz = e.z - p.z, d = Math.hypot(dx, dz), m = p.r + e.r * 0.8;
-    if (d < m && d > 0.0001) { e.x = p.x + dx / d * m; e.z = p.z + dz / d * m; }
+    platPush(e, p, p.r + e.r * 0.8);
   }
+}
+// out of a platform to distance m from its centre (also from dead centre, where the direction is undefined: a cuckoo that
+// blinked onto the middle of one used to stay there)
+function platPush(e, p, m) {
+  let dx = e.x - p.x, dz = e.z - p.z, d = Math.hypot(dx, dz);
+  if (d >= m) return false;
+  if (d < 0.0001) { const a = Math.atan2(G.player ? G.player.x - p.x : 1, G.player ? G.player.z - p.z : 0) + Math.PI; dx = Math.sin(a); dz = Math.cos(a); d = 1; }
+  e.x = p.x + dx / d * m; e.z = p.z + dz / d * m; return true;
+}
+// flyers never pass through a platform: their lowest height rises smoothly over the last metre before one to just above its
+// top, so a mothlet glides over (and swoops onto) it instead
+function platLift(e) {
+  if (!W) return;
+  for (const p of W.plats) {
+    const d = Math.hypot(e.x - p.x, e.z - p.z), edge = p.r + e.r * 0.7;
+    if (d > edge + 1) continue;
+    const k = clamp((edge + 1 - d) / 1, 0, 1), floor = (p.h + 0.3) * k * k * (3 - 2 * k);
+    if (e.y < floor) e.y = floor;
+  }
+}
+// bosses move by their own code (45/47/48): afterwards they're pushed out of any platform their body is below the top of
+function platBoss(e) {
+  if (!W || e.dead) return;
+  let moved = false;
+  for (const p of W.plats) if (e.y < p.h - 0.3) moved = platPush(e, p, p.r + e.r * 0.7) || moved;
+  if (moved && e.mesh) { e.mesh.position.x = e.x; e.mesh.position.z = e.z; if (e.blob) { e.blob.position.x = e.x; e.blob.position.z = e.z; } }
 }
 // keep enemies on the isle
 function keepIn(e, pad = 1) { const d = Math.hypot(e.x, e.z), m = W.R - pad; if (d > m) { e.x *= m / d; e.z *= m / d; } }
@@ -1883,9 +2042,17 @@ function makePlayer() {
   const g = new THREE.Group(), body = new THREE.Group(); g.add(body); body.add(hero.root);
   const blob = new THREE.Mesh(new THREE.CircleGeometry(0.5, 20), new THREE.MeshBasicMaterial({ color: 0x3a2420, transparent: true, opacity: 0.22, depthWrite: false }));
   blob.rotation.x = -Math.PI / 2; scene.add(g, blob);
-  // Starheart Form dressing: floating star crown + aura (hidden until transformed)
-  const crown = new THREE.Group(); crown.position.y = HERO_H + 0.35; crown.visible = false; body.add(crown);
-  for (let i = 0; i < 5; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.star, color: 0xffe08a, transparent: true, depthWrite: false })); s.scale.setScalar(0.22); const a = i / 5 * TAU; s.position.set(Math.cos(a) * 0.32, 0, Math.sin(a) * 0.32); crown.add(s); }
+  // Starheart Form dressing (hidden until transformed), all "powered up" and nothing near the head (2026-10-26: the old ring of
+  // stars circling the head read as dizzy): `crown` is now a glowing star sigil turning under Schiffy's paws (it stays on the
+  // ground while he jumps) plus `flames`, soft additive tongues of light rising round the body; animatePlayer also streams
+  // sparkles upward (formFx)
+  const crown = new THREE.Group(); crown.visible = false; g.add(crown);
+  // the rings are normal-blended (additive pink washed out to pale yellow on the bright meadow grass); the star glows on top
+  const glowPlane = (tex, size, col, y, add) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshBasicMaterial({ map: TEX[tex], color: col, transparent: true, depthWrite: false, blending: add ? THREE.AdditiveBlending : THREE.NormalBlending, opacity: add ? 0.9 : 0.85, polygonOffset: true, polygonOffsetFactor: -2 })); m.rotation.x = -Math.PI / 2; m.position.y = y; crown.add(m); return m; };
+  crown.userData.ring = glowPlane('ring', 2.7, 0xff6fc0, 0.05); crown.userData.ring2 = glowPlane('ring', 1.8, 0xffc23a, 0.06); crown.userData.star = glowPlane('star', 1.5, 0xffd3f0, 0.07, true);
+  const flames = new THREE.Group(); flames.visible = false; g.add(flames);
+  for (let i = 0; i < 4; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.glow, color: i % 2 ? 0xffe08a : 0xff9ed8, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 })); const a = i / 4 * TAU + 0.4; s.position.set(Math.cos(a) * 0.32, 0.75, Math.sin(a) * 0.32); s.scale.set(0.9, 2.0, 1); flames.add(s); }
+  crown.userData.flames = flames;
   const aura = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.glow, color: 0xff9ed8, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }));
   aura.scale.setScalar(2.4); aura.position.y = 0.8; body.add(aura);
   return { x: 0, y: 0, z: 6, vx: 0, vz: 0, vy: 0, r: 0.42, face: Math.PI, onGround: true, coyote: 0, airJ: 1, jumpBuf: 0,
@@ -2147,6 +2314,23 @@ function startForm() {
   $('hud').classList.add('form');
 }
 function endForm() { const p = G.player; p.form = 0; p.crown.visible = false; $('hud').classList.remove('form'); }
+// Starheart Form's look each frame (makePlayer builds it): the sigil turns and breathes on the ground under Schiffy, the aura's
+// tongues of light flicker upward, and sparkles + hearts rise off him (~26 a second)
+function formFx(p, dt) {
+  const on = p.form > 0, c = p.crown, U = c.userData, fl = U.flames;
+  c.visible = on; if (fl) fl.visible = on;
+  if (!on) return;
+  const t = G.time, gy = Math.max(0, groundAt(p.x, p.z, p.y));
+  c.position.y = gy - p.y; c.rotation.y += dt * 1.2;
+  const br = 1 + Math.sin(t * 4) * 0.05;
+  U.ring.scale.setScalar(br); U.ring2.rotation.z -= dt * 2.6; U.star.rotation.z += dt * 1.4; U.star.scale.setScalar(0.92 + Math.sin(t * 6) * 0.08);
+  if (fl) fl.children.forEach((s, i) => { s.material.opacity = 0.45 + 0.18 * Math.sin(t * 9 + i * 1.7); s.scale.y = 1.9 + 0.45 * Math.sin(t * 7 + i * 2.3); s.position.y = 0.7 + 0.12 * Math.sin(t * 5 + i); });
+  p.formSpark = (p.formSpark || 0) + dt * 26;
+  for (; p.formSpark >= 1; p.formSpark--) {
+    const a = rand(TAU), r = rand(0.2, 0.65);
+    spr(p.x + Math.cos(a) * r, p.y + rand(0.1, 1.1), p.z + Math.sin(a) * r, { tex: Math.random() < 0.7 ? 'star' : 'heart', col: pick([0xffd3f0, 0xffe08a, 0xff9ed8, 0xffffff]), size: rand(0.2, 0.34), life: rand(0.7, 1.05), vy: rand(1.6, 3.0), drag: 0.6, spin: rand(-3, 3), add: true });
+  }
+}
 function useTreat() {
   const p = G.player;
   if (p.treats <= 0) return toast('🍯 Treat Jars all gone!');
@@ -2327,7 +2511,7 @@ function animatePlayer(p, dt, move) {
   for (const m of h.mats) { if (m.emissive) m.emissive.setHex(flashOn ? 0xff4060 : p.form > 0 ? 0x5a2040 : 0x000000); }
   p.body.visible = !blink || p.dashT > 0;
   if (h.wand) h.wand.visible = p.body.visible;
-  p.crown.rotation.y += dt * 2.5;
+  formFx(p, dt);
   p.aura.material.opacity = p.form > 0 ? 0.35 + Math.sin(G.time * 8) * 0.1 : damp(p.aura.material.opacity, 0, 8, dt);
   if (h.mixer) {
     const driven = heroAnimTick(p, dt, move);
@@ -3211,7 +3395,7 @@ function updateEnemies(dt) {
       if (k >= 1) { scene.remove(e.mesh); scene.remove(e.blob); if (e.ring) e.ring.kill = true; G.enemies.splice(i, 1); }
       continue;
     }
-    if (e.boss) { (e.tick || updateBoss)(e, dt); continue; }
+    if (e.boss) { (e.tick || updateBoss)(e, dt); platBoss(e); continue; }
     if (e.spawnT > 0) { e.spawnT -= dt; const k = 1 - Math.max(0, e.spawnT) / 0.8; e.rig.scale.setScalar((e.elite ? 1.3 : 1) * (k < 0.7 ? k / 0.7 * 1.15 : 1.15 - (k - 0.7) / 0.3 * 0.15)); placeEnemyMesh(e); continue; }
     const dx = p.x - e.x, dz = p.z - e.z, d = Math.hypot(dx, dz), toP = Math.atan2(dx, dz);
     e.flashT = Math.max(0, e.flashT - dt);
@@ -3231,7 +3415,7 @@ function updateEnemies(dt) {
       const ox = e.x - o.x, oz = e.z - o.z, od = Math.hypot(ox, oz), m = e.r + o.r;
       if (od < m && od > 0.001) { e.x += ox / od * (m - od) * 0.5; e.z += oz / od * (m - od) * 0.5; }
     }
-    if (!e.fly) collide(e);
+    if (!e.fly) collide(e); else platLift(e);
     keepIn(e, 1.2);
     animEnemy(e, dt);
     placeEnemyMesh(e);
@@ -3739,6 +3923,8 @@ Object.assign(AI, {
         // vanish, and mark where it will appear: behind Schiffy (relative to where Schiffy faces)
         let a = p.face + Math.PI + rand(-0.6, 0.6), tx = p.x + Math.sin(a) * 2.4, tz = p.z + Math.cos(a) * 2.4;
         if (hitsWall(tx, tz, e.r)) { a = toP + Math.PI; tx = p.x + Math.sin(a) * 2.4; tz = p.z + Math.cos(a) * 2.4; }
+        // both blocked (e.g. Schiffy stands on a platform): the nearest free spot on a ring round Schiffy, else toward the middle
+        for (let k = 0; k < 24 && hitsWall(tx, tz, e.r); k++) { const rr = k < 12 ? 2.4 : 3.6, aa = toP + Math.PI + (k % 12) * TAU / 12; tx = p.x + Math.sin(aa) * rr; tz = p.z + Math.cos(aa) * rr; }
         if (hitsWall(tx, tz, e.r)) { tx = p.x * 0.85; tz = p.z * 0.85; }
         e.tx = tx; e.tz = tz; e.mode = 'gone'; e.mt = 0.55; e.under = true; e.rig.visible = e.blob.visible = false;
         burst(e.x, 1, e.z, 12, { tex: 'puff', col: 0xffffff, size: 0.5, speed: 4, life: 0.4 }); tone(800, 400, 0.1, 'square', 0.04);
@@ -4455,7 +4641,7 @@ function runChronowlAtk(e, dt, toP, d) {
         for (const [x, z] of pts) addStarfall(x, z, { delay: 1.3, dmg: e.dmg, r: 1.4, col: 0xfff1a0 });
         for (let k = 0; k < 5; k++) { const A = pts[k], B = pts[(k + 2) % 5]; addConstLine(A[0], A[1], B[0], B[1], 1.3, Math.round(e.dmg * 0.8)); }
         e.step++; tone(880, 1320, 0.3, 'triangle', 0.06);
-        toastOnce('consttip', '✨ Constellation! Stars land, then the lines flash. Stand in the middle or get out!');
+        toastOnce('consttip', '✨ Stars land, then their lines flash: stand clear!');
       }
       if (t > 0.5 + sets * 1.1 + 1.4) done(1.2);
       break;
@@ -4602,6 +4788,7 @@ function newRun() {
   G.run = { depth: 0, level: 1, xp: 0, coins: 0, board: Array(9).fill(null), bag: [], relics: [], cards: [], curses: [], vows: [], kills: 0, shards: 0, startT: G.time, pendingCards: 0 };
   if (SAVE.tree.chip) G.run.bag.push(randomChip(1));
   SAVE.runs++; save();
+  guideRunStart();
 }
 const xpNeed = l => Math.round(18 + l * 14 + l * l * 2.5);
 function gainXP(n) {
@@ -4854,20 +5041,20 @@ function enterHub() {
   for (let z = 11.5; z >= -13; z -= 2.1) pathStone(Math.sin(z * 0.7) * 0.45, z, rand(0.8, 1.0));
   for (const [x, z] of [[-1.8, 10.2], [1.8, 10.2], [-1.9, -0.9], [1.9, -0.9]]) pathStone(x, z, 0.55);        // side steps to the sign/bench and the workbench/shrine
   place('Prop_Sign', 3.4, 9.2, { rot: 0.25, col: 0.9 });
-  G.interact.push({ x: 3.4, z: 9.2, r: 2.6, label: 'Check the quest board', fn: () => openInfo('goal') });
+  G.interact.push({ x: 3.4, z: 9.2, r: 2.6, label: 'Quest board', fn: () => openInfo('goal') });
   place('Deco_Bench', -3.4, 9.4, { rot: -0.2, col: 0.6 });
   place('Deco_Signpost', -2.6, 7.2, { rot: 0.5, col: 0.3 });
   const tree = place('Prop_KernelTree', -9, -8.5, { rot: 0.6, s: 1, col: 1.3 });
   G.hubTree = tree;
-  G.interact.push({ x: -7.4, z: -6.8, r: 3.2, label: 'Kernel Tree: grow stronger for keeps', fn: () => openTree() });
+  G.interact.push({ x: -7.4, z: -6.8, r: 3.2, label: 'Kernel Tree · upgrades', fn: () => openTree() });
   for (let i = 0; i < 9; i++) { const a = i / 9 * TAU + 0.2; place(i % 3 === 1 ? 'Deco_Bush' : 'Deco_Flower', -9 + Math.cos(a) * 3.6, -8.5 + Math.sin(a) * 3.6, { s: 1.1, col: 0 }); }
   place('Prop_Cottage', 11, -8.5, { rot: -1.0, col: 2.2 });
   place('Prop_Cottage', 12.5, 2, { rot: -1.5, s: 0.85, col: 1.9 });
   place('Deco_Lamp', 7.6, -3.6, { col: 0.35 }); place('Deco_Flower', 8.8, -5.2, { s: 1.2, col: 0 }); place('Deco_Mushroom', 9.6, 5.2, { s: 1.1, col: 0 });
   place('Prop_Workbench', 5.4, -1, { rot: -Math.PI / 2, col: 1.0 });
-  G.interact.push({ x: 5.4, z: -1, r: 2.4, label: 'Workbench: chip tips', fn: () => openInfo('chips') });
+  G.interact.push({ x: 5.4, z: -1, r: 2.4, label: 'Chip tips', fn: () => openInfo('chips') });
   place('Prop_Shrine', -5.4, -1, { rot: Math.PI / 2, s: 0.9, col: 0.9 });
-  G.interact.push({ x: -5.4, z: -1, r: 2.4, label: 'Shrine: what\'s a Promise?', fn: () => openInfo('promises') });
+  G.interact.push({ x: -5.4, z: -1, r: 2.4, label: 'Promise tips', fn: () => openInfo('promises') });
   // practice yard: two plushies behind a short fence, south-east
   for (const [x, z] of [[8.5, 8.5], [11.5, 6]]) addDummy(x, z);
   for (const [x, z, r] of [[6.2, 10.5, 1.0], [7.2, 12.2, 1.6], [9.4, 13.0, 1.75]]) place('Deco_Fence', x, z, { rot: r, col: 0 });
@@ -4952,8 +5139,17 @@ function updateHud() {
   $('shards').textContent = fmt(SAVE.shards + (r ? r.shards : 0));
   if (r) { $('lvl').textContent = r.level; $('xpFill').style.width = (r.xp / xpNeed(r.level) * 100) + '%'; }
   $('lvlBox').style.visibility = r ? 'visible' : 'hidden';
-  const cd = (id, t, max) => { const el = $(id); el.style.setProperty('--cd', max > 0 ? clamp(t / max, 0, 1) : 0); el.classList.toggle('ready', t <= 0); };
-  cd('skNova', p.novaCd, st.novaCd); cd('skDash', p.dashCd, st.dashCd); cd('skBolt', p.sparkle < 8 && p.form <= 0 ? 1 : 0, 1);
+  // action bar: the dark sweep drains as a cooldown runs and its seconds show on top; Star Bolt says when Sparkle is too low,
+  // Form shows how full the star meter is (READY when it can be used)
+  const cd = (id, t, max, label) => {
+    const el = $(id); el.style.setProperty('--cd', max > 0 ? clamp(t / max, 0, 1) : 0); el.classList.toggle('ready', t <= 0);
+    const s = el.querySelector('.cdt'); if (s) { const txt = label != null ? label : t > 0.05 && max > 0.5 ? Math.ceil(t) + '' : ''; if (s.textContent !== txt) s.textContent = txt; }
+  };
+  const lowSp = p.sparkle < 8 && p.form <= 0;
+  cd('skNova', p.novaCd, st.novaCd); cd('skDash', p.dashCd, st.dashCd); cd('skBolt', lowSp ? 1 : 0, 1, '');
+  const bn = lowSp ? 'Recharging' : 'Star Bolt'; if ($('boltNm').textContent !== bn) $('boltNm').textContent = bn;
+  $('skBolt').classList.toggle('low', lowSp);
+  const fp = $('formPct'), ftxt = p.form > 0 ? 'Form ON' : p.meter >= 100 ? 'READY!' : 'Form ' + Math.floor(p.meter) + '%'; if (fp.textContent !== ftxt) fp.textContent = ftxt;
   // Treat Jars: count badge; the slot dims when none are left and pulses when hurt with a jar in hand
   $('treatCount').textContent = p.treats; cd('skTreat', p.treats <= 0 ? 1 : 0, 1);
   $('skTreat').classList.toggle('urge', p.treats > 0 && p.hp < p.maxHp * 0.4);
@@ -4967,7 +5163,19 @@ function updateHud() {
   const bag = r ? r.bag.length : 0;
   $('bagDot').textContent = bag; $('bagDot').style.display = bag ? '' : 'none';
   $('cross').style.display = G.state === 'play' && !TOUCH.on ? '' : 'none';
+  // (!! matters: classList.toggle(name, undefined) flips the class instead of turning it off)
+  $('lockHint').classList.toggle('on', !!(G.state === 'play' && mouse.everLocked && !mouse.locked && !mouse.noLock && !TOUCH.on));
 }
+// action bar tooltips: hover a slot (mouse) or touch-and-hold one (the bar's own slots, not the touch buttons)
+(() => {
+  const bar = $('skills'), tip = $('skTip'); let hold = null;
+  const show = sk => { if (!sk || !sk.dataset.tip) return; tip.textContent = sk.dataset.tip; tip.style.left = (sk.offsetLeft + sk.offsetWidth / 2) + 'px'; tip.classList.add('on'); };
+  const hide = () => { tip.classList.remove('on'); clearTimeout(hold); };
+  bar.addEventListener('pointerover', e => { if (e.pointerType === 'mouse') show(e.target.closest('.sk')); });
+  bar.addEventListener('pointerout', e => { if (e.pointerType === 'mouse' && !bar.contains(e.relatedTarget)) hide(); });
+  bar.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse') { const sk = e.target.closest('.sk'); hold = setTimeout(() => show(sk), 380); } });
+  addEventListener('pointerup', e => { if (e.pointerType !== 'mouse') setTimeout(hide, 900); });
+})();
 function nearestInteract() {
   const p = G.player; let best = null, bd = 1e9;
   for (const it of G.interact) { if (it.done) continue; const d = dist2(p.x, p.z, it.x, it.z); if (d < it.r * it.r && d < bd) { bd = d; best = it; } }
@@ -4985,6 +5193,7 @@ function openModal(html, cls = '', state = 'modal') {
   mouse.lockGesture = false;   // a lock request still in flight must not count as a real failure when this cancels it
   if (document.pointerLockElement) document.exitPointerLock();
   const m = $('modal'); m.className = 'on ' + cls; $('modalBox').innerHTML = html; unstrokeEmoji($('modalBox'));
+  $('skTip').classList.remove('on');
   keys.clear(); pressed.clear(); mouse.down = [false, false, false]; mouse.pressed = [false, false, false];
   // choice windows ignore clicks/keys for a moment, so attack-spamming can't pick a card by accident
   if (/\bpick\b/.test(cls)) { UI.armAt = performance.now() + PICK_ARM_MS; m.classList.add('arming'); setTimeout(() => m.classList.remove('arming'), PICK_ARM_MS); }
@@ -5019,7 +5228,7 @@ function rollCards(n = 3) {
 }
 function openCards() {
   const r = G.run, cards = rollCards(3);
-  const box = openModal(`<h2>⭐ Level ${r.level - r.pendingCards + 1}!</h2><p class="sub">Schiffy's heart grows! Pick a power-up.</p>
+  const box = openModal(`<h2>⭐ Level ${r.level - r.pendingCards + 1}!</h2><p class="sub">Pick a power-up</p>
     <div class="cards">${cards.map((c, i) => `<button class="card" data-k="${i}"><div class="ck">${i + 1}</div><div class="cn">${c.name}</div><div class="cd">${c.desc}</div></button>`).join('')}</div>`, 'pick lvl');
   const take = i => { r.cards.push(cards[i].id); const c = cards[i]; r.pendingCards--; const before = G.player.maxHp; computeStats(); if (c.heal) healPlayer(G.player.maxHp - before); SFX.level(); closeModal(); };
   bindButtons(box, Object.fromEntries(cards.map((c, i) => [i, () => take(i)])));
@@ -5037,14 +5246,14 @@ function renderBoard(first) {
   const chipEl = (id, extra = '') => { const c = CHIPS[id]; return `<div class="chip t${c.tier}" style="--c:${CHIP_COLORS[c.col]}" ${extra}>${'nesw'.split('').map(d => c.ports.includes(d) ? `<i class="port ${d}"></i>` : '').join('')}<div class="chn">${c.name}</div><div class="chd">${c.desc}</div></div>`; };
   const slots = r.board.map((id, i) => `<div class="slot ${boardSel != null ? 'target' : ''}" data-k="s${i}">${id ? chipEl(id) + (mul[i] > 1 ? `<div class="mul">x${mul[i]}</div>` : '') : '<span class="empty">free slot</span>'}</div>`).join('');
   const lines = links.map(l => { const ax = l.a % 3, ay = (l.a / 3) | 0, bx = l.b % 3, by = (l.b / 3) | 0; return `<div class="link ${l.same ? 'same' : ''} ${ax !== bx ? 'h' : 'v'}" style="left:${(ax + bx) / 2 * 33.33 + 16.66}%;top:${(ay + by) / 2 * 33.33 + 16.66}%"></div>`; }).join('');
-  const bag = r.bag.map((id, i) => `<div class="bagItem ${boardSel === i ? 'sel' : ''}" data-k="b${i}">${chipEl(id)}</div>`).join('') || '<p class="sub">Bag\'s empty! Clear isles to sniff out more chips.</p>';
+  const bag = r.bag.map((id, i) => `<div class="bagItem ${boardSel === i ? 'sel' : ''}" data-k="b${i}">${chipEl(id)}</div>`).join('') || '<p class="sub">Empty. Clear isles to find chips.</p>';
   const st = G.st;
-  const html = `<h2>🔷 Chip Board</h2><p class="sub">Pick a chip, then a slot. Touching ports link up for <b>x1.25</b>, or <b>x1.5</b> when the colours match!</p>
+  const html = `<h2>🔷 Chip Board</h2><p class="sub">Click a chip, then a slot. Touching ports link: <b>x1.25</b>, same colour <b>x1.5</b></p>
     <div class="boardWrap"><div class="board">${slots}${lines}</div>
     <div class="side"><h3>Chip Bag</h3><div class="bag">${bag}</div>
-    <h3>Keepsakes</h3><div class="relList">${r.relics.map(id => `<div><b>${RELICS[id].icon} ${RELICS[id].name}</b> ${RELICS[id].desc}</div>`).join('') || '<p class="sub">None yet. Treasure isles and elites drop them!</p>'}</div>
-    <h3>Schiffy's Stats</h3><div class="stats">❤️ HP ${st.hp} · 🐾 Damage x${st.dmg.toFixed(2)} · ⚡ Crit ${(st.crit * 100).toFixed(0)}% · 🛡️ Defence ${(st.def * 100).toFixed(0)}%</div></div></div>
-    <button class="btn" data-k="close">All Set! (Tab)</button>`;
+    <h3>Keepsakes</h3><div class="relList">${r.relics.map(id => `<div><b>${RELICS[id].icon} ${RELICS[id].name}</b> ${RELICS[id].desc}</div>`).join('') || '<p class="sub">None yet. Elites and chests drop them.</p>'}</div>
+    <h3>Schiffy's Stats</h3><div class="stats"><span>❤️ HP <b>${st.hp}</b></span><span>🐾 Damage <b>x${st.dmg.toFixed(2)}</b></span><span>⚡ Crit <b>${(st.crit * 100).toFixed(0)}%</b></span><span>🛡️ Defence <b>${(st.def * 100).toFixed(0)}%</b></span></div></div></div>
+    <button class="btn" data-k="close">Done <span class="kc">Tab</span></button>`;
   const box = first ? openModal(html, 'wide', 'board') : (($('modalBox').innerHTML = html), $('modalBox'));
   const map = { close: () => closeModal() };
   r.bag.forEach((id, i) => map['b' + i] = () => { boardSel = boardSel === i ? null : i; renderBoard(); });
@@ -5060,17 +5269,17 @@ function renderBoard(first) {
 // ---------- keepsake choice / promise / shop / tree / info ----------
 function openRelicChoice(n) {
   const opts = shuffle(freeRelics()).slice(0, n);
-  if (!opts.length) { gainCoins(150); return toast('🎀 Every Keepsake collected! Have <b>150 Kibble</b> instead.'); }
-  const box = openModal(`<h2>🎀 Pick a Keepsake!</h2><p class="sub">A lucky charm to carry for the rest of the run.</p><div class="cards">${opts.map((id, i) => `<button class="card relic" data-k="${i}"><div class="ck">${i + 1}</div><div class="ri">${RELICS[id].icon}</div><div class="cn">${RELICS[id].name}</div><div class="cd">${RELICS[id].desc}</div></button>`).join('')}</div>`, 'pick');
+  if (!opts.length) { gainCoins(150); return toast('🎀 All Keepsakes found: <b>+150 Kibble</b>'); }
+  const box = openModal(`<h2>🎀 Pick a Keepsake</h2><p class="sub">Yours for this run</p><div class="cards">${opts.map((id, i) => `<button class="card relic" data-k="${i}"><div class="ck">${i + 1}</div><div class="ri">${RELICS[id].icon}</div><div class="cn">${RELICS[id].name}</div><div class="cd">${RELICS[id].desc}</div></button>`).join('')}</div>`, 'pick');
   const take = i => { closeModal(); giveRelic(opts[i]); };
   bindButtons(box, Object.fromEntries(opts.map((id, i) => [i, () => take(i)])));
   UI.onKey = e => { const k = +e.key; if (k >= 1 && k <= opts.length) { take(k - 1); return true; } };
 }
 function openPromise(it) {
   const offers = it.offers || (it.offers = offerPromises());
-  const box = openModal(`<h2>💗 The Promise Shrine</h2><p class="sub">"Pinky-swear me something, little star... and I'll make it worth your while."</p>
-    <div class="cards">${offers.map((p, i) => `<button class="card promise" data-k="${i}"><div class="ck">${i + 1}</div><div class="cn">${p.name}</div><div class="cd"><b>The deal:</b> ${p.vow}</div><div class="cd rew"><b>Your prize:</b> ${p.reward}</div></button>`).join('')}</div>
-    <button class="btn ghost" data-k="no">No deal!</button>`, 'pick');
+  const box = openModal(`<h2>💗 Promise Shrine</h2><p class="sub">Make a vow, win a prize</p>
+    <div class="cards">${offers.map((p, i) => `<button class="card promise" data-k="${i}"><div class="ck">${i + 1}</div><div class="cn">${p.name}</div><div class="cd vow"><span class="lbl">Vow</span>${p.vow}</div><div class="cd rew"><span class="lbl">Prize</span>${p.reward}</div></button>`).join('')}</div>
+    <button class="btn ghost" data-k="no">No thanks</button>`, 'pick');
   const take = i => { it.done = true; closeModal(); acceptPromise(offers[i]); const h = G.room.shrine && part(G.room.shrine, 'Prop_Shrine_heart'); if (h) h.visible = false; burst(0, 2, -2, 20, { tex: 'heart', col: 0xff8fd0, size: 0.4, speed: 5, life: 1, add: true }); };
   bindButtons(box, Object.assign(Object.fromEntries(offers.map((p, i) => [i, () => take(i)])), { no: () => closeModal() }));
   UI.onKey = e => { const k = +e.key; if (k >= 1 && k <= offers.length) { take(k - 1); return true; } if (e.code === 'Escape') { closeModal(); return true; } };
@@ -5078,10 +5287,10 @@ function openPromise(it) {
 function openShop() {
   const r = G.run, p = G.player, stock = G.room.stock;
   const name = s => s.type === 'chip' ? `<span class="dot" style="background:${CHIP_COLORS[CHIPS[s.id].col]}"></span>${CHIPS[s.id].name} <small>T${CHIPS[s.id].tier}</small>` : s.type === 'relic' ? `${RELICS[s.id].icon} ${RELICS[s.id].name}` : s.type === 'treat' ? '🍯 Treat Jar' : s.type === 'card' ? '⭐ Star Chart' : '💗 Bun\'s Bandage';
-  const desc = s => s.type === 'chip' ? CHIPS[s.id].desc : s.type === 'relic' ? RELICS[s.id].desc : s.type === 'treat' ? 'One more jar of healing goodness (+1 Treat Jar)' : s.type === 'card' ? 'Read the stars: one bonus level-up' : 'Heal 40% of your max HP, right now';
-  const box = openModal(`<h2>🛍️ Bun's Shop</h2><p class="sub">"Ooh, a customer! Kibble only, sweetie." · Your pouch: <b>🦴 ${fmt(r.coins)}</b></p>
+  const desc = s => s.type === 'chip' ? CHIPS[s.id].desc : s.type === 'relic' ? RELICS[s.id].desc : s.type === 'treat' ? '+1 Treat Jar' : s.type === 'card' ? '+1 level-up' : 'Heal 40% HP now';
+  const box = openModal(`<h2>🛍️ Bun's Shop</h2><p class="sub">You have <b class="money">🦴 ${fmt(r.coins)}</b></p>
     <div class="shop">${stock.map((s, i) => `<div class="item ${s.sold ? 'sold' : ''}"><div><div class="cn">${name(s)}</div><div class="cd">${desc(s)}</div></div><button class="btn small" data-k="${i}" ${s.sold || r.coins < s.price ? 'disabled' : ''}>${s.sold ? 'Sold!' : '🦴 ' + s.price}</button></div>`).join('')}</div>
-    <button class="btn" data-k="close">Bye, Bun!</button>`, 'wide');
+    <button class="btn" data-k="close">Leave</button>`, 'wide');
   const map = { close: () => closeModal() };
   stock.forEach((s, i) => map[i] = () => {
     if (s.sold || r.coins < s.price) return;
@@ -5094,34 +5303,32 @@ function openShop() {
 }
 function openTree() {
   const rows = TREE.map(t => { const l = SAVE.tree[t.id] || 0, max = l >= t.max, c = t.cost(l); return `<div class="item"><div><div class="cn">${t.name} <small>${l}/${t.max}</small></div><div class="cd">${t.desc}</div></div><button class="btn small" data-k="${t.id}" ${max || SAVE.shards < c ? 'disabled' : ''}>${max ? 'Maxed!' : '💎 ' + c}</button></div>`; }).join('');
-  const box = openModal(`<h2>🌳 The Kernel Tree</h2><p class="sub">Feed it Heart Shards and it grows. So does Schiffy, forever! You have <b>💎 ${SAVE.shards}</b></p><div class="shop">${rows}</div><button class="btn" data-k="close">Back to the Isle</button>`, 'wide');
+  const box = openModal(`<h2>🌳 Kernel Tree</h2><p class="sub">Upgrades for every run · you have <b class="money">💎 ${SAVE.shards}</b></p><div class="shop">${rows}</div><button class="btn" data-k="close">Done</button>`, 'wide');
   const map = { close: () => closeModal() };
   for (const t of TREE) map[t.id] = () => { const l = SAVE.tree[t.id] || 0, c = t.cost(l); if (l >= t.max || SAVE.shards < c) return; SAVE.shards -= c; SAVE.tree[t.id] = l + 1; save(); SFX.level(); resetPlayerForRun(); openTree(); };
   bindButtons(box, map);
   UI.onKey = e => { if (e.code === 'Escape') { closeModal(); return true; } };
 }
+// Info windows (readability pass 2026-10-26: one idea per line, the numbers kept, flavour cut). Controls live in the guide
+// (72-guide.js, openGuide); INFO.controls is kept as a short pointer for anything that still opens it.
 const INFO = {
-  chips: `<h2>🔷 Chip Talk</h2><p>Chips are tiny magic circuits that turn up all over the isles. Slot them into Schiffy's <b>3×3 Chip Board</b> (<b>Tab</b>) and feel the power!</p><p>Each chip has <b>ports</b> on some of its sides. Park two chips side by side with their ports touching and they <b>link up</b>: both get <b>x1.25</b>. Match their colours for <b>x1.5</b>. Pretty snazzy, huh?</p>`,
-  promises: `<h2>💗 About Promises</h2><p>Out on the isles, Promise Shrines love a deal. Make a vow, like "don't get hit on the next isle" or "enemies get tougher for a while", and the shrine pays you for it.</p><p>Keep a challenge vow to win its prize. Curses fade after a few isles. A brave pup reads the fine print!</p>`,
-  controls: `<h2>🎮 Controls</h2><div class="ctl"><b>WASD</b> run · <b>Mouse</b> look · <b>Wheel</b> zoom<br><b>Left click</b> paw combo<br><b>Hold left click</b> until the star glows gold, let go: <strong>Star Smash</strong><br><b>Left click in mid-air</b> two <strong>Air Swipes</strong>, then the Star Slam<br><b>Left click while dashing</b> <strong>Dash Lunge</strong><br><b>Right click</b> Star Bolt (hold to keep firing) · <b>Q</b> Heart Nova<br><b>Space</b> jump, then jump again in mid-air<br><b>Shift</b> dash (dash backwards for a barrel roll)<br><b>F</b> Starheart Form, once the star meter is full<br><b>R</b> munch a Treat Jar to heal · <b>E</b> use / talk<br><b>Tab</b> Chip Board · <b>Esc</b> pause</div><p class="sub" style="margin-top:10px">New moves unlock as you go deeper. Keep an eye out!</p>`,
-  goal: `<h2>🗺️ The Quest</h2><p><b>Nocturne, the Lullaby Moth Queen</b>, sang every sky isle to sleep, and her lullaby is floating toward Heartwood Isle. Only one pup is still wide awake. Hi, Schiffy!</p>
-<p><b>1.</b> Jump through the portal and hop across the <b>8 isles of Lullaby Meadows</b>. Every portal shows what's waiting next: a brawl, an elite, a treasure chest, a Promise Shrine or Bun's Shop.</p>
-<p><b>2.</b> Bonk Nocturne out of her song on isle 8, then cross the <b>8 isles of Sundae Dunes</b> to face <b>Sultana, the Sundae Sphinx</b>.</p>
-<p><b>3.</b> Climb past her temple into the <b>8 isles of the Starlight Observatory</b>, where <b>Chronowl, the Starlight Clockkeeper</b>, keeps the night wound up. Stop his clock and the whole sky wakes up!</p>
-<p><b>4.</b> Along the way, slot <b>Chips</b> into your Chip Board (<b>Tab</b>), grab <b>Keepsakes</b> and level up. If Schiffy needs a nap, your <b>Heart Shards 💎</b> come home with you: spend them at the Kernel Tree and go again, stronger!</p>`,
+  chips: `<h2>🔷 Chips</h2><ul class="steps"><li>Slot chips into your <b>3×3 Chip Board</b> <span class="kc">Tab</span></li><li>Touching <b>ports</b> link both chips: <b>x1.25</b></li><li>Same colour: <b>x1.5</b></li></ul>`,
+  promises: `<h2>💗 Promises</h2><ul class="steps"><li>A shrine offers a <b>vow</b> and a <b>prize</b></li><li>Challenge vows pay when you keep them</li><li>Curse vows pay now and fade after a few isles</li></ul>`,
+  controls: `<h2>🎮 Controls</h2><p class="sub">Press <span class="kc">H</span> any time for the full guide.</p>`,
+  goal: `<h2>🗺️ The Quest</h2><ul class="steps"><li>🌙 Cross <b>Lullaby Meadows</b> and beat <b>Nocturne</b></li><li>🍨 Cross <b>Sundae Dunes</b> and beat <b>Sultana</b></li><li>🔭 Climb the <b>Starlight Observatory</b> and beat <b>Chronowl</b></li><li>💎 <b>Heart Shards</b> come home: spend them at the Kernel Tree</li></ul>`,
 };
-INFO.welcome = INFO.goal + INFO.controls;
-function openInfo(k) { const box = openModal(INFO[k] + `<button class="btn" data-k="close">${k === 'welcome' ? 'Let\'s Go!' : 'Got It!'}</button>`, 'info'); bindButtons(box, { close: () => closeModal() }); UI.onKey = e => { if (e.code === 'Escape' || e.code === 'KeyE') { closeModal(); return true; } }; }
+INFO.welcome = INFO.goal;
+function openInfo(k) { const box = openModal(INFO[k] + (k === 'goal' ? `<button class="btn ghost" data-k="guide">🎮 Controls</button>` : '') + `<button class="btn" data-k="close">Got it</button>`, 'info'); bindButtons(box, { close: () => closeModal(), guide: () => { G.state = 'play'; openGuide('bar'); } }); UI.onKey = e => { if (e.code === 'Escape' || e.code === 'KeyE') { closeModal(); return true; } }; }
 function openPause() {
   if (G.state !== 'play') return;
-  const box = openModal(`<h2>⏸ Paws-ed</h2><p class="sub">Take a breather. The fluff will wait.</p>
+  const box = openModal(`<h2>⏸ Paused</h2>
     <div class="opts"><label>Mouse sensitivity <input type="range" min="0.3" max="2.5" step="0.1" value="${SAVE.sens}" data-o="sens"></label>
     <label>Screen shake <input type="range" min="0" max="1" step="0.25" value="${SAVE.shake}" data-o="shake"></label>
-    <label><input type="checkbox" ${SAVE.mute ? 'checked' : ''} data-o="mute"> Mute sound</label></div>
-    <button class="btn" data-k="resume">Back to It!</button> <button class="btn ghost" data-k="controls">Controls</button>
+    <label class="chk"><input type="checkbox" ${SAVE.mute ? 'checked' : ''} data-o="mute"> Mute sound</label></div>
+    <button class="btn" data-k="resume">Resume</button> <button class="btn ghost" data-k="controls">Controls</button>
     ${G.run ? '<button class="btn ghost" data-k="board">Chip Board</button> <button class="btn danger" data-k="quit">Head Home</button>' : ''}`, 'info', 'pause');
   box.querySelectorAll('[data-o]').forEach(i => i.addEventListener('input', () => { SAVE[i.dataset.o] = i.type === 'checkbox' ? i.checked : +i.value; save(); }));
-  bindButtons(box, { resume: () => closeModal(), controls: () => openInfoFrom('controls'), board: () => { G.state = 'play'; openBoard(); }, quit: () => { closeModal(); bankShards(); showEnd(false, true); } });
+  bindButtons(box, { resume: () => closeModal(), controls: () => { G.state = 'play'; openGuide('pause'); }, board: () => { G.state = 'play'; openBoard(); }, quit: () => { closeModal(); bankShards(); showEnd(false, true); } });
   UI.onKey = e => { if (e.code === 'Escape' || e.code === 'KeyP') { closeModal(); return true; } };
 }
 function openInfoFrom(k) { G.state = 'play'; openInfo(k); }
@@ -5131,8 +5338,8 @@ function showEnd(won, quit) {
   if (document.pointerLockElement) document.exitPointerLock();
   const m = $('modal'); m.className = 'on end ' + (won ? 'won' : 'lost');
   $('modalBox').innerHTML = `<h1>${won ? '⭐ Sky Saved! ⭐' : quit ? '🏡 Home Sweet Home' : '💤 Nap Time...'}</h1>
-    <p class="sub">${won ? 'Nocturne is snoozing, Sultana is sharing her sundaes, Chronowl is fixing his clocks and every isle is wide awake. Who\'s a good pup? <b>You are!</b>' : quit ? 'Every adventure helps. Your Heart Shards came home with you!' : 'Even heroes need a snooze. Your Heart Shards are safe: feed them to the Kernel Tree and go again!'}</p>
-    <div class="endStats"><div><b>${r.depth}</b>Isles</div><div><b>${r.kills}</b>Bonked</div><div><b>${r.level}</b>Level</div><div><b>${mins}:${String(secs).padStart(2, '0')}</b>Time</div><div><b>💎 ${r.shards}</b>Heart Shards</div></div>
+    <p class="sub">${won ? 'Every isle is awake again. Good pup!' : quit ? 'Your Heart Shards came home with you.' : 'Your Heart Shards are safe. Spend them at the Kernel Tree.'}</p>
+    <div class="endStats"><div><b>${r.depth}</b>Isles</div><div><b>${r.kills}</b>Foes</div><div><b>${r.level}</b>Level</div><div><b>${mins}:${String(secs).padStart(2, '0')}</b>Time</div><div><b>💎 ${r.shards}</b>Heart Shards</div></div>
     <button class="btn big" data-k="home">${won ? '🎉 Victory Lap Home' : '🐾 Back to Heartwood'}</button>`;
   unstrokeEmoji($('modalBox'));
   bindButtons($('modalBox'), { home: () => { $('modal').className = ''; G.state = 'play'; fadeTo(() => enterHub()); } });
@@ -5151,6 +5358,51 @@ function bossIntro(kind) {
     return true;
   });
 }
+// ---------- controls guide (2026-10-26, like Sky Patrol's 81-controls) ----------
+// One card, key by key, in four short groups, with a Mouse / Touch tab. Opens by itself on the first hub visit (with the
+// three-line quest on top) and once at the start of the first run; afterwards from the pause menu, the H key and the
+// Guide slot on the action bar. "Don't show this again" (SAVE.seen.guideOff) stops only the automatic openings.
+const GUIDE = {
+  mouse: [
+    ['Move', [['WASD', 'Run'], ['Mouse', 'Look around'], ['Space', 'Jump · again in the air'], ['Shift', 'Dash · backwards = roll'], ['Wheel', 'Zoom']]],
+    ['Fight', [['Click', 'Paw combo'], ['Hold click', 'Star Smash · let go at gold'], ['Click in air', 'Air combo, then slam'], ['Click in dash', 'Dash Lunge'], ['Right click', 'Star Bolt · uses Sparkle'], ['Q', 'Heart Nova · uses Sparkle']]],
+    ['Powers', [['F', 'Starheart Form · star meter full'], ['R', 'Treat Jar · heal']]],
+    ['Isle', [['E', 'Use · talk'], ['Tab', 'Chip Board'], ['H', 'This guide'], ['Esc', 'Pause']]],
+  ],
+  touch: [
+    ['Move', [['Left side', 'Drag to run'], ['Right side', 'Drag to look'], ['⤒', 'Jump · again in the air'], ['💨', 'Dash']]],
+    ['Fight', [['🐾', 'Paw combo · hold for Star Smash'], ['⭐', 'Star Bolt · uses Sparkle'], ['💗', 'Heart Nova · uses Sparkle']]],
+    ['Powers', [['🌟', 'Starheart Form · star meter full'], ['🍯', 'Treat Jar · heal']]],
+    ['Isle', [['E', 'Use · talk'], ['☰', 'Chip Board'], ['⏸', 'Pause']]],
+  ],
+};
+let guideTab = null;
+function guideHTML(tab, quest) {
+  // two columns of about the same height: Move + Powers | Fight + Isle
+  const grp = ([name, rows], n) => `<section class="gGroup" style="order:${n}"><h3>${name}</h3>${rows.map(([k, what]) => `<div class="gRow"><span class="kc">${k}</span><span>${what}</span></div>`).join('')}</section>`;
+  const [mv, ft, pw, il] = GUIDE[tab], groups = `<div class="gCol">${grp(mv, 1)}${grp(pw, 3)}</div><div class="gCol">${grp(ft, 2)}${grp(il, 4)}</div>`;
+  return `<h2>🎮 Controls</h2>${quest ? `<p class="gQuest">Wake the sky: beat <b>Nocturne</b>, <b>Sultana</b> and <b>Chronowl</b> across 24 isles.</p>` : ''}
+    <div class="gTabs"><button class="gTab ${tab === 'mouse' ? 'on' : ''}" data-k="tMouse">⌨️ Keyboard</button><button class="gTab ${tab === 'touch' ? 'on' : ''}" data-k="tTouch">📱 Touch</button></div>
+    <div class="gGrid">${groups}</div>
+    <p class="gFoot">More moves unlock as you go deeper.</p>
+    <div class="gEnd"><label class="gOff"><input type="checkbox" data-o="guideOff" ${SAVE.seen.guideOff ? 'checked' : ''}> Don't show this again</label><button class="btn" data-k="close">Got it</button></div>`;
+}
+// from: 'welcome' (first hub visit: quest line on top), 'run' (first run), 'pause', 'key', 'bar'
+function openGuide(from = 'key') {
+  if (G.state !== 'play' && from !== 'welcome') return;
+  const tab = guideTab || (TOUCH.on ? 'touch' : 'mouse'), quest = from === 'welcome';
+  const box = openModal(guideHTML(tab, quest), 'info guide');
+  const close = () => closeModal();
+  bindButtons(box, { close, tMouse: () => { guideTab = 'mouse'; G.state = 'play'; openGuide(from); }, tTouch: () => { guideTab = 'touch'; G.state = 'play'; openGuide(from); } });
+  const off = box.querySelector('[data-o="guideOff"]'); if (off) off.addEventListener('change', () => { SAVE.seen.guideOff = off.checked ? 1 : 0; save(); });
+  UI.onKey = e => { if (e.code === 'Escape' || e.code === 'KeyH' || e.code === 'Enter' || e.code === 'Space') { close(); return true; } };
+}
+// once, the first time a run starts (after the welcome card on the first hub visit)
+function guideRunStart() {
+  if (SAVE.seen.guideRun || SAVE.seen.guideOff) return;
+  SAVE.seen.guideRun = 1; save();
+  after(1.6, () => { if (G.state === 'play' && G.run) openGuide('run'); });
+}
 // ---------- boot + main loop ----------
 function update(dt) {
   guard('timers', () => tickTimers(dt));
@@ -5168,6 +5420,7 @@ function update(dt) {
   guard('stars', () => updateStars(dt));
   guard('interact', () => updateInteract());
   if (tapped('board') && G.run) openBoard();
+  if (tapped('guide')) openGuide('key');
   if (tapped('pause') && (TOUCH.on || !mouse.locked)) openPause();
   maybeCards();
 }
@@ -5222,11 +5475,12 @@ function startGame() {
   G.state = 'play';
   banner('Heartwood Isle', hubGreeting());
   // the Play click is a user gesture, so the lock can be taken now, unless the welcome window opens first
-  if (!SAVE.seen.controls) { SAVE.seen.controls = 1; save(); openInfo('welcome'); }
+  if (!SAVE.seen.controls) { SAVE.seen.controls = 1; save(); openGuide('welcome'); }
   else lockMouse(true);
 }
 $('playBtn').addEventListener('click', startGame);
 $('skBoard').addEventListener('click', () => { if (G.state === 'play') openBoard(); });
+$('skGuide').addEventListener('click', () => { if (G.state === 'play') openGuide('bar'); });
 $('skTreat').addEventListener('click', () => { if (G.state === 'play') useTreat(); });
 boot();
 // platform hook (same pattern as Sky Patrol): lets a host page read state
