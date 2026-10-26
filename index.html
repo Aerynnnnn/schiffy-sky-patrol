@@ -1402,7 +1402,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 <script src="https://cdn.jsdelivr.net/npm/meshoptimizer@0.20.0/meshopt_decoder.js"></script>
 <script>
 (() => {
-const BUILD_ID = '638c920b1c';
+const BUILD_ID = '06c11e9489';
 // ---------- Schiffy save bridge (shared by Sky Patrol and Skyheart; pasted into both builds, edit only here) ----------
 // Gold earned in Skyheart travels to Sky Patrol's playground savings through one ledger key. Rules (SKYHEART.md):
 // - Skyheart first puts each deposit in its OWN save (an outbox, written together with the run's Heart Shards), then
@@ -23788,24 +23788,26 @@ function skyTick(dt) {
   }
   skyHum(dt);
 }
-// the gate's song: a soft shimmering fifth that swells as Schiffy walks up, a twinkle now and then (no samples). Off when
-// muted, on a hidden tab, away from the hub, or while the gate sleeps.
+// the gate's song: a low, warm A-major pad (each note two slightly detuned sines, under a soft low-pass) that slowly breathes
+// and swells as Schiffy walks up, with a soft wind-chime note now and then (no samples). Off when muted, on a hidden tab,
+// away from the hub, or while the gate sleeps.
+// (2026-10-26, user: "too loud and annoying". The old one was a bright E-B-E fifth with a twinkle every 1-2 s, and its
+// tremolo LFO was wired straight onto the output gain: it swung that gain +-0.3 around a 0.022 target, ~14x too loud, and
+// kept sounding after Schiffy walked away. The breathing now multiplies on its own gain node and never makes it louder.)
+// peak output gain right at the gate (the pad's partials sum to ~1). Measured at the gate's front steps through a silent
+// AudioContext: old -22 dB RMS (peaks -10), this one about -46 dB, ~10 dB under the hub music (MUS_VOL: ~-36 dB)
+// No drone any more (2026-10-26, the user, after the softer pad above: "still really loud ... or just remove it"): the gate
+// only rings a soft chime now and then while Schiffy stands close (rarer and quieter than the old twinkles). skyHum keeps
+// its name and call site; SKY.hum stays null.
+const SKY_CHIME = [440, 554.37, 659.25, 880];   // A4 C#5 E5 A5
+const SKY_CHIME_VOL = 0.007, SKY_CHIME_GAP = [7, 13];   // peak gain at the gate's steps; seconds between chimes
 function skyHum(dt) {
-  const want = SKY.on && SKY.page !== false && actx && !muted && !document.hidden && G.mode === 'hub' ? SKY.near * SKY.near : 0;
-  if (!SKY.hum && want > 0.01) {
-    try {
-      const out = actx.createGain(), lp = actx.createBiquadFilter(), lfo = actx.createOscillator(), lg = actx.createGain();
-      out.gain.value = 0; lp.type = 'lowpass'; lp.frequency.value = 1800; lp.connect(out); out.connect(bus());
-      const oscs = [329.63, 493.88, 659.25].map((f, i) => { const o = actx.createOscillator(), g = actx.createGain(); o.type = i === 2 ? 'triangle' : 'sine'; o.frequency.value = f; o.detune.value = (i - 1) * 6; g.gain.value = [0.5, 0.35, 0.12][i]; o.connect(g); g.connect(lp); o.start(); return o; });
-      lfo.frequency.value = 0.35; lg.gain.value = 0.3; lfo.connect(lg); lg.connect(out.gain); lfo.start();
-      SKY.hum = { out, oscs: [...oscs, lfo], tw: 1.5 };
-    } catch (e) { SKY.hum = null; }
-  }
-  const H = SKY.hum; if (!H) return;
-  const v = want * 0.022 + (SKY.cine ? 0.02 : 0);
-  H.out.gain.setTargetAtTime(v, actx.currentTime, 0.25);
-  if (want > 0.2 && !SKY.cine && (H.tw -= dt) <= 0) { H.tw = skyRand(0.8, 2.2); const n = [659.25, 783.99, 880, 987.77, 1174.66][Math.floor(skyRand(0, 5))]; if (!muted) tone('sine', n, n * 1.002, 0.5, 0.014 * want); }
-  if (want <= 0.001 && !SKY.cine && H.out.gain.value < 0.0005) { for (const o of H.oscs) try { o.stop(); } catch (e) {} H.out.disconnect(); SKY.hum = null; }
+  const want = SKY.on && SKY.page !== false && actx && !muted && !document.hidden && G.mode === 'hub' && !SKY.cine ? SKY.near * SKY.near : 0;
+  if (want <= 0.4) { SKY.chimeT = Math.max(SKY.chimeT || 0, 2); return; }
+  if ((SKY.chimeT = (SKY.chimeT ?? 2) - dt) > 0) return;
+  SKY.chimeT = skyRand(SKY_CHIME_GAP[0], SKY_CHIME_GAP[1]);
+  const n = SKY_CHIME[Math.floor(skyRand(0, SKY_CHIME.length))];
+  tone('sine', n, n, 1.4, SKY_CHIME_VOL * want);
 }
 
 // ---------- the trip: walk in, star wipe, page change ----------
