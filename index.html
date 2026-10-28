@@ -1419,7 +1419,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 <script src="https://cdn.jsdelivr.net/npm/meshoptimizer@0.20.0/meshopt_decoder.js"></script>
 <script>
 (() => {
-const BUILD_ID = '54a627f6aa';
+const BUILD_ID = '5e9bf0e47d';
 // ---------- Schiffy save bridge (shared by Sky Patrol and Skyheart; pasted into both builds, edit only here) ----------
 // Gold earned in Skyheart travels to Sky Patrol's playground savings through one ledger key. Rules (SKYHEART.md):
 // - Skyheart first puts each deposit in its OWN save (an outbox, written together with the run's Heart Shards), then
@@ -6662,15 +6662,20 @@ function updatePlayer(dt) {
   let mx = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
   let mz = (keys.has('KeyS') ? 1 : 0) - (keys.has('KeyW') ? 1 : 0);
   if (TOUCH.on) { mx += TOUCH.mx; mz += TOUCH.mz; }   // analog left stick (85-touch)
+  // third person on the playground (88-play3p): the input turns with the camera
+  [mx, mz] = p3Move(p, mx, mz);
   const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
   const jumpHeld = keys.has('Space'), jumpP = pressed('Space');
   const dashP = pressed('ShiftLeft') || pressed('ShiftRight');
   const inHub = G.mode === 'hub';
 
   let firing = false;
+  // third person on the playground (88-play3p): Schiffy faces his walk and fires where the camera looks; null = classic aim
+  const p3 = p3Aim(p, mx, mz);
   const ax = (keys.has('ArrowRight') ? 1 : 0) - (keys.has('ArrowLeft') ? 1 : 0), az = (keys.has('ArrowDown') ? 1 : 0) - (keys.has('ArrowUp') ? 1 : 0);
-  const ta = TOUCH.on ? touchAim(p) : null;   // right stick: aims and fires while held
-  if (ta) { p.aimX = ta[0]; p.aimZ = ta[1]; firing = true; }
+  const ta = !p3 && TOUCH.on ? touchAim(p) : null;   // right stick: aims and fires while held
+  if (p3) firing = p3.fire;
+  else if (ta) { p.aimX = ta[0]; p.aimZ = ta[1]; firing = true; }
   else if (ax || az) { const l = Math.hypot(ax, az); p.aimX = ax / l; p.aimZ = az / l; firing = true; }
   else if (mouse.active && !TOUCH.on) {
     const h = mouseGround(p.y + 1.0);
@@ -17613,6 +17618,22 @@ const HOME_DECOR_MOVES = new Set(['cos.decor.banners', 'cos.decor.bunting', 'cos
 const homeAnim = sku => { const h = HOME_CAT_BY[sku]; return !h ? null : h.decor ? (HOME_DECOR_MOVES.has(sku) ? HOME_DECOR_ANIM : null) : HOME_ANIM['home.' + h.model]; };
 // the home isle's trees, bushes, rocks and flowers, from the layout (G.homeLayout, which the boutique structures read too).
 // Called by refreshDecor (84-shop), so buying, showing or hiding a structure and every edit rebuild them together.
+// the playground's daisy (heart = the gold middle): a puffy scalloped disc, about the old flower's size, cached for every rebuild
+function homeDaisyGeo(heart) {
+  const k = heart ? 'homeDaisyHeart' : 'homeDaisy';
+  if (!homeDaisyGeo[k]) {
+    let g;
+    if (heart) { g = new THREE.SphereGeometry(0.05, 10, 6); g.scale(1, 0.55, 1); g.translate(0, 0.075, 0); }
+    else {
+      const s = new THREE.Shape();
+      for (let i = 0; i < 35; i++) { const a = i / 35 * Math.PI * 2, r = 0.085 + 0.05 * Math.pow(Math.abs(Math.cos(a * 2.5)), 0.7); s[i ? 'lineTo' : 'moveTo'](Math.cos(a) * r, Math.sin(a) * r); }
+      g = new THREE.ExtrudeGeometry(s, { depth: 0.02, bevelEnabled: true, bevelThickness: 0.018, bevelSize: 0.012, bevelSegments: 1, curveSegments: 1 });
+      g.rotateX(-Math.PI / 2); g.translate(0, 0.03, 0); g.computeVertexNormals();
+    }
+    SHARED.add(g); homeDaisyGeo[k] = g;
+  }
+  return homeDaisyGeo[k];
+}
 function refreshHomeProps() {
   const room = G.room; if (!room || !room.hub || !G.roomGroup) return;
   if (G.homeProps) removeObj(G.homeProps);
@@ -17632,7 +17653,10 @@ function refreshHomeProps() {
     if (it.id === 'lookout') { homeColliders(it, room, 'homeProp'); lookoutPlaced(it, room); }
     else G.padMeshes.push({ m: o, x: HOME.x + it.dx, z: HOME.z + it.dz, t: 0, home: true });   // the pad has no collider: you step onto it
   }
-  const fc = th.flowers.map(c => new THREE.Color(c)), flowers = new THREE.InstancedMesh(new THREE.SphereGeometry(0.13, 8, 6), (() => { const m = toonU(0xffffff); m.emissive.setHex(0xffffff); m.emissiveIntensity = 0.3; return m; })(), 110);
+  // little five-petal daisies with a gold heart (2026-10-29, third-person pilot: the squashed spheres read as flat pucks
+  // from the low camera); same spots, same colours
+  const fc = th.flowers.map(c => new THREE.Color(c)), flowers = new THREE.InstancedMesh(homeDaisyGeo(), (() => { const m = toonU(0xffffff); m.emissive.setHex(0xffffff); m.emissiveIntensity = 0.3; return m; })(), 110);
+  const hearts = new THREE.InstancedMesh(homeDaisyGeo(true), toonU(0xffcf4a), 110);
   // the flowers come from a fixed seed (2026-10-18): every edit rebuilds the isle, and with Math.random they all jumped to new
   // spots after each drag or turn. Now the same candidate spots come back every time; only those under something are skipped.
   let fn = 0, fs = 20261018;
@@ -17641,10 +17665,10 @@ function refreshHomeProps() {
     const dx = frand(-HOME.hx + 0.6, HOME.hx - 0.6), dz = frand(-HOME.hz + 0.6, HOME.hz - 0.6), fcol = fc[Math.floor(frand(0, fc.length))];
     if ((dx < -6 && Math.abs(dz) < 2) || HOME_KEEP.some(k => Math.abs(dx - k.x) < k.hx + 0.3 && Math.abs(dz - k.z) < k.hz + 0.3)
       || on.some(i => i.box && i.box.some(q => q.y0 < 0.6 && dx > q.x0 - 0.3 && dx < q.x1 + 0.3 && dz > q.z0 - 0.3 && dz < q.z1 + 0.3))) continue;   // off the bridge path, the keep-clear spots and whatever stands on the grass
-    dm.position.set(HOME.x + dx, 0.12, HOME.z + dz); dm.scale.set(1, 0.55, 1); dm.updateMatrix(); flowers.setMatrixAt(fn, dm.matrix); flowers.setColorAt(fn++, fcol);
+    dm.position.set(HOME.x + dx, 0.02, HOME.z + dz); dm.rotation.y = fn * 2.399; dm.updateMatrix(); flowers.setMatrixAt(fn, dm.matrix); hearts.setMatrixAt(fn, dm.matrix); flowers.setColorAt(fn++, fcol);
   }
-  flowers.count = fn; grp.add(flowers);
-  shadows(grp, true, false); flowers.castShadow = false;
+  flowers.count = hearts.count = fn; grp.add(flowers, hearts);
+  shadows(grp, true, false); flowers.castShadow = hearts.castShadow = false;
   G.roomGroup.add(grp); G.homeProps = grp;
 }
 
@@ -22960,6 +22984,451 @@ endHomeEdit = after(endHomeEdit, () => {
   HPET.pets.visible = true; hpetEndChase();
   for (const pt of HPET.list) { hpetFree(pt); if (pt.st === 'follow') hpetIdle(pt); pt.mesh.position.set(pt.x, pt.mesh.position.y, pt.z); }
 });
+// ---------- third person on Schiffy's Playground (pilot, 2026-10-29, branch playground-3p) ----------
+// On the playground the camera can drop behind Schiffy like Schiffy Skyheart's chase camera: drag (mouse or the right half of
+// a phone screen) to orbit, the arrow keys too, the wheel pulls it in or out. WASD / the move stick turn with the camera and
+// Schiffy faces where he walks. Placed items between the camera and Schiffy fade to a ghost; a big build right behind the
+// camera pulls it in instead of letting it clip through. Walking, jumping and landing on items is the hub's own collision
+// (hubGround / hubOverlap read every item's boxes), so nothing changes there.
+// Build (B): a ghost of a stored item stands in front of Schiffy where the camera looks, snapped to half units like the
+// editor; Q / E turn it, Z / C pick another, F (or a click) places it, X picks up the item in front to move it, T opens
+// the classic top-down editor. V (or the button) switches between this view and the classic one; the choice is saved
+// (SAVE.view3p, unset = third person). Everything else (hub lawn, isles, runs) keeps the classic camera.
+// Hooks are wrappers at load (updateCamera, updateInteract) plus p3Move / p3Aim called from updatePlayer (30-player).
+const P3 = {
+  in: false, k: 0, yaw: 0, pitch: 0.36, dist: 6.4, cd: 6.4, x: 0, y: 0, z: 0, fov: 0,
+  drag: null, tl: null, carry: false, moveYaw: 0, occ: [], occSrc: null, build: null, el: null,
+  cam: new THREE.PerspectiveCamera(), pos: new THREE.Vector3(), q: new THREE.Quaternion(),
+};
+const P3_FOV = 55, P3_PITCH = [-0.12, 1.15], P3_GHOST = 0.25, P3_SHOULDER = 0.45, P3_REACH = 2.2;
+const p3Damp = (a, b, k, dt) => a + (b - a) * (1 - Math.exp(-k * dt));
+const p3Want = () => SAVE.view3p !== false;
+const p3Guest = () => typeof COOP !== 'undefined' && !!COOP.visit;
+// on the playground (m > 0 = with a margin round it; hysteresis so the bridge end doesn't flicker)
+const p3OnIsle = (p, m) => Math.abs(p.x - HOME.x) < HOME.hx + m && Math.abs(p.z - HOME.z) < HOME.hz + m;
+// third person drives the controls (not just the blend): on the playground, wanted, playing, and not in the editor / telescope
+const p3Live = () => P3.k > 0.5 && G.mode === 'hub' && G.state !== 'homeEdit' && !G.scope;
+const p3Fwd = () => [-Math.sin(P3.yaw), -Math.cos(P3.yaw)];
+
+// ---- movement and facing (called from updatePlayer) ----
+// The input turns with the camera. A switch of view while a key is held keeps the old mapping until the keys are let go,
+// so walking off the isle onto the bridge doesn't swing Schiffy round mid-stride.
+function p3Move(p, mx, mz) {
+  if (G.mode !== 'hub' || p !== G.player) return [mx, mz];
+  const live = p3Live(), want = live ? P3.yaw : 0, idle = Math.hypot(mx, mz) < 0.05;
+  if (idle) P3.carry = false;
+  else if (!P3.carry && P3.liveWas !== undefined && P3.liveWas !== live) P3.carry = true;
+  P3.liveWas = live;
+  if (!P3.carry) P3.moveYaw = want;
+  const c = Math.cos(P3.moveYaw), s = Math.sin(P3.moveYaw);
+  // right = (cos, -sin), forward = (-sin, -cos): input x along right, input z (S = +1) against forward
+  return [mx * c + mz * s, -mx * s + mz * c];
+}
+// null = classic aiming; else Schiffy faces his walk, and a held weapon fires where the camera looks
+function p3Aim(p, mx, mz) {
+  if (!p3Live() || p !== G.player) return null;
+  const l = Math.hypot(mx, mz);
+  if (l > 0.1) { p.aimX = mx / l; p.aimZ = mz / l; }
+  // a test weapon from the range: the mouse button fires (a drag only looks), and on phones holding the look stick fires too
+  const fire = !!G.weapon && !P3.build && ((mouse.down && !(P3.drag && P3.drag.moved)) || (TOUCH.on && !!TOUCH.aim));
+  if (fire) { const [fx, fz] = p3Fwd(); p.aimX = fx; p.aimZ = fz; }
+  return { fire };
+}
+
+// ---- camera ----
+const _p3UpdateCamera = updateCamera;
+updateCamera = function (dt, rdt = dt) {
+  _p3UpdateCamera.call(this, dt, rdt);   // the classic pose (fog, shake, sun) every frame, so leaving glides back to it
+  try { p3Camera(rdt); } catch (err) { console.error('[p3] camera', err); }
+};
+function p3Camera(dt) {
+  const p = G.player;
+  const hub = G.mode === 'hub' && G.room && G.room.hub && p;
+  if (hub) P3.in = p3OnIsle(p, P3.in ? 1.2 : -0.3);
+  const target = hub && P3.in && p3Want() && !G.scope && G.state !== 'homeEdit' ? 1 : 0;
+  if (G.state === 'homeEdit' || G.scope || !hub) P3.k = 0;   // the editor and the telescope frame the camera themselves
+  const was = P3.k;
+  P3.k = Math.abs(target - P3.k) < 0.002 ? target : p3Damp(P3.k, target, 4.5, dt);
+  if (was === 0 && P3.k > 0) p3Enter(p);
+  p3Hud();
+  if (P3.k <= 0) { if (P3.fov) p3Fov(0); p3Occlude(null); p3Labels(false); if (P3.build) p3BuildEnd(); return; }
+  p3Look(dt);
+  // pivot: Schiffy's shoulders, followed tightly sideways and softly up and down (jumps don't bob the view)
+  P3.x = p3Damp(P3.x, p.x, 16, dt); P3.z = p3Damp(P3.z, p.z, 16, dt); P3.y = p3Damp(P3.y, p.y + 1.25, 7, dt);
+  // building lifts the camera a little higher and further back, so the ghost in front reads over Schiffy's head
+  P3.bk = p3Damp(P3.bk || 0, P3.build ? 1 : 0, 5, dt);
+  const pitch = Math.min(P3.pitch + 0.32 * P3.bk, 1.3);
+  const cp = Math.cos(pitch), sp = Math.sin(pitch), rx = Math.cos(P3.yaw), rz = -Math.sin(P3.yaw);
+  const px = P3.x + rx * P3_SHOULDER, pz = P3.z + rz * P3_SHOULDER, py = P3.y;
+  const dx = Math.sin(P3.yaw) * cp, dy = sp, dz = Math.cos(P3.yaw) * cp, want = (P3.dist + 1.6 * P3.bk) * G.zoom;
+  // don't clip into builds: a big item in the camera's half of the line pulls the camera in front of it (the near half is
+  // left to the ghost fade, or the camera would end up nose to nose with Schiffy); eased back out, snapped in
+  const d = p3Ray(px, py, pz, dx, dy, dz, want);
+  P3.cd = d < P3.cd ? d : p3Damp(P3.cd, d, 3, dt);
+  let cx = px + dx * P3.cd, cy = py + dy * P3.cd, cz = pz + dz * P3.cd;
+  cy = Math.max(cy, groundAt(cx, cz, 0.1, cy) + 0.35);
+  P3.cam.position.set(cx, cy, cz); P3.cam.up.set(0, 1, 0); P3.cam.lookAt(px, py - 0.25, pz);
+  // blend from the classic pose: position along a straight line, rotation by slerp, field of view eased
+  const k = P3.k * P3.k * (3 - 2 * P3.k);
+  camera.position.lerp(P3.cam.position, k); camera.quaternion.slerp(P3.cam.quaternion, k);
+  p3Fov(k);
+  camera.updateMatrixWorld(true);
+  camBase.p.copy(camera.position); camBase.q.copy(camera.quaternion); camBase.ok = true;   // aimCamera follows (68-juice)
+  p3Occlude(k > 0.5 ? [camera.position.x, camera.position.y, camera.position.z, p.x, p.y + 0.9, p.z] : null);
+  p3Labels(k > 0.5);
+  // the shadow box (±24 m round Schiffy) slides ahead along the view: nothing behind the camera is seen, and the far
+  // corner of the isle stays inside it
+  if (k > 0.5) { const [fx, fz] = p3Fwd(), s = 10 * k; sun.position.x += fx * s; sun.position.z += fz * s; sun.target.position.x += fx * s; sun.target.position.z += fz * s; }
+  if (P3.build) p3BuildTick(dt);
+}
+// floating plaques (textSprite: drawn on top, a fixed world size) are made for the high classic camera. Down here they
+// hide behind builds (depth test on) and shrink when close, so "Lookout" no longer shows through the cottage and "Pets"
+// doesn't fill the screen; back to the classic camera they are exactly as built.
+function p3Labels(on) {
+  const root = G.roomGroup; if (!root) return;
+  const key = root.uuid + ':' + root.children.length + ':' + (G.homeProps ? G.homeProps.uuid : '');
+  if (P3.lblKey !== key) {
+    if (P3.lbl) for (const l of P3.lbl) p3LabelReset(l);
+    P3.lblKey = key; P3.lbl = [];
+    // only the playground's own plaques (the hub's are far off, and some of them animate their own size)
+    const w = new THREE.Vector3();
+    root.traverse(n => { if (n.isSprite && n.renderOrder === 20 && n.material && n.material.depthTest === false && p3OnIsle(n.getWorldPosition(w), 2)) P3.lbl.push({ s: n, sc: n.scale.clone() }); });
+  }
+  if (!on) { if (P3.lblOn) { for (const l of P3.lbl) p3LabelReset(l); P3.lblOn = false; } return; }
+  P3.lblOn = true;
+  const v = P3.lv || (P3.lv = new THREE.Vector3());
+  for (const l of P3.lbl) {
+    l.s.material.depthTest = true;
+    const d = l.s.getWorldPosition(v).distanceTo(camera.position), k = clamp(d / 11, 0.4, 1);
+    l.s.scale.set(l.sc.x * k, l.sc.y * k, 1);
+  }
+}
+function p3LabelReset(l) { l.s.material.depthTest = false; l.s.scale.copy(l.sc); }
+// coming onto the isle: the camera starts behind Schiffy, looking the way he faces
+function p3Enter(p) {
+  P3.yaw = Math.atan2(-Math.sin(p.face), -Math.cos(p.face)); P3.pitch = 0.36; P3.cd = P3.dist * G.zoom;
+  P3.x = p.x; P3.y = p.y + 1.25; P3.z = p.z;
+}
+function p3Fov(k) {
+  const f = 38 + (P3_FOV - 38) * k; if (Math.abs(f - camera.fov) < 0.01) return;
+  camera.fov = f; camera.updateProjectionMatrix(); P3.fov = k;
+  pMat.uniforms.scale.value = renderer.domElement.height / (2 * Math.tan(camera.fov * Math.PI / 360));   // particle sizes follow the lens
+}
+// orbit input: mouse drag (any button), the right-hand touch drag, arrow keys
+function p3Look(dt) {
+  if (G.state !== 'play') return;
+  const ox = (keys.has('ArrowRight') ? 1 : 0) - (keys.has('ArrowLeft') ? 1 : 0), oy = (keys.has('ArrowUp') ? 1 : 0) - (keys.has('ArrowDown') ? 1 : 0);
+  P3.yaw -= ox * dt * 2.4; P3.pitch = clamp(P3.pitch + oy * dt * 1.4, P3_PITCH[0], P3_PITCH[1]);
+  // the right-hand touch stick is a look drag here (it never fires: p3Aim skips touchAim)
+  const s = TOUCH.aim;
+  if (s) {
+    if (P3.tl && P3.tl.id === s.id) { P3.yaw -= (s.x - P3.tl.x) * 0.0085; P3.pitch = clamp(P3.pitch + (s.y - P3.tl.y) * 0.006, P3_PITCH[0], P3_PITCH[1]); }
+    P3.tl = { id: s.id, x: s.x, y: s.y }; TOUCH.fire = false; TOUCH.ax = TOUCH.az = 0;
+  } else P3.tl = null;
+}
+canvas.addEventListener('mousedown', e => {
+  if (fromTouch() || P3.k < 0.5 || G.state !== 'play') return;
+  P3.drag = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, moved: false, b: e.button };
+});
+window.addEventListener('mousemove', e => {
+  const d = P3.drag; if (!d) return;
+  if (G.state !== 'play') { P3.drag = null; return; }
+  P3.yaw -= (e.clientX - d.x) * 0.0055; P3.pitch = clamp(P3.pitch + (e.clientY - d.y) * 0.004, P3_PITCH[0], P3_PITCH[1]);
+  d.x = e.clientX; d.y = e.clientY;
+  if (Math.hypot(e.clientX - d.sx, e.clientY - d.sy) > 6) d.moved = true;
+});
+window.addEventListener('mouseup', e => {
+  const d = P3.drag; P3.drag = null;
+  if (d && !d.moved && d.b === 0 && P3.build && G.state === 'play') p3Place();   // a click (not a drag) places in build mode
+});
+// the item boxes the camera ray may run into: big ones only (a house, the lookout, a ride), on the isle
+function p3Solid(q) { return q.y1 - q.y0 > 1.4 && (q.x1 - q.x0) * (q.z1 - q.z0) > 2; }
+// how far the camera may sit along (dx, dy, dz) from the pivot (px, py, pz), at most len: in front of a big item box in the
+// camera's half of the line, or of one the camera would sit in (a box wholly in the near half fades instead). Repeated,
+// since stopping short of one box (a roof) can leave the camera inside another (the walls under it).
+function p3Ray(px, py, pz, dx, dy, dz, len) {
+  let d = len;
+  for (let pass = 0; pass < 4; pass++) {
+    let hit = Infinity;
+    for (const it of G.homeLayout || []) {
+      if (it.off || !it.box) continue;
+      for (const q of it.box) {
+        if (!p3Solid(q)) continue;
+        const t = p3Slab(px, py, pz, dx, dy, dz, HOME.x + q.x0 - 0.2, q.y0 - 0.1, HOME.z + q.z0 - 0.2, HOME.x + q.x1 + 0.2, q.y1 + 0.2, HOME.z + q.z1 + 0.2, true);
+        if (t && t[0] < d && (t[0] > len * 0.45 || t[1] > d - 0.3)) hit = Math.min(hit, t[0]);
+      }
+    }
+    if (hit === Infinity) break;
+    d = Math.max(0.9, hit - 0.35);
+    if (d === 0.9) break;
+  }
+  return d;
+}
+// ray vs box: the entry distance (0 if it starts inside), or [entry, exit] with both; null on a miss
+function p3Slab(ox, oy, oz, dx, dy, dz, x0, y0, z0, x1, y1, z1, both) {
+  let t0 = 0, t1 = Infinity;
+  for (const [o, d, a, b] of [[ox, dx, x0, x1], [oy, dy, y0, y1], [oz, dz, z0, z1]]) {
+    if (Math.abs(d) < 1e-6) { if (o < a || o > b) return null; continue; }
+    let ta = (a - o) / d, tb = (b - o) / d; if (ta > tb) [ta, tb] = [tb, ta];
+    t0 = Math.max(t0, ta); t1 = Math.min(t1, tb); if (t0 > t1) return null;
+  }
+  return both ? [t0, t1] : t0;
+}
+// ---- ghost fade: placed items on the line camera -> Schiffy's chest fade to P3_GHOST and back ----
+function p3OccList() {
+  if (P3.occSrc === G.homeProps) return P3.occ;
+  P3.occSrc = G.homeProps; P3.occ = [];
+  // the model's own bounds (a tree's canopy, not just its trunk box), trimmed a little: round shapes don't fill their box
+  for (const it of G.homeLayout || []) {
+    const m = G.homeMeshes && G.homeMeshes[it.id]; if (it.off || !m) continue;
+    const b = new THREE.Box3().setFromObject(m); if (b.isEmpty()) continue;
+    const c = b.getCenter(new THREE.Vector3()), s = b.getSize(new THREE.Vector3()).multiplyScalar(0.42);
+    P3.occ.push({ it, m, op: 1, b: [c.x - s.x, c.y - s.y, c.z - s.z, c.x + s.x, c.y + s.y, c.z + s.z] });
+  }
+  return P3.occ;
+}
+function p3Occlude(seg) {
+  if (!seg && !P3.occ.some(o => o.op < 1)) return;
+  const L = p3OccList(), dt = G.dt || 1 / 60;
+  let sx, sy, sz, len;
+  if (seg) { sx = seg[3] - seg[0]; sy = seg[4] - seg[1]; sz = seg[5] - seg[2]; len = Math.hypot(sx, sy, sz) || 1; sx /= len; sy /= len; sz /= len; }
+  for (const o of L) {
+    let want = 1;
+    const b = o.b;
+    if (seg) {
+      const t = p3Slab(seg[0], seg[1], seg[2], sx, sy, sz, b[0], b[1], b[2], b[3], b[4], b[5]);
+      if (t != null && t < len - 0.4) want = P3_GHOST;
+      // right at the lens, or big on screen (a canopy over half the view), a ghost is just a dark smear: almost gone instead
+      const ex = clamp(seg[0], b[0], b[3]) - seg[0], ey = clamp(seg[1], b[1], b[4]) - seg[1], ez = clamp(seg[2], b[2], b[5]) - seg[2];
+      const r = Math.hypot(b[3] - b[0], b[4] - b[1], b[5] - b[2]) / 2, dc = Math.hypot((b[0] + b[3]) / 2 - seg[0], (b[1] + b[4]) / 2 - seg[1], (b[2] + b[5]) / 2 - seg[2]);
+      if (Math.hypot(ex, ey, ez) < 1.2) want = 0.06;
+      else if (want < 1 && r / Math.max(dc, 0.1) > 0.4) want = 0.1;
+    }
+    if (o.op === want) continue;
+    o.op = Math.abs(o.op - want) < 0.02 ? want : p3Damp(o.op, want, 12, 1 / 60);
+    p3Opacity(o);
+  }
+}
+function p3Opacity(o) {
+  // the models share materials between copies, so a faded one gets its own (made once); the ink shells hide while faded
+  if (!o.mats) { o.mats = []; o.m.traverse(n => { if (n.isMesh && !n.userData.outline) { n.material = [].concat(n.material).map(m => { const c = m.clone(); o.mats.push(c); return c; }); if (n.material.length === 1) n.material = n.material[0]; } }); }
+  const faded = o.op < 0.98;
+  // depth writes stay on: only the front surface shows, so a tree's overlapping puffs don't stack into a dark smear
+  for (const m of o.mats) { m.opacity = o.op; m.transparent = faded; }
+  o.m.traverse(n => { if (n.userData.outline) n.visible = !faded; });
+}
+
+// ---- build in third person ----
+function p3BuildStart() {
+  if (P3.k < 0.5 || G.state !== 'play') return;
+  if (p3Guest()) { sfx('deny'); toast("It's your friend's playground", 'Only they can build here', '#ff8f8f'); return; }
+  P3.build = { list: homeStored(), i: 0, id: null, rot: 0, ghost: null, mats: [], it: null, ok: false, key: '', from: null, rings: null };
+  p3BuildPick(0);
+  if (!P3.build.id) toast('Nothing in storage', `Buy items at the blueprint table, or ${ctl('press X', 'tap Pick up')} to move one that's out`, '#ffd34d');
+  sfx('door'); p3Hud(true);
+}
+function p3BuildEnd(keepPicked) {
+  const B = P3.build; if (!B) return;
+  if (B.from && !keepPicked) p3Unpick();
+  p3Ghost(null); if (B.rings) removeObj(B.rings);
+  P3.build = null; p3Hud(true);
+}
+// show the i-th stored item (wrapping) as the ghost
+function p3BuildPick(step) {
+  const B = P3.build; if (!B) return;
+  if (B.from) p3Unpick();
+  B.list = homeStored();
+  if (!B.list.length) { B.id = null; p3Ghost(null); p3Hud(true); return; }
+  B.i = ((B.i + step) % B.list.length + B.list.length) % B.list.length;
+  B.id = B.list[B.i]; const v = homeSave().items[B.id]; B.rot = v && v.rot || 0;
+  p3Ghost(B.id); p3Hud(true);
+}
+// nat = a tree / bush / rock being moved ({ kind, v }: its obstacle model), else id is a catalogue item
+function p3Ghost(id, nat) {
+  const B = P3.build; if (!B) return;
+  if (B.ghost) { removeObj(B.ghost); B.ghost = null; B.mats = []; }
+  if (!id) { B.it = null; return; }
+  const sku = nat ? nat.kind : homeSkuOf(id), v = homeSave().items[id] || {};
+  B.it = { id: '__p3ghost', kind: sku, cat: !nat, nature: !!nat, ghost: true, dx: 0, dz: 0, rot: B.rot, pitch: v.pitch || 0, roll: v.roll || 0, lift: 0, size: v.size || 1 };
+  const mesh = nat ? makeObstacle(nat.kind, theme(), nat.v) : homeModel(sku);
+  // its own see-through material copies, tinted red when it won't fit (like the purchase preview's)
+  mesh.traverse(n => {
+    if (!n.isMesh) return;
+    if (n.userData.outline) { n.visible = false; return; }
+    n.material = [].concat(n.material).map(m => { const c = m.clone(); c.transparent = true; c.opacity = 0.62; c.depthWrite = false; B.mats.push({ m: c, col: c.color ? c.color.clone() : null }); return c; });
+    if (n.material.length === 1) n.material = n.material[0];
+    n.castShadow = false;
+  });
+  scene.add(mesh); B.ghost = mesh; B.key = '';
+}
+// every frame in build mode: the spot in front of Schiffy where the camera looks, snapped to half units
+function p3BuildTick(dt) {
+  const B = P3.build, p = G.player; if (!B || !B.it) { if (B && B.rings) { removeObj(B.rings); B.rings = null; } return; }
+  B.it.rot = B.rot;
+  const { boxes } = homeTurned(B.it);
+  let ext = 0.5; for (const q of boxes) ext = Math.max(ext, Math.hypot(Math.max(-q.x0, q.x1), Math.max(-q.z0, q.z1)));
+  const [fx, fz] = p3Fwd(), d = Math.min(ext, 4) + p.r + 1.3;
+  B.it.dx = Math.round((p.x + fx * d - HOME.x) * 2) / 2; B.it.dz = Math.round((p.z + fz * d - HOME.z) * 2) / 2;
+  const key = B.it.dx + ',' + B.it.dz + ',' + B.rot;
+  if (key !== B.key) {
+    B.key = key;
+    const r = homePlace(B.it, (G.homeLayout || []).filter(i => !i.off));
+    B.it.y = r.b; B.it.box = r.box; B.it.low = r.low;
+    // never on top of Schiffy himself
+    const onMe = r.box.some(q => p.x - HOME.x > q.x0 - p.r && p.x - HOME.x < q.x1 + p.r && p.z - HOME.z > q.z0 - p.r && p.z - HOME.z < q.z1 + p.r && q.y0 < p.y + 1.1 && q.y1 > p.y);
+    // and only as high as Schiffy can hop (a double jump tops out near 2.2 m): stacking onto a roof stays in the editor
+    B.ok = r.ok && !onMe && r.b <= p.y + P3_REACH;
+    // out of reach: the red ghost shows at Schiffy's level, where he can see it (not up on a roof behind the camera's view)
+    B.lift = r.b > p.y + P3_REACH ? p.y - r.b : 0;
+    homePose(B.ghost, null, B.it, r.b + B.lift, r.low);
+    for (const { m, col } of B.mats) if (col) { m.color.copy(col); if (!B.ok) m.color.lerp(HP_RED, 0.55); }
+    p3Rings();
+  }
+  if (B.rings) { const k = 0.6 + 0.4 * Math.sin(G.time * 5); for (const c of B.rings.children) c.material.opacity = (c.isLineSegments ? 1 : 0.35) * k; }
+}
+// the ghost's footprint on the ground: gold, or red where it won't fit
+function p3Rings() {
+  const B = P3.build; if (B.rings) { removeObj(B.rings); B.rings = null; }
+  const g = new THREE.Group(), col = B.ok ? 0xffd34d : 0xff4f6a;
+  for (const q of B.it.box) {
+    const w = q.x1 - q.x0 + 0.2, d = q.z1 - q.z0 + 0.2, cx = HOME.x + (q.x0 + q.x1) / 2, cz = HOME.z + (q.z0 + q.z1) / 2;
+    const f = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.35, depthWrite: false }));
+    const y0 = q.y0 + (B.lift || 0), y1 = q.y1 + (B.lift || 0);
+    f.rotation.x = -Math.PI / 2; f.position.set(cx, (B.lift ? y0 : groundAt(cx, cz, 0.1, y0 + 0.01)) + 0.05, cz); f.renderOrder = 6; g.add(f);
+    const e = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(q.x1 - q.x0 + 0.06, q.y1 - q.y0 + 0.06, q.z1 - q.z0 + 0.06)), new THREE.LineBasicMaterial({ color: col, transparent: true, depthTest: !B.lift }));
+    e.position.set(cx, (y0 + y1) / 2, cz); e.renderOrder = 7; g.add(e);
+  }
+  scene.add(g); B.rings = g;
+}
+function p3Turn(deg) { const B = P3.build; if (!B || !B.it) return; B.rot = wrapDeg(B.rot + deg); sfx('ui'); }
+function p3Place() {
+  const B = P3.build; if (!B || !B.it) return;
+  if (!B.ok) { sfx('deny'); toast('No room for that here', B.it.y > G.player.y + P3_REACH ? 'Too high to reach: stack it up there in the Top-down editor' : 'Turn it, walk a little, or aim the camera at a clear spot', '#ff8f8f'); return; }
+  const items = homeSave().items, nat = B.it.nature, v = Object.assign({}, items[B.id], { dx: B.it.dx, dz: B.it.dz, rot: B.rot }, nat ? {} : { out: true });
+  delete v.lift; delete v.off; if (B.it.y) v.y = +B.it.y.toFixed(2); else delete v.y;
+  items[B.id] = v; writeSave(); refreshDecor();
+  heFreePlayer();
+  const name = nat ? B.natName || 'It' : (HOME_CAT_BY[homeSkuOf(B.id)] || {}).name || 'It';
+  if (nat) { emit(HOME.x + B.it.dx, B.it.y + 0.3, HOME.z + B.it.dz, 18, 0xffd34d, { speed: 3, flat: true, size: 0.4, grav: 0 }); sfx('item'); toast(`${name} moved`, '', '#ffd34d'); B.from = null; p3BuildPick(0); return; }
+  emit(HOME.x + B.it.dx, B.it.y + 0.3, HOME.z + B.it.dz, 18, 0xffd34d, { speed: 3, flat: true, size: 0.4, grav: 0 });
+  sfx('item'); toast(`${name} placed`, ctl('Hop on it with Space · X picks it back up', 'Hop on it with Jump · Pick up moves it again'), '#ffd34d');
+  B.from = null; B.i = Math.max(0, B.i - 1);
+  p3BuildPick(0);
+}
+// pick up the item nearest the spot in front of Schiffy (within reach): a catalogue item, tree, bush or rock (the lookout
+// and jump pad keep to the editor, which checks the pad still reaches the plateau) and carry it as the ghost
+function p3PickUp() {
+  const B = P3.build, p = G.player; if (!B) return;
+  if (B.from) p3Unpick();
+  const [fx, fz] = p3Fwd(), sx = p.x + fx * 1.8 - HOME.x, sz = p.z + fz * 1.8 - HOME.z;
+  let best = null, bd = 2.6;
+  for (const it of G.homeLayout || []) {
+    if (it.off || !(it.cat || it.nature) || it.fixed || !it.box) continue;
+    for (const q of it.box) { const d = Math.hypot(clamp(sx, q.x0, q.x1) - sx, clamp(sz, q.z0, q.z1) - sz) + Math.max(0, q.y0 - p.y - 1.5); if (d < bd) { bd = d; best = it; } }
+  }
+  if (!best) { sfx('deny'); toast('Nothing to pick up', 'Face something on the isle (the lookout and jump pad move in the Top-down editor)', '#ff8f8f'); return; }
+  const items = homeSave().items;
+  B.from = { id: best.id, v: items[best.id] ? Object.assign({}, items[best.id]) : null };
+  B.id = best.id; B.rot = best.rot || 0;
+  if (best.nature) {
+    // a tree / bush / rock is cleared while carried (put back as it was if the move is called off)
+    items[best.id] = Object.assign({}, items[best.id], { dx: best.dx, dz: best.dz, rot: best.rot, off: true }); writeSave(); refreshDecor();
+    B.natName = best.name; p3Ghost(best.id, { kind: best.kind, v: best.v });
+  } else {
+    homeSetOut(best.id, false); refreshDecor();
+    B.list = homeStored(); B.i = Math.max(0, B.list.indexOf(best.id));
+    p3Ghost(best.id);
+  }
+  sfx('door'); p3Hud(true);
+}
+// put a picked-up item back where it was
+function p3Unpick() {
+  const B = P3.build; if (!B || !B.from) return;
+  const items = homeSave().items;
+  if (B.from.v) items[B.from.id] = B.from.v; else delete items[B.from.id];
+  B.from = null; writeSave(); refreshDecor(); heFreePlayer();
+}
+// while building, the E prompts (pet bed, blueprint table, telescope) stay quiet
+const _p3UpdateInteract = updateInteract;
+updateInteract = function (dt) { if (P3.build && G.mode === 'hub') { setPrompt(null); return; } return _p3UpdateInteract.call(this, dt); };
+
+// ---- keys ----
+function p3Toggle() {
+  SAVE.view3p = !p3Want(); writeSave(); sfx('ui');
+  toast(p3Want() ? 'Third-person view' : 'Classic view', p3Want() ? ctl('Drag to look around · V switches back', 'Drag on the right to look around') : ctl('V for third person on the playground', 'The button switches back'), '#8fe3ff');
+}
+window.addEventListener('keydown', e => {
+  if (e.repeat || G.state !== 'play' || G.mode !== 'hub' || (e.target.matches && e.target.matches('input'))) return;
+  const onIsle = P3.in && G.player;
+  if (e.code === 'KeyV' && onIsle) { p3Toggle(); return; }
+  if (e.code === 'KeyB' && onIsle && P3.k > 0.5) { if (P3.build) { p3BuildEnd(); sfx('door'); } else p3BuildStart(); return; }
+  if (!P3.build) return;
+  const n = e.shiftKey ? 5 : 15, act = { KeyQ: () => p3Turn(-n), KeyE: () => p3Turn(n), KeyZ: () => p3BuildPick(-1), KeyC: () => p3BuildPick(1), KeyF: p3Place, Enter: p3Place, KeyX: p3PickUp, KeyT: p3Editor, Escape: () => { p3BuildEnd(); sfx('door'); } }[e.code];
+  if (act) { e.preventDefault(); e.stopImmediatePropagation(); pressedSet.delete(e.code); act(); }
+}, true);
+function p3Editor() { p3BuildEnd(); startHomeEdit(); }
+// the top-down editor (from here or the blueprint table) frames itself with the classic lens: drop third person at once
+const _p3StartHomeEdit = startHomeEdit;
+startHomeEdit = function () {
+  if (P3.build) p3BuildEnd();
+  P3.k = 0; p3Fov(0); P3.drag = null;
+  for (const o of P3.occ) if (o.op < 1) { o.op = 1; p3Opacity(o); }
+  return _p3StartHomeEdit.apply(this, arguments);
+};
+
+// ---- HUD: view switch + Build, and the build bar ----
+function p3Hud(force) {
+  if (!P3.el) p3HudBuild();
+  const show = G.mode === 'hub' && P3.in && G.state === 'play' && !!G.player;
+  const key = [show, p3Want(), !!P3.build, P3.build && P3.build.id, P3.build && !!P3.build.from, P3.k > 0.5, TOUCH.on, p3Guest(), !!G.weapon].join('|');
+  if (!force && key === P3.hudKey) return; P3.hudKey = key;
+  const E = P3.el, B = P3.build;
+  E.bar.hidden = !show || !!B;
+  E.view.innerHTML = p3Want() ? `Classic view${TOUCH.on ? '' : ' <kbd>V</kbd>'}` : `Third person${TOUCH.on ? '' : ' <kbd>V</kbd>'}`;
+  E.buildBtn.hidden = !p3Want() || P3.k < 0.5 || p3Guest();
+  E.buildBtn.innerHTML = `Build${TOUCH.on ? '' : ' <kbd>B</kbd>'}`;
+  E.build.hidden = !show || !B;
+  if (B) {
+    const h = B.id && (B.it && B.it.nature ? { name: B.natName || 'Tree' } : HOME_CAT_BY[homeSkuOf(B.id)]);
+    E.name.innerHTML = h ?`<b>${h.name}</b><span>${B.from ? 'Moving it' : `In storage · ${B.i + 1} of ${B.list.length}`}</span>` : `<b>Nothing in storage</b><span>${ctl('X', 'Pick up')} moves an item that's out</span>`;
+    for (const b of [E.prev, E.next]) b.disabled = !B.list.length || B.list.length < 2 && !B.from;
+    E.place.disabled = !B.id;
+  }
+  // phones: the right-hand stick looks around here
+  if (TUI.aim) { const t = TUI.aim.querySelector('span'), want = P3.k > 0.5 && G.mode === 'hub' ? (G.weapon ? 'Look + fire' : 'Look') : 'Aim + fire'; if (t && t.textContent !== want) t.textContent = want; }
+}
+function p3HudBuild() {
+  const st = document.createElement('style');
+  st.textContent = `
+  #p3Bar { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; gap: 8px; z-index: 12; }
+  #p3Build { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px;
+    max-width: min(760px, 94vw); padding: 8px 10px; border-radius: 16px; background: rgba(255, 250, 240, 0.94); box-shadow: 0 3px 0 rgba(38, 49, 92, 0.35), 0 8px 22px rgba(38, 49, 92, 0.25); z-index: 12; }
+  #p3Build .p3name { display: flex; flex-direction: column; min-width: 150px; max-width: 220px; text-align: center; line-height: 1.15; }
+  #p3Build .p3name b { font-size: 15px; color: var(--navy, #26315c); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #p3Build .p3name span { font-size: 12px; color: #6b6880; }
+  #p3Build .smallbtn, #p3Bar .smallbtn { white-space: nowrap; }
+  #p3Build .smallbtn.go { background: #ffd34d; }
+  #p3Bar kbd, #p3Build kbd { font-size: 11px; padding: 0 4px; margin-left: 3px; }
+  #app.touch #p3Bar { bottom: auto; top: 54px; }
+  #app.touch #p3Build { bottom: auto; top: 50px; max-width: 58vw; padding: 6px; gap: 4px; }
+  #app.touch #p3Build .p3name { min-width: 110px; }
+  @media (max-height: 520px) { #p3Build .p3name span { display: none; } }`;
+  document.head.appendChild(st);
+  const bar = document.createElement('div'); bar.id = 'p3Bar'; bar.hidden = true;
+  bar.innerHTML = `<button type="button" class="smallbtn" data-p3="view"></button><button type="button" class="smallbtn" data-p3="build">Build <kbd>B</kbd></button>`;
+  const build = document.createElement('div'); build.id = 'p3Build'; build.hidden = true;
+  build.innerHTML = `<button type="button" class="smallbtn" data-p3="prev" title="Previous item (Z)">◀</button><div class="p3name"></div><button type="button" class="smallbtn" data-p3="next" title="Next item (C)">▶</button>
+    <button type="button" class="smallbtn" data-p3="tl" title="Turn left (Q)">⟲</button><button type="button" class="smallbtn" data-p3="tr" title="Turn right (E)">⟳</button>
+    <button type="button" class="smallbtn go" data-p3="place" title="Place it (F or click)">Place</button><button type="button" class="smallbtn" data-p3="pick" title="Pick up the item in front (X)">Pick up</button>
+    <button type="button" class="smallbtn" data-p3="edit" title="The classic top-down editor (T)">Top-down</button><button type="button" class="smallbtn" data-p3="done" title="Stop building (B / Esc)">Done</button>`;
+  $('#app').append(bar, build);
+  const E = P3.el = { bar, build, view: bar.querySelector('[data-p3="view"]'), buildBtn: bar.querySelector('[data-p3="build"]'), name: build.querySelector('.p3name') };
+  for (const b of build.querySelectorAll('[data-p3]')) E[b.dataset.p3] = b;
+  const act = { view: p3Toggle, build: p3BuildStart, prev: () => p3BuildPick(-1), next: () => p3BuildPick(1), tl: () => p3Turn(-15), tr: () => p3Turn(15), place: p3Place, pick: p3PickUp, edit: p3Editor, done: () => { p3BuildEnd(); sfx('door'); } };
+  for (const root of [bar, build]) root.addEventListener('click', e => { const b = e.target.closest('[data-p3]'); if (b && act[b.dataset.p3] && G.state === 'play') { act[b.dataset.p3](); p3Hud(true); } });
+  // buttons never start a camera drag or a stick
+  for (const root of [bar, build]) root.addEventListener('pointerdown', e => e.stopPropagation());
+}
 // ---------- flow ----------
 function resetActors() {
   clearRoomEntities();
