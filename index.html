@@ -1393,6 +1393,8 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 <script type="application/octet-stream" id="schiffyGlb" data-src="models/schiffy_v2.glb?v=01b69dd975"></script>
 <!-- Playground catalogue items Home_<id> (blender/build_home.py) -->
 <script type="application/octet-stream" id="homeGlb" data-src="models/home.glb?v=bd157eb6cf"></script>
+<!-- Run + Playground pets Pet_<species> (blender/build_pets.py; 65-pets.js keeps the primitive build as the fallback) -->
+<script type="application/octet-stream" id="petsGlb" data-src="models/pets.glb?v=a50fbd2155"></script>
 <!-- The Skyheart Gate isle north-west of the hub (blender/build_skygate.py; 93-skyheart.js has stand-ins) -->
 <script type="application/octet-stream" id="skygateGlb" data-src="models/skygate.glb?v=adfe97e8f0"></script>
 <script>window.__glb = {}; document.querySelectorAll('script[data-src]').forEach(e => { window.__glb[e.id] = fetch(e.getAttribute('data-src')).then(r => (r.ok ? r.arrayBuffer() : null)).catch(() => null); });</script>
@@ -1402,7 +1404,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 <script src="https://cdn.jsdelivr.net/npm/meshoptimizer@0.20.0/meshopt_decoder.js"></script>
 <script>
 (() => {
-const BUILD_ID = '7963c10ab3';
+const BUILD_ID = '94371b15b0';
 // ---------- Schiffy save bridge (shared by Sky Patrol and Skyheart; pasted into both builds, edit only here) ----------
 // Gold earned in Skyheart travels to Sky Patrol's playground savings through one ledger key. Rules (SKYHEART.md):
 // - Skyheart first puts each deposit in its OWN save (an outbox, written together with the run's Heart Shards), then
@@ -3677,7 +3679,7 @@ function loadGlbMap(id) {
   }));
 }
 function loadProps() {
-  return Promise.all(['propsGlb', 'weaponsGlb', 'obstaclesGlb', 'portalsGlb', 'skyGlb', 'creaturesGlb', 'enemiesGlb', 'bossesGlb', 'peaksGlb', 'volcanoGlb', 'clockworkGlb', 'homeGlb'].map(loadGlbMap)).then(maps => { const all = Object.assign({}, ...maps); return Object.keys(all).length ? all : null; });
+  return Promise.all(['propsGlb', 'weaponsGlb', 'obstaclesGlb', 'portalsGlb', 'skyGlb', 'creaturesGlb', 'enemiesGlb', 'bossesGlb', 'peaksGlb', 'volcanoGlb', 'clockworkGlb', 'homeGlb', 'petsGlb'].map(loadGlbMap)).then(maps => { const all = Object.assign({}, ...maps); return Object.keys(all).length ? all : null; });
 }
 // 'T_<key>' materials take the current biome's colours so Blender obstacles match every sector
 function themeColor(key, th) {
@@ -13301,9 +13303,15 @@ function addNoteMine(x, z, n) {
   } });
 }
 // ---------- pickups ----------
-// Dog bone treat: a shaft capped by two knuckle bumps at each end
-const boneShaftGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.56, 12); boneShaftGeo.rotateZ(Math.PI / 2); SHARED.add(boneShaftGeo);
-const boneKnobGeo = new THREE.SphereGeometry(0.14, 14, 10); SHARED.add(boneKnobGeo);
+// Dog bone treat: a shaft capped by two knuckle bumps at each end.
+// Schiffy-bar finish (builder D, 2026-10-28): the shaft is a smooth lathe with a soft waist that flares into the knuckles (was a
+// plain 12-sided cylinder), knuckles have enough segments to read round. Same size; also the Critter Cannon's bone shot (42-shots).
+const boneShaftGeo = (() => {
+  const pts = [];
+  for (let k = 0; k <= 12; k++) { const t = k / 12, y = -0.3 + t * 0.6, w = Math.abs(t - 0.5) * 2; pts.push(new THREE.Vector2(0.088 + 0.05 * Math.pow(w, 3), y)); }
+  const g = new THREE.LatheGeometry(pts, 20); g.rotateZ(Math.PI / 2); g.computeVertexNormals(); return g;
+})(); SHARED.add(boneShaftGeo);
+const boneKnobGeo = new THREE.SphereGeometry(0.145, 20, 14); SHARED.add(boneKnobGeo);
 const boneMat = new THREE.MeshToonMaterial({ color: 0xfff0d2, gradientMap: toonGrad }); SHARED.add(boneMat);
 function makeBone() {
   const b = new THREE.Group();
@@ -13311,28 +13319,43 @@ function makeBone() {
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) b.add(outline(mesh(boneKnobGeo, boneMat, sx * 0.3, 0, sz * 0.1), 1.12));
   return b;
 }
-// Gold bar: a square frustum turned 45° and stretched along x reads as a classic trapezoid ingot
-const goldGeo = new THREE.CylinderGeometry(0.19, 0.27, 0.2, 4, 1); goldGeo.rotateY(Math.PI / 4); goldGeo.scale(1.7, 1, 1); SHARED.add(goldGeo);
-const goldTopGeo = new THREE.BoxGeometry(0.42, 0.012, 0.1); SHARED.add(goldTopGeo);
+// Gold bar: a classic trapezoid ingot (same footprint as the old 45°-turned square frustum), now a rounded box tapered toward
+// its top, so every edge is a soft roll (normals follow the taper); the shine strip is a soft pill on the top face
+const goldGeo = (() => {
+  const H = 0.2, TAPER = 0.3, g = softBoxGeo(0.65, H, 0.38, 0.055, 3).clone();
+  const pos = g.attributes.position, nor = g.attributes.normal, n = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i), k = 1 - TAPER * (y + H / 2) / H, dk = -TAPER / H;
+    n.set(nor.getX(i) / k, -x * dk / k * nor.getX(i) + nor.getY(i) - z * dk / k * nor.getZ(i), nor.getZ(i) / k).normalize();
+    pos.setXYZ(i, x * k, y, z * k); nor.setXYZ(i, n.x, n.y, n.z);
+  }
+  g.computeBoundingSphere(); return g;
+})(); SHARED.add(goldGeo);
+const goldTopGeo = softBoxGeo(0.34, 0.016, 0.07, 0.008, 2); SHARED.add(goldTopGeo);
 const goldMat = new THREE.MeshToonMaterial({ color: 0xffc22e, emissive: 0x6a3a00, emissiveIntensity: 0.25, gradientMap: toonGrad }); SHARED.add(goldMat);
 const goldShineMat = new THREE.MeshBasicMaterial({ color: 0xfff1b0 }); SHARED.add(goldShineMat);
 // Brass key: ring bow, shaft and two teeth
 const keyMat = new THREE.MeshToonMaterial({ color: 0xffc93c, emissive: 0x6a3a00, emissiveIntensity: 0.25, gradientMap: toonGrad }); SHARED.add(keyMat);
 function makeKeyMesh() {
+  // (builder D, 2026-10-28) chubby round bow with a collar bead, rolled-end shaft, pillowy teeth: same size and layout
   const k = new THREE.Group();
-  k.add(outline(mesh(new THREE.TorusGeometry(0.16, 0.06, 8, 18), keyMat, -0.28, 0, 0), 1.18));
-  const shaft = outline(mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 8), keyMat, 0.09, 0, 0), 1.25); shaft.rotation.z = Math.PI / 2; k.add(shaft);
-  k.add(outline(mesh(new THREE.BoxGeometry(0.07, 0.15, 0.07), keyMat, 0.25, -0.09, 0), 1.25));
-  k.add(outline(mesh(new THREE.BoxGeometry(0.07, 0.11, 0.07), keyMat, 0.12, -0.07, 0), 1.25));
+  k.add(outline(mesh(softGeoKeep('keyBow', () => new THREE.TorusGeometry(0.16, 0.065, 12, 28)), keyMat, -0.28, 0, 0), 1.18));
+  k.add(outline(mesh(softGeoKeep('keyBead', () => new THREE.SphereGeometry(0.075, 16, 12)), keyMat, -0.11, 0, 0), 1.2));
+  const shaft = outline(mesh(softCylGeo(0.05, 0.05, 0.5, 14, 0.035, 2), keyMat, 0.09, 0, 0), 1.25); shaft.rotation.z = Math.PI / 2; k.add(shaft);
+  k.add(outline(mesh(softBoxGeo(0.08, 0.16, 0.075, 0.03, 2), keyMat, 0.25, -0.09, 0), 1.25));
+  k.add(outline(mesh(softBoxGeo(0.08, 0.12, 0.075, 0.03, 2), keyMat, 0.12, -0.07, 0), 1.25));
   k.scale.setScalar(1.25);
   return k;
 }
 // grenade pickup: a round bomb with an orange band and a little fuse
 function makeGrenadeMesh() {
-  const g = new THREE.Group();
-  g.add(outline(mesh(new THREE.SphereGeometry(0.26, 14, 10), toon(0x3a3554)), 1.15));
-  const band = mesh(new THREE.TorusGeometry(0.26, 0.04, 6, 18), toon(0xff7a4d)); band.rotation.x = Math.PI / 2; g.add(band);
-  g.add(mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.18, 6), toon(0x9e6a45), 0, 0.3, 0), mesh(new THREE.SphereGeometry(0.06, 6, 5), basic(0xffd34d), 0, 0.42, 0));
+  // (builder D, 2026-10-28) a plump round bomb: smooth body, a fat soft band, a rolled cap collar, a curled fuse and a glowing spark
+  const g = new THREE.Group(), K = (key, make) => softGeoKeep('gren' + key, make);
+  g.add(outline(mesh(K('Body', () => new THREE.SphereGeometry(0.26, 24, 18)), toon(0x3a3554)), 1.15));
+  const band = mesh(K('Band', () => new THREE.TorusGeometry(0.255, 0.045, 10, 32)), toon(0xff7a4d)); band.rotation.x = Math.PI / 2; g.add(band);
+  g.add(outline(mesh(softCylGeo(0.09, 0.1, 0.08, 16, 0.03, 2), toon(0x5a5478), 0, 0.27, 0), 1.12));
+  const fuse = mesh(K('Fuse', () => new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0.29, 0), new THREE.Vector3(0.01, 0.36, 0), new THREE.Vector3(0.06, 0.41, 0), new THREE.Vector3(0.1, 0.42, 0)]), 8, 0.024, 6)), toon(0x9e6a45));
+  g.add(fuse, mesh(K('Spark', () => new THREE.SphereGeometry(0.06, 12, 8)), basic(0xffd34d), 0.11, 0.42, 0));
   return g;
 }
 function spawnPickup(kind, x, z, extra = {}) {
@@ -13821,9 +13844,21 @@ function updateDrones(dt) {
 // ---------- pets (they follow, hatch and grow, never fight; collected species give a minor run bonus, see petStats) ----------
 // G.pet = { species, stage 0..3, cleared (isles since last stage), mesh, x, z, y, dropped: { t } | null }
 function makeEggMesh(species) {
-  const d = PETS[species], g = new THREE.Group();
-  const egg = outline(mesh(new THREE.SphereGeometry(0.32, 16, 12), toon(d.egg), 0, 0.38, 0), 1.1); egg.scale.set(0.85, 1.12, 0.85); g.add(egg);
-  for (let k = 0; k < 5; k++) { const sp = mesh(new THREE.SphereGeometry(0.06, 8, 6), toon(d.spots), Math.cos(k * 1.3) * 0.24, 0.3 + (k % 3) * 0.12, Math.sin(k * 1.3) * 0.24); sp.scale.set(1, 0.6, 1); g.add(sp); }
+  // (builder D, 2026-10-28) a smooth true egg shape (fuller below, a lathe instead of a stretched sphere) with soft round spots
+  // lying on its shell, turned to face out; same size and spot layout as before
+  const d = PETS[species], g = new THREE.Group(), H = 0.36, RR = 0.272, Y0 = 0.38;
+  const er = y => { const u = clamp((y - Y0) / H, -1, 1); return RR * Math.sqrt(1 - u * u) * (1 - 0.13 * u); };
+  const shell = softGeoKeep('eggShell', () => {
+    const pts = []; for (let k = 0; k <= 20; k++) { const y = Y0 - H + k / 20 * 2 * H; pts.push(new THREE.Vector2(er(y), y - Y0)); }
+    const l = new THREE.LatheGeometry(pts, 24); l.computeVertexNormals(); return l;
+  });
+  const egg = outline(mesh(shell, toon(d.egg), 0, Y0, 0), 1.1); g.add(egg);
+  const spotGeo = softGeoKeep('eggSpot', () => new THREE.SphereGeometry(0.065, 12, 8)), spotMat = toon(d.spots), up = new THREE.Vector3();
+  for (let k = 0; k < 5; k++) {
+    const a = k * 1.3, y = 0.3 + (k % 3) * 0.12, r = er(y) * 0.985, x = Math.cos(a) * r, z = Math.sin(a) * r;
+    const sp = mesh(spotGeo, spotMat, x, y, z); sp.scale.set(1, 1, 0.32);
+    sp.lookAt(up.set(x * 2, y + (y - Y0) * 0.6, z * 2)); g.add(sp);
+  }
   g.userData.egg = egg;
   return g;
 }
@@ -13833,6 +13868,7 @@ function makePetMesh(species, stage) {
   const body = new THREE.Group(); g.add(body);
   const C = c => toon(c), O = m => { body.add(outline(m, 1.1)); return m; };
   const eyes = (y, z, sp, r = 0.06) => { for (const k of [-1, 1]) { body.add(mesh(new THREE.SphereGeometry(r, 8, 6), toon(0x26315c), k * sp, y, z)); body.add(mesh(new THREE.SphereGeometry(r * 0.35, 6, 5), basic(0xffffff), k * sp - 0.015, y + 0.02, z + r * 0.6)); } };
+  if (petModel(species, body)) species = '';   // the Blender model (pets.glb) replaces the primitive build below
   switch (species) {
     case 'puffpup': {
       O(mesh(new THREE.SphereGeometry(0.34, 14, 10), C(d.body), 0, 0.36, 0));
@@ -13975,12 +14011,53 @@ function makePetMesh(species, stage) {
     for (const k of [-1, 1]) { const an = mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.18, 4), C(d.accent), k * 0.07, 0.72, 0.16); an.rotation.x = 0.6; body.add(an); }
     eyes(0.55, 0.22, 0.08);
   }
-  if (stage >= 3) { const bow = mesh(new THREE.TorusGeometry(0.06, 0.025, 6, 10), toon(0xff8fb1), 0, 0.72, -0.1); body.add(bow); }
+  if (stage >= 3 && body.userData.rig) {
+    // grown-up bow on a model pet: two puffy loops and a knot on the crown (a bare ring read as a stray handle)
+    // seat: the model's Pet_<x>_bowAt empty when it has one, else the top of the model
+    const bow = new THREE.Group(), pk = toon(0xff8fb1), at = body.getObjectByName('Pet_' + body.userData.rig.sp + '_bowAt');
+    body.updateMatrixWorld(true);
+    if (at) at.getWorldPosition(bow.position); else bow.position.set(0, new THREE.Box3().setFromObject(body).max.y - 0.03, -0.04);
+    bow.rotation.x = -0.5; body.add(bow);
+    for (const k of [-1, 1]) { const l = outline(mesh(softGeoKeep('petBowLoop', () => new THREE.SphereGeometry(0.075, 14, 10)), pk, k * 0.075, 0, 0), 1.12); l.scale.set(1, 0.7, 0.45); l.rotation.z = k * 0.35; bow.add(l); }
+    bow.add(outline(mesh(softGeoKeep('petBowKnot', () => new THREE.SphereGeometry(0.035, 12, 8)), toon(0xff6f9f)), 1.15));
+  } else if (stage >= 3) { const bow = mesh(new THREE.TorusGeometry(0.06, 0.025, 6, 10), toon(0xff8fb1), 0, 0.72, -0.1); body.add(bow); }
   g.scale.setScalar(s);
   g.userData.body = body;
   shadows(g);
   return g;
 }
+// Pet models (pets.glb from blender/build_pets.py, builder D 2026-10-28): Pet_<species> at the Schiffy bar, built at stage-3 size,
+// with glossy eyes, ears, four legs and a tail as children. The rig lives on body.userData.rig; petRigTick runs it.
+function petModel(species, body) {
+  const m = makeProp('Pet_' + species); if (!m) return false;
+  const pre = 'Pet_' + species + '_';
+  mobFace(m, pre);
+  const P = mobParts(m, pre, ['eyeL', 'eyeR', 'earL', 'earR', 'legFL', 'legFR', 'legBL', 'legBR', 'legL', 'legR', 'tail', 'wingL', 'wingR']);
+  const key = m.getObjectByName(pre + 'key'); if (key) body.userData.key = key;   // Sprocket's wind-up key (updatePet spins it)
+  const glow = m.getObjectByName(pre + 'glow'), gc = PET_GLOW[species];
+  if (glow && gc) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: SPR_TEX.soft, color: gc[0], transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: gc[2] })); s.scale.setScalar(gc[1]); glow.add(s); }
+  body.add(m); body.userData.rig = { P, el: spr0(), er: spr0(), ph: 0, blink: rand(1, 4), y: 0, buzz: species === 'buzzby', sp: species };
+  return true;
+}
+// soft glow sprites on a model pet's _glow anchor: [colour, size, opacity] (as the old primitive builds had)
+const PET_GLOW = { glimmer: [0xbfefff, 1.2, 0.7], emberkit: [0xffa03d, 0.5, 0.6], pumi: [0xff8a3d, 0.35, 0.5] };
+// legs step in diagonal pairs while it moves, the tail wags (faster when happy), ears flop on springs as it bobs, eyes blink
+function petRigTick(body, dt, moving, happy) {
+  const R = body && body.userData.rig; if (!R) return;
+  const P = R.P, s = Math.sin(R.ph += dt * (moving ? 13 : 0));
+  if (!moving) R.ph *= Math.max(0, 1 - dt * 10);
+  for (const [k, sg] of [['legFL', 1], ['legBR', 1], ['legFR', -1], ['legBL', -1], ['legL', 1], ['legR', -1]]) if (P[k]) P[k].o.rotation.x = P[k].r.x + (moving ? sg * s * 0.55 : 0);
+  // wings / flippers / fins: a lazy idle flap, faster while moving; Buzzby's wings buzz all the time
+  const fl = R.buzz ? 0.3 + Math.sin(G.time * 60) * 0.4 : Math.sin(G.time * (moving ? 14 : 3)) * (moving ? 0.45 : 0.12);
+  // +fl raises a wing whichever side its builder put it on (set A has _wingL on -x, set B on +x)
+  for (const k of ['wingL', 'wingR']) if (P[k]) P[k].o.rotation.z = P[k].r.z + (P[k].p.x >= 0 ? fl : -fl);
+  if (P.tail) P.tail.o.rotation.y = P.tail.r.y + Math.sin(G.time * (happy ? 16 : moving ? 11 : 4)) * (happy ? 0.6 : 0.35);
+  const wy = body.getWorldPosition(_petV).y, vy = dt > 0 ? (wy - R.y) / dt : 0; R.y = wy;
+  for (const [k, st, sd] of [['earL', R.el, -1], ['earR', R.er, 1]]) if (P[k]) P[k].o.rotation.z = P[k].r.z + sd * partSpring(st, clamp(-vy * 0.12, -0.5, 0.5), dt, 90, 7);
+  R.blink -= dt; const shut = R.blink < 0.12 ? 0.12 : 1; if (R.blink < 0) R.blink = rand(2, 5);
+  for (const k of ['eyeL', 'eyeR']) if (P[k]) P[k].o.scale.y = P[k].s.y * shut;
+}
+const _petV = new THREE.Vector3();
 function maybeDropEgg(x, z, chance) {
   if (G.pet || G.mode !== 'story' || Math.random() > chance) return;
   if (G.room.pickups.some(p => p.kind === 'egg')) return;
@@ -14045,6 +14122,7 @@ function updatePet(dt) {
   if (bu && bu.wings) bu.wings.forEach((w, i) => { w.rotation.z = (i ? -1 : 1) * (0.3 + Math.sin(G.time * 60) * 0.4); });
   pet.mesh.position.set(pet.x, (G.room && !G.room.hub ? groundAt(pet.x, pet.z, 0.2, 9) * 0 : 0) + hop + fly, pet.z);
   if (pet.stage === 0) pet.mesh.rotation.z = Math.sin(G.time * 3) * 0.15; else pet.mesh.rotation.y = Math.atan2(p.x - pet.x, p.z - pet.z);
+  petRigTick(pet.mesh.userData.body, dt, d > 0.5, false);
   pet.mesh.visible = true;
 }
 // finishing a level with a pet adds it to the Collectibles tab
@@ -22603,6 +22681,7 @@ function hpetAnim(pt, dt) {
   if (fly) y += fly + Math.sin(T * 2) * 0.15;
   m.position.set(pt.x, y, pt.z);
   b.rotation.set(rx, 0, rz); b.scale.set(1, sy, 1);
+  petRigTick(b, dt, pt.moving, pt.st === 'greet' || pt.st === 'petted' || pt.anim === 'wag');
 }
 // ---- the Pets panel ----
 function hpetPanelEl() {
