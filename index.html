@@ -41,8 +41,13 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #ffc8a6; col
 .bl { bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); left: 16px; right: 16px; }
 .pill { display: inline-flex; align-items: center; gap: 8px; background: var(--cream); border: 3px solid var(--navy); border-radius: 999px;
   padding: 4px 14px 4px 8px; box-shadow: 0 4px 0 var(--navy); font: 400 18px var(--display); letter-spacing: .02em; font-variant-numeric: tabular-nums; width: max-content; }
-#hearts { display: flex; gap: 3px; align-items: center; background: var(--cream); border: 3px solid var(--navy); border-radius: 18px; padding: 5px 10px; box-shadow: 0 4px 0 var(--navy); width: max-content; }
-#hearts svg { width: 34px; height: 21px; }
+/* bones (HP) in their own bar at the top centre, 1.4x the old corner size (2026-10-28 playtest: "life could look bigger or
+   more centred"). Everything else that sits at the top centre (boss bar, wave counter, Gold Rush timer, wind sign) starts
+   --hpOff lower so it hangs under the bar. Long bone rows wrap onto a second line. */
+#hud { --hpOff: 62px; }
+#hpBar { position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 12px); transform: translateX(-50%); }
+#hearts { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; align-items: center; background: var(--cream); border: 3px solid var(--navy); border-radius: 22px; padding: 6px 14px; box-shadow: 0 4px 0 var(--navy); width: max-content; max-width: min(600px, 46vw); }
+#hearts svg { width: 48px; height: 29px; }
 #hearts .o > * { fill: var(--navy); stroke: var(--navy); stroke-width: 3.4; stroke-linejoin: round; }
 #hearts .full .f > * { fill: #fff0d2; }
 #hearts .empty .f > * { fill: #b9a99a; }
@@ -53,7 +58,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #ffc8a6; col
 @keyframes lastBone { 0%, 100% { transform: rotate(0) scale(1); } 12% { transform: rotate(-9deg) scale(1.14); } 24% { transform: rotate(7deg) scale(1.1); } 36% { transform: rotate(-4deg) scale(1.04); } 48% { transform: rotate(0) scale(1); } }
 @keyframes lastBox { 0%, 100% { box-shadow: 0 4px 0 var(--navy); } 15% { box-shadow: 0 4px 0 var(--navy), 0 0 0 4px rgba(255, 79, 106, .55); } }
 @media (prefers-reduced-motion: reduce) { #hearts.last .full { animation: none; } }
-#hearts .pip { width: 16px; height: 16px; border-radius: 50%; background: var(--sky); border: 3px solid var(--navy); margin-left: 3px; }
+#hearts .pip { width: 22px; height: 22px; border-radius: 50%; background: var(--sky); border: 3px solid var(--navy); margin-left: 3px; }
 .gold { width: 26px; height: 16px; flex: none; background: var(--navy); clip-path: polygon(18% 0, 82% 0, 100% 100%, 0 100%); position: relative; }
 .gold::after { content: ""; position: absolute; inset: 3px; background: linear-gradient(#ffe58a 0 35%, #ffc22e 35%); clip-path: polygon(18% 0, 82% 0, 100% 100%, 0 100%); }
 .keyico { width: 30px; height: 16px; flex: none; }
@@ -328,7 +333,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #ffc8a6; col
 .chip { font: 400 13px var(--display); min-width: 34px; height: 34px; padding: 0 6px; display: grid; place-items: center; color: var(--navy);
   border: 3px solid var(--navy); border-radius: 12px; box-shadow: 0 3px 0 var(--navy); position: relative; }
 .chip sub { position: absolute; right: -8px; bottom: -8px; font: 400 11px var(--display); color: var(--cream); background: var(--navy); border-radius: 999px; padding: 1px 5px; }
-#bossbar { position: absolute; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + 16px); width: min(440px, 64vw); text-align: center; }
+#bossbar { position: absolute; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + 16px + var(--hpOff)); width: min(440px, 64vw); text-align: center; }
 #bossbar .name { display: inline-block; font: 400 18px var(--display); letter-spacing: .06em; color: var(--cream); background: var(--berry); border: 3px solid var(--navy);
   border-radius: 999px; padding: 2px 16px; box-shadow: 0 3px 0 var(--navy); position: relative; z-index: 1; }
 #bossbar .track { height: 16px; margin-top: -6px; background: var(--cream); border: 3px solid var(--navy); border-radius: 999px; overflow: hidden; box-shadow: 0 3px 0 var(--navy); }
@@ -358,7 +363,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 #prompt .act.alt { color: #2a8fb0; font-size: 14px; }
 @media (max-width: 520px) { #prompt { grid-template-columns: 56px minmax(0, 1fr); gap: 10px; } #prompt .ico { width: 56px; height: 56px; } #prompt .ico img, #prompt .ico svg { width: 46px; height: 46px; } #prompt .desc { font-size: 13px; } }
 /* challenge waves: a counter under the top edge, and a banner that slams in for each new wave */
-#waveHud { position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 16px); transform: translateX(-50%); display: flex; align-items: center; gap: 10px;
+#waveHud { position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 16px + var(--hpOff)); transform: translateX(-50%); display: flex; align-items: center; gap: 10px;
   background: var(--cream); border: 3px solid var(--navy); border-radius: 999px; box-shadow: 0 4px 0 var(--navy); padding: 4px 14px; font: 600 15px var(--round); color: var(--navy); white-space: nowrap; }
 #waveHud b { font: 400 17px var(--display); letter-spacing: .04em; }
 #waveHud .wpips { display: flex; gap: 4px; }
@@ -631,7 +636,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 @keyframes grShine { from { background-position: -150% 0; } to { background-position: 150% 0; } }
 @keyframes grBob { from { transform: translateY(0) rotate(-3deg); } to { transform: translateY(-6px) rotate(3deg); } }
 @keyframes grCoin { 0% { opacity: 1; transform: translate(0, 0) scale(.4); } 60% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--dx), calc(var(--dy) + 150px)) scale(1) rotate(540deg); } }
-.gr-hud { position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 16px); transform: translateX(-50%); display: flex; align-items: center; gap: 10px; white-space: nowrap;
+.gr-hud { position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 16px + var(--hpOff)); transform: translateX(-50%); display: flex; align-items: center; gap: 10px; white-space: nowrap;
   background: linear-gradient(#ffe27a, #ffc93c); border: 3px solid var(--navy); border-radius: 999px; box-shadow: 0 4px 0 var(--navy); padding: 3px 16px 3px 10px; font: 600 14px var(--round); color: var(--navy); }
 .gr-hud svg { width: 30px; height: 18px; }
 .gr-hud b { font: 400 17px var(--display); letter-spacing: .04em; }
@@ -790,6 +795,8 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 @media (max-height: 520px) {
   .corner.tl { transform: scale(.74); transform-origin: top left; }
   .corner.tr { transform: scale(.74); transform-origin: top right; }
+  #hud { --hpOff: 44px; }
+  #hpBar { top: calc(env(safe-area-inset-top, 0px) + 8px); transform: translateX(-50%) scale(.74); transform-origin: top center; }
   .corner.br { transform: scale(.8); transform-origin: bottom right; }
   .touch .corner.br { transform: translateX(-50%) scale(.66); transform-origin: bottom center; }
   .hubbar { transform: scale(.8); transform-origin: top right; }
@@ -809,7 +816,13 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 @media (max-width: 520px) {
   .tbtns { transform: scale(.85); transform-origin: bottom right; }
   .touch #prompt { width: calc(100% - 32px); bottom: calc(env(safe-area-inset-bottom, 0px) + 230px); }
-  .corner.tl { transform: scale(.66); transform-origin: top left; left: 10px; }
+  /* upright phones have no room between the corners: the bones lead the left column instead (same .66 scale as the
+     corners, so still 1.4x the old bones). --hpH = the bar's drawn height (updateHUD), so a wrapped second row of bones
+     pushes the counters and the boss bar / wave counter down instead of covering them */
+  #hpBar { left: 10px; top: calc(env(safe-area-inset-top, 0px) + 10px); transform: scale(.66); transform-origin: top left; }
+  #hearts { max-width: 340px; justify-content: flex-start; }
+  .corner.tl { transform: scale(.66); transform-origin: top left; left: 10px; top: calc(env(safe-area-inset-top, 0px) + 16px + var(--hpH, 32px)); }
+  #hud { --hpOff: calc(var(--hpH, 32px) + 76px); }
   .corner.tr { transform: scale(.66); transform-origin: top right; right: 10px; }
   .touch .corner.br { left: 10px; right: auto; transform: scale(.7); transform-origin: bottom left; }
   .touch .corner.br .winfo { width: 104px; }
@@ -1052,8 +1065,9 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
   </div>
 
   <div id="hud" hidden>
+    <!-- Schiffy's bones (HP): their own bar at the top centre (80-hud updateHUD) -->
+    <div id="hpBar"><div id="hearts"></div></div>
     <div class="corner tl">
-      <div id="hearts"></div>
       <div class="row">
         <div class="pill"><span class="gold" aria-hidden="true"></span><span id="crystals">0</span></div>
         <div class="pill"><svg class="keyico" viewBox="0 0 30 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><path d="M13 6.5h14v3h-2.5v3.5h-3V9.5H19v2.5h-3V9.5h-3z"/></svg><span id="keys">0</span></div>
@@ -1155,8 +1169,9 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
         <li><i class="dot" style="background:#ff7a5c"></i>Rival</li>
         <li><i class="dot" style="background:#9fd98a"></i>Event</li>
         <li><i class="dot" style="background:#b98cff"></i>Vault</li>
-        <li><i class="lock"></i>Locked gate</li>
-        <li><i class="chest"></i>Unopened chest</li>
+        <li><i class="lock"></i>Locked gate (optional: needs a key)</li>
+        <li><i class="chest"></i>Unopened chest (optional)</li>
+        <li><i class="dot" style="background:#ff6b9a"></i>Pink paws on the isle: the way to the boss</li>
       </ul>
     </div>
   </div>
@@ -1404,7 +1419,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 <script src="https://cdn.jsdelivr.net/npm/meshoptimizer@0.20.0/meshopt_decoder.js"></script>
 <script>
 (() => {
-const BUILD_ID = '94371b15b0';
+const BUILD_ID = '54a627f6aa';
 // ---------- Schiffy save bridge (shared by Sky Patrol and Skyheart; pasted into both builds, edit only here) ----------
 // Gold earned in Skyheart travels to Sky Patrol's playground savings through one ledger key. Rules (SKYHEART.md):
 // - Skyheart first puts each deposit in its OWN save (an outbox, written together with the run's Heart Shards), then
@@ -2265,10 +2280,11 @@ window.addEventListener('keydown', e => {
   else if (e.code === 'Enter' && G.state === 'feed') closeFeed();
 });
 window.addEventListener('keyup', e => keys.delete(e.code));
-window.addEventListener('blur', () => { keys.clear(); mouse.down = false; });
+window.addEventListener('blur', () => { keys.clear(); mouse.down = false; mouse.rdown = false; });
 // touch sticks and buttons (85-touch) write here; updatePlayer reads it. touchT stamps the last finger so the
 // browser's emulated mouse events after a tap can't grab the aim or pull the trigger.
-const TOUCH = { on: false, mx: 0, mz: 0, fire: false, ax: 0, az: 0, move: null, aim: null };
+// (nade = the Grenade button while a finger holds it: { id, ox, oy, dx, dy }, the drag off the button steers the throw)
+const TOUCH = { on: false, mx: 0, mz: 0, fire: false, ax: 0, az: 0, move: null, aim: null, nade: null };
 let touchT = -1e9;
 const fromTouch = () => performance.now() - touchT < 900;
 const ctl = (mouseTxt, touchTxt) => TOUCH.on ? touchTxt : mouseTxt;   // control hints in game text
@@ -2278,9 +2294,10 @@ canvas.addEventListener('mousedown', e => {
   if (fromTouch()) return;
   initAudio();
   if (e.button === 0) { mouse.down = true; mouse.active = true; }
-  if (e.button === 2 && G.state === 'play') G.throwQueued = true; // right-click throws a grenade
+  // right button held = grenade aim, released = throw (grenadeTick, 35-weapons)
+  if (e.button === 2 && G.state === 'play') { mouse.rdown = mouse.rtap = true; mouse.active = true; }
 });
-window.addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; });
+window.addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; if (e.button === 2) mouse.rdown = false; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 // mouse wheel zooms the camera in or out a little
 canvas.addEventListener('wheel', e => { e.preventDefault(); if (G.state === 'homeEdit') return; G.zoom = clamp(G.zoom * (e.deltaY > 0 ? 1.07 : 0.935), 0.72, 1.35); }, { passive: false });
@@ -3339,31 +3356,37 @@ function buildIsland(room) {
     dm.position.set(cellX(i), 0.01, cellX(j)); dm.rotation.set(0, 0, 0); dm.scale.setScalar(1); dm.updateMatrix(); tiles.setMatrixAt(ti++, dm.matrix);
   }
   tiles.count = ti; tiles.receiveShadow = true; grp.add(tiles); G.ground.tiles = tiles;
-  // paw-print trails walking toward each exit (gold toward a locked vault)
+  // paw-print trails walking toward each exit (gold toward a locked vault, boss pink toward the boss: playtesters didn't
+  // know where to go and thought the padlocks blocked the way, 2026-10-28). The boss exit also gets a "Boss" plaque.
   const padGeo = new THREE.CylinderGeometry(0.27, 0.27, 0.06, 18), toeGeo = new THREE.CylinderGeometry(0.105, 0.105, 0.06, 12);
-  const paws = [];
+  const paws = [], bossK = bossDirOf(room);
   for (const k in d) {
-    const [ax, az] = DIRS[k], px = -az, pz = ax, gold = !!(room.locks && room.locks[k]);
+    const [ax, az] = DIRS[k], px = -az, pz = ax, gold = !!(room.locks && room.locks[k]), boss = k === bossK;
     let side = 1;
     for (let s = 2.3; s <= HALF - 0.9; s += 1.3) {
       const cx = ax * s + px * 0.32 * side, cz = az * s + pz * 0.32 * side;
       if (gapAtRoom(room, cx, cz)) { side = -side; continue; }
-      paws.push({ x: cx, z: cz, gold, ax, az, pad: true });
-      for (const [lat, fwd] of [[-0.25, 0.3], [-0.09, 0.42], [0.09, 0.42], [0.25, 0.3]]) paws.push({ x: cx + ax * fwd + px * lat, z: cz + az * fwd + pz * lat, gold });
+      paws.push({ x: cx, z: cz, gold, boss, ax, az, pad: true });
+      for (const [lat, fwd] of [[-0.25, 0.3], [-0.09, 0.42], [0.09, 0.42], [0.25, 0.3]]) paws.push({ x: cx + ax * fwd + px * lat, z: cz + az * fwd + pz * lat, gold, boss });
       side = -side;
     }
   }
-  const pawCol = new THREE.Color(th.path), goldCol = new THREE.Color(0xffc93c);
+  const pawCol = new THREE.Color(th.path), goldCol = new THREE.Color(0xffc93c), bossCol = new THREE.Color(BOSS_TRAIL);
+  const colOf = p => p.gold ? goldCol : p.boss ? bossCol : pawCol;
   const pads = paws.filter(p => p.pad), toes = paws.filter(p => !p.pad);
   if (pads.length) {
     const pawMat = toonU(0xffffff); if (th.glow) { pawMat.emissive.setHex(th.path); pawMat.emissiveIntensity = 0.6; }
     const pm2 = new THREE.InstancedMesh(padGeo, pawMat, pads.length), tm2 = new THREE.InstancedMesh(toeGeo, pawMat, toes.length);
-    pads.forEach((p, i) => { dm.position.set(p.x, 0.05, p.z); dm.rotation.set(0, Math.atan2(p.ax, p.az), 0); dm.scale.set(1, 1, 0.85); dm.updateMatrix(); pm2.setMatrixAt(i, dm.matrix); pm2.setColorAt(i, p.gold ? goldCol : pawCol); });
-    toes.forEach((p, i) => { dm.position.set(p.x, 0.05, p.z); dm.rotation.set(0, 0, 0); dm.scale.setScalar(1); dm.updateMatrix(); tm2.setMatrixAt(i, dm.matrix); tm2.setColorAt(i, p.gold ? goldCol : pawCol); });
+    pads.forEach((p, i) => { dm.position.set(p.x, 0.05, p.z); dm.rotation.set(0, Math.atan2(p.ax, p.az), 0); dm.scale.set(1, 1, 0.85); dm.updateMatrix(); pm2.setMatrixAt(i, dm.matrix); pm2.setColorAt(i, colOf(p)); });
+    toes.forEach((p, i) => { dm.position.set(p.x, 0.05, p.z); dm.rotation.set(0, 0, 0); dm.scale.setScalar(1); dm.updateMatrix(); tm2.setMatrixAt(i, dm.matrix); tm2.setColorAt(i, colOf(p)); });
     pm2.receiveShadow = tm2.receiveShadow = true;
     const pawSet = [pm2, tm2, instOutline(pm2, 1.14), instOutline(tm2, 1.3)];
+    if (bossK) {
+      const [ax, az] = DIRS[bossK], sign = textSprite('Boss', '#ff6b9a', 0.55);
+      sign.position.set(ax * (HALF - 1.2), 2.4, az * (HALF - 1.2)); pawSet.push(sign);
+    }
     grp.add(...pawSet);
-    G.pawMeshes = pawSet; G.pawSpots = pads.map(p => [p.x, p.z, p.gold]);
+    G.pawMeshes = pawSet; G.pawSpots = pads.map(p => [p.x, p.z, p.gold ? 0xffc93c : p.boss ? BOSS_TRAIL : th.path]);
     // trails stay hidden while an isle is locked down for a fight
     if (room.sealed) pawSet.forEach(m => { m.visible = false; });
   }
@@ -3442,8 +3465,8 @@ function buildIsland(room) {
     if (room.type === 'final') grp.add(arenaRing(7.6 * ISLE_K, Math.round(44 * ISLE_K), th, true));
   }
   if (room.type === 'start' && G.level === 1 && G.sector === 1 && !G.loop) {
-    const s = textSprite(ctl('WASD move · Mouse aim + click · Space jump · Shift dash · Right-click grenade · Q bark',
-      'Left thumb moves · Right thumb aims and fires · Tap Bark when the dial glows'), '#fff4dc', 0.36); s.position.set(0, 3.2, -4); grp.add(s);
+    const s = textSprite(ctl('WASD move · Mouse aim + click · Space jump · Shift dash · Hold right-click: grenade · Q bark',
+      'Left thumb moves · Right thumb aims and fires · Tap Bark when the dial glows'), '#fff4dc', 0.36); s.position.set(0, 3.2, -2); grp.add(s);
   }
   shadows(grp, true, true);
   under.traverse(n => { n.castShadow = false; });
@@ -4465,7 +4488,33 @@ function makeStall(th, room) {
 // Paw trails hide while a fight is on and pop back, with a little sparkle along the trail, once it's won
 function setPaws(show) {
   for (const m of G.pawMeshes || []) m.visible = show;
-  if (show) for (const [x, z, gold] of G.pawSpots || []) emit(x, 0.25, z, 3, gold ? 0xffc93c : theme().path, { speed: 1.6, size: 0.35, life: 0.6, grav: -1 });
+  if (show) for (const [x, z, col] of G.pawSpots || []) emit(x, 0.25, z, 3, col, { speed: 1.6, size: 0.35, life: 0.6, grav: -1 });
+}
+// the boss trail's colour (the minimap's boss pink, ROOM_ICON.boss) and which exit of `room` is the first step of the
+// shortest bridge path to this sector's boss isle (null on the boss isle itself, in the hub, or with no path)
+const BOSS_TRAIL = 0xff6b9a;
+function bossDirOf(room) {
+  const map = G.map; if (!map || !room || room.hub || !map.rooms) return null;
+  const boss = [...map.rooms.values()].find(r => r.type === 'boss' || r.type === 'final');
+  if (!boss || boss === room) return null;
+  // walk out from the boss over open bridges (hidden secret isles and padlocked vault bridges are never the way on)
+  const dist = new Map([[boss, 0]]), q = [boss];
+  while (q.length) {
+    const r = q.shift();
+    for (const k in r.doors) {
+      if (r.locks && r.locks[k]) continue;
+      const n = map.rooms.get(key(r.gx + DIRS[k][0], r.gy + DIRS[k][1]));
+      if (!n || n.hidden || dist.has(n)) continue;
+      dist.set(n, dist.get(r) + 1); q.push(n);
+    }
+  }
+  if (!dist.has(room)) return null;
+  for (const k in room.doors) {
+    if (room.locks && room.locks[k]) continue;
+    const n = map.rooms.get(key(room.gx + DIRS[k][0], room.gy + DIRS[k][1]));
+    if (n && dist.get(n) === dist.get(room) - 1) return k;
+  }
+  return null;
 }
 function seal() {
   G.room.sealed = true; G.lastHitT = G.time;
@@ -6723,9 +6772,9 @@ function updatePlayer(dt) {
   if (!inHub) {
     weaponTick(p, firing, dt);
     if (pressed('KeyQ')) useAbility(p);
-    if (G.throwQueued || pressed('KeyG')) throwGrenade(p);
+    // hold G / right mouse / the touch button to aim, let go to throw (35-weapons)
+    grenadeTick(p);
   }
-  G.throwQueued = false;
 
   // visuals
   const targetFace = Math.atan2(p.aimX, p.aimZ);
@@ -7254,16 +7303,111 @@ function barkWaveFx(x, y, z, R, bc) {
 }
 
 // ---------- grenades ----------
-function throwGrenade(p) {
+// Aimed throws (2026-10-28, playtesters: "show where they land, let me aim them, it's strange they drop at your feet"):
+// hold G, the right mouse button or the touch Grenade button to aim (a landing ring and the arc show), let go to throw; a
+// quick tap still throws. Mouse: at the cursor. Touch: drag off the button to steer (screen direction, longer drag = further);
+// no drag = the biggest group of foes in reach. Keys only: the biggest group ahead, else 6 m ahead. Never closer than
+// NADE_MIN, so a cursor on Schiffy no longer drops it at his feet. NADE_ARC is the flight's apex (40-bullets).
+const NADE_MIN = 3, NADE_MAX = 9.5, NADE_R = 2.6, NADE_ARC = 3.2, NADE_DOTS = 11, NADE_DRAG0 = 14, NADE_DRAG = 96;
+let NADE_AIM = null, nadeFx = null;
+function throwGrenade(p, t) {
   if (G.bombs < 1) { sfx('deny'); toast('No grenades', 'Enemies sometimes drop them'); return; }
   G.bombs--;
-  const h = mouse.active ? mouseGround(0) : null;
-  let tx = h ? h.x : p.x + p.aimX * 6, tz = h ? h.z : p.z + p.aimZ * 6;
-  const dx = tx - p.x, dz = tz - p.z, l = Math.hypot(dx, dz) || 1, R = Math.min(l, 9.5);
+  let [tx, tz] = t || grenadeTarget(p);
+  const dx = tx - p.x, dz = tz - p.z, l = Math.hypot(dx, dz) || 1, R = clamp(l, NADE_MIN, NADE_MAX);
   tx = p.x + dx / l * R; tz = p.z + dz / l * R;
   spawnLob(p.x, p.y + 1.2, p.z, tx, tz, null, 'grenade');
   sfx('lob'); updateHUD(true);
 }
+// where a throw would land now: [x, z], already clamped to NADE_MIN..NADE_MAX from p
+function grenadeTarget(p) {
+  let dx, dz;
+  const n = TOUCH.nade, drag = n ? Math.hypot(n.dx, n.dy) : 0;
+  if (n && drag > NADE_DRAG0) {
+    const R = lerp(NADE_MIN, NADE_MAX, clamp((drag - NADE_DRAG0) / NADE_DRAG, 0, 1));
+    dx = n.dx / drag * R; dz = n.dy / drag * R;
+  } else if (mouse.active && !TOUCH.on) {
+    const h = mouseGround(0); if (h) { dx = h.x - p.x; dz = h.z - p.z; }
+  } else {
+    const g = nadeCluster(p, n || TOUCH.on ? null : [p.aimX, p.aimZ]);
+    if (g) [dx, dz] = g; else { dx = p.aimX * 6; dz = p.aimZ * 6; }
+  }
+  let l = Math.hypot(dx, dz);
+  // cursor right on Schiffy: throw the way he faces
+  if (!(l > 0.3)) { dx = p.aimX; dz = p.aimZ; l = Math.hypot(dx, dz) || 1; }
+  const R = clamp(l, NADE_MIN, NADE_MAX);
+  return [p.x + dx / l * R, p.z + dz / l * R];
+}
+// the foe in reach with the most others inside a blast round it (ties: the nearer); dir limits it to within ~50 degrees of that way
+function nadeCluster(p, dir) {
+  let best = null, bs = 0, bd = Infinity;
+  const live = G.enemies.filter(e => !(e.spawnT > 0) && !e.dead && !e.hidden && !e.dummy);
+  for (const e of live) {
+    const ex = e.x - p.x, ez = e.z - p.z, d = Math.hypot(ex, ez);
+    if (d > NADE_MAX + 1) continue;
+    if (dir && d > 0.5 && (ex * dir[0] + ez * dir[1]) / d < 0.64) continue;
+    let s = 0; for (const o of live) if (Math.hypot(o.x - e.x, o.z - e.z) < NADE_R) s++;
+    if (s > bs || (s === bs && d < bd)) { bs = s; bd = d; best = [ex, ez]; }
+  }
+  return best;
+}
+// per frame from updatePlayer (not in the hub): starts, steers and releases the aim
+function grenadeTick(p) {
+  const held = keys.has('KeyG') || !!mouse.rdown || !!TOUCH.nade, now = performance.now();
+  // a press and release inside one frame still counts (it starts and releases the aim on this tick)
+  const tapped = pressed('KeyG') || !!mouse.rtap || !!TOUCH.nadeTap; mouse.rtap = TOUCH.nadeTap = false;
+  // paused or a menu opened mid-aim (no ticks for a while): start over rather than throw on the way back
+  if (NADE_AIM && now - NADE_AIM.last > 250) NADE_AIM = null;
+  let A = NADE_AIM;
+  if ((held || tapped) && !A) {
+    if (G.bombs < 1) { NADE_AIM = { last: now, none: true }; sfx('deny'); toast('No grenades', 'Enemies sometimes drop them'); return; }
+    A = NADE_AIM = { last: now };
+  }
+  if (!A) return;
+  A.last = now;
+  if (A.none) { if (!held) NADE_AIM = null; return; }
+  if (held) { A.t = grenadeTarget(p); nadeShow(p, A.t); return; }
+  // let go: it lands where the ring last showed (a lifted finger has already dropped the touch drag); a tap never showed one
+  const t = A.t || grenadeTarget(p);
+  NADE_AIM = null; nadeHide();
+  // a co-op guest's throw is done by the host's game (92-coop)
+  if (coopGuestNade(t)) return;
+  throwGrenade(p, t);
+}
+function nadePreview() {
+  if (nadeFx) return nadeFx;
+  const g = new THREE.Group(), ring = makeLobMarker(NADE_R);
+  for (const m of [ring.userData.ring, ring.userData.fill]) m.material.color.setHex(0xffb03b);
+  // each arc dot = a sun-gold bead on a navy ink bead, so it reads on pale floors (snow, sand) and dark ones alike
+  const dotGeo = new THREE.SphereGeometry(0.13, 10, 8), inkGeo = new THREE.SphereGeometry(0.19, 10, 8);
+  const dotMat = new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.95, depthWrite: false });
+  const inkMat = new THREE.MeshBasicMaterial({ color: 0x26315c, transparent: true, opacity: 0.75, depthWrite: false });
+  const dots = [];
+  for (let i = 0; i < NADE_DOTS; i++) {
+    const d = new THREE.Group(), ink = new THREE.Mesh(inkGeo, inkMat), bead = new THREE.Mesh(dotGeo, dotMat);
+    ink.renderOrder = 2; bead.renderOrder = 3; d.add(ink, bead); dots.push(d); g.add(d);
+  }
+  g.add(ring); g.visible = false;
+  nadeFx = { g, ring, dots, last: 0 };
+  return nadeFx;
+}
+function nadeShow(p, t) {
+  const fx = nadePreview(); if (fx.g.parent !== scene) scene.add(fx.g);
+  fx.g.visible = true; fx.last = performance.now();
+  fx.ring.position.set(t[0], 0.06, t[1]); fx.ring.scale.setScalar(NADE_R * (1 + 0.04 * Math.sin(fx.last / 90)));
+  // dots march along the flight path the grenade will take (same curve as its flight in updateBullets)
+  const y0 = p.y + 1.2, off = (fx.last / 1000 * 1.6) % 1;
+  fx.dots.forEach((d, i) => {
+    const k = (i + off) / (NADE_DOTS + 1);
+    d.position.set(lerp(p.x, t[0], k), lerp(y0, 0.3, k) + Math.sin(k * Math.PI) * NADE_ARC, lerp(p.z, t[1], k));
+  });
+}
+function nadeHide() { if (nadeFx) nadeFx.g.visible = false; }
+// the preview hides itself once nothing is aiming (pause, death, a menu): updatePlayer stops calling grenadeTick then
+(function nadeWatch() {
+  requestAnimationFrame(nadeWatch);
+  if (nadeFx && nadeFx.g.visible && performance.now() - nadeFx.last > 200) nadeHide();
+})();
 // explosion used by grenades and lobber bombs: damages enemies; grenades also smash crates and cracked fences
 function explodeAt(x, z, radius, dmg, s, isGrenade) {
   // cartoon blast: hot flash, toon smoke cloud cooling from orange to grey, shockwave ring and flying debris
@@ -7576,7 +7720,7 @@ function updateBullets(dt) {
     if (b.kind === 'lob' || b.kind === 'grenade') {
       b.t += dt; const k = Math.min(1, b.t / b.dur);
       if (b.homing) { const e = nearestEnemy(b.tx, b.tz, 3); if (e) { b.tx = lerp(b.tx, e.x, dt * 2); b.tz = lerp(b.tz, e.z, dt * 2); b.marker.position.set(b.tx, 0.06, b.tz); } }
-      b.x = lerp(b.sx, b.tx, k); b.z = lerp(b.sz, b.tz, k); b.y = lerp(b.sy, 0.3, k) + Math.sin(k * Math.PI) * (b.kind === 'grenade' ? 3.2 : 2.6);
+      b.x = lerp(b.sx, b.tx, k); b.z = lerp(b.sz, b.tz, k); b.y = lerp(b.sy, 0.3, k) + Math.sin(k * Math.PI) * (b.kind === 'grenade' ? NADE_ARC : 2.6);
       b.mesh.position.set(b.x, b.y, b.z); b.mesh.userData.spin.rotation.x += dt * 9;
       const mk = b.marker.userData;
       if (mk.ring) { mk.ring.material.opacity = 0.6 + 0.3 * Math.sin(G.time * 18); mk.fill.scale.setScalar(Math.max(0.01, k)); }
@@ -13741,13 +13885,14 @@ function updateInteract(dt) {
       });
     }
   } else if (chestNear) {
-    setPrompt({ icon: PROMPT_ICONS.chest, verb: 'Treasure chest', title: 'Locked chest', desc: 'Gold, often a treat or grenade, sometimes a gadget or weapon.',
+    // (both say "optional": playtesters thought a key was needed to get on, 2026-10-28)
+    setPrompt({ icon: PROMPT_ICONS.chest, verb: 'Optional · treasure chest', title: 'Locked chest', desc: 'Gold, often a treat or grenade, sometimes a gadget or weapon. Keys drop from enemies; the Stall sells them.',
       cost: { kind: 'key', amount: 1, have: G.keys }, action: 'Open' });
-    if (use) { if (G.keys < 1) { sfx('deny'); toast('It\'s locked', 'Find a key: enemies drop them, the stall sells them'); } else openChest(); }
+    if (use) { if (G.keys < 1) { sfx('deny'); toast('It\'s locked (optional)', 'Find a key: enemies drop them, the Stall sells them'); } else openChest(); }
   } else if (gateNear) {
-    setPrompt({ icon: PROMPT_ICONS.gate, verb: 'Secret vault', title: 'Padlocked gate', desc: 'Two free gadgets and a pile of gold wait on the other side.',
+    setPrompt({ icon: PROMPT_ICONS.gate, verb: 'Optional · bonus vault', title: 'Padlocked gate', desc: 'Two free gadgets and a pile of gold wait on the other side. The way on never needs a key.',
       cost: { kind: 'key', amount: 1, have: G.keys }, action: 'Unlock' });
-    if (use) { if (G.keys < 1) { sfx('deny'); toast('Vault gate locked', 'Bring a key to open it'); } else unlockGate(gateNear); }
+    if (use) { if (G.keys < 1) { sfx('deny'); toast('Vault gate locked (optional)', 'Bring a key: enemies drop them, the Stall sells them'); } else unlockGate(gateNear); }
   } else if (ia) {
     const o = ia.prompt(); setPrompt(o);
     if (o && use) ia.use();
@@ -14947,7 +15092,7 @@ function hazardTell(kind, mode) { if (kind !== 'lava') return; WS.mode = mode; i
 function windSignEl() {
   if (WS.el) return WS.el;
   const st = document.createElement('style');
-  st.textContent = `#windSign{position:absolute;left:50%;top:calc(env(safe-area-inset-top,0px) + 108px);transform:translateX(-50%);display:flex;align-items:center;gap:6px;pointer-events:none;opacity:0;transition:opacity .12s;z-index:5}
+  st.textContent = `#windSign{position:absolute;left:50%;top:calc(env(safe-area-inset-top,0px) + 108px + var(--hpOff,0px));transform:translateX(-50%);display:flex;align-items:center;gap:6px;pointer-events:none;opacity:0;transition:opacity .12s;z-index:5}
 #windSign.on{opacity:1}
 #windSign .ws-b{width:44px;height:44px;position:relative;display:grid;place-items:center}
 #windSign .ws-b::before{content:'';position:absolute;inset:6px;transform:rotate(45deg);background:#ffd23a;border:3px solid #17161c;border-radius:5px;box-shadow:0 3px 0 rgba(23,22,28,.55)}
@@ -15031,7 +15176,24 @@ function enterRoom(room, via) {
   requestAnimationFrame(() => { fade.style.transition = 'opacity .32s ease-out'; fade.style.opacity = '0'; });
   // the lost puppy reunites with its family on the start isle
   if (G.puppy && room.type === 'start') finishPuppyEscort();
+  routeTip('enter');
   updateHUD(true);
+}
+// Way-finding tips (2026-10-28 playtest: "didn't understand where to find the keys, or where to go without one"). Each shows
+// for the first ROUTE_TIP_N times on a save (SAVE.tips): on an isle clear, follow the pink paws; the first padlocked bridge
+// or locked chest you see, that it's optional. Delayed a beat so they don't land on top of the isle's own tips.
+const ROUTE_TIP_N = 3;
+function routeTip(why) {
+  const r = G.room; if (!r || r.hub || G.mode !== 'story') return;
+  const tips = SAVE.tips = SAVE.tips || {};
+  let id = null, t1 = '', t2 = '';
+  if (why === 'clear' && bossDirOf(r)) { id = 'bossTrail'; t1 = 'Isle clear!'; t2 = 'Follow the pink paws to the boss'; }
+  else if (why === 'enter' && !r.sealed && ((r.locks && Object.keys(r.locks).length && r.type !== 'bonus') || (r.chest && !r.chest.opened))) {
+    id = 'lockTip'; t1 = 'Padlocks are optional'; t2 = 'A Brass Key opens a bonus vault or chest. The way on never needs one';
+  }
+  if (!id || (tips[id] || 0) >= ROUTE_TIP_N) return;
+  tips[id] = (tips[id] || 0) + 1; writeSave();
+  setTimeout(() => { if (G.room === r && G.state === 'play') toast(t1, t2, '#ff9ec0'); }, why === 'clear' ? 900 : 1400);
 }
 function setupRoomType(room) {
   const t = room.type, fresh = !room.cleared;
@@ -15237,6 +15399,7 @@ function checkRoomClear(dt = 1 / 60) {
   }
   if (G.st.piggy) { const interest = Math.min(6 * G.st.piggy, Math.floor(G.crystals * 0.1 * G.st.piggy)); if (interest > 0) { G.crystals += interest; popText('+' + interest + ' interest', G.player.x, G.player.y + 3.2, G.player.z, '#ffb3d1'); } }
   popText('Isle clear!', G.player.x, G.player.y + 2.6, G.player.z, '#ffd34d');
+  routeTip('clear');
   bloomIsle(true);   // flowers pop up across the cleared isle (69-ambience)
   petIsleCleared();
   if (G.runStats) G.runStats.isles++;
@@ -19479,6 +19642,8 @@ function updateHUD(force) {
   for (let i = 0; i < p.maxHp; i++) h += heartSvg(i < p.hp ? 'full' : 'empty');
   for (let i = 0; i < p.shield; i++) h += '<span class="pip"></span>';
   $('#hearts').innerHTML = h; $('#hearts').setAttribute('aria-label', `${p.hp} of ${p.maxHp} bones`);
+  // the bar's drawn height, for the upright-phone layout that stacks the counters under it (style.css, max-width 520px)
+  const hb = $('#hpBar').getBoundingClientRect().height; if (hb > 0) $('#hud').style.setProperty('--hpH', Math.round(hb) + 'px');
   // one bone left: it wobbles and pulses red (CSS #hearts.last), like Emis's sloshing low-health orb
   $('#hearts').classList.toggle('last', p.hp === 1 && p.maxHp > 1);
   $('#crystals').textContent = G.crystals; $('#kills').textContent = G.kills; $('#keys').textContent = G.keys; $('#bombs').textContent = G.bombs;
@@ -19918,7 +20083,7 @@ function ctlMouseHTML() {
   return `<section class="ctlsec"><h3>Move and fight</h3>
     <div class="ctlhero">
       <div class="ck big">${wasd}<b>Move</b><small>Arrow keys aim and fire too</small></div>
-      <div class="ck big mouse">${CTL_MOUSE_SVG}<span class="mlist"><span><i class="dot l"></i><b>Left</b>aim + fire</span><span><i class="dot r"></i><b>Right</b>grenade</span><span><i class="dot w"></i><b>Wheel</b>zoom</span></span></div>
+      <div class="ck big mouse">${CTL_MOUSE_SVG}<span class="mlist"><span><i class="dot l"></i><b>Left</b>aim + fire</span><span><i class="dot r"></i><b>Right</b>hold: aim grenade</span><span><i class="dot w"></i><b>Wheel</b>zoom</span></span></div>
     </div>
     <div class="ctlgrid">
       ${ctlItem('<kbd class="wide">Space</kbd>', 'Jump', 'Hop low shots and gaps')}
@@ -19956,7 +20121,7 @@ function ctlTouchHTML() {
       ${ctlItem(ctlTb('Right', 'stick aim'), 'Aim + fire', 'Drag to aim. Just hold to fire at the closest enemy')}
       ${ctlItem(ctlTb('Jump', 'jump'), 'Jump', 'Hold for a higher jump')}
       ${ctlItem(ctlTb('Dash', 'dash'), 'Dash', 'Can\'t be hit mid-dash')}
-      ${ctlItem(ctlTb('<span class="bombico"></span>'), 'Grenade', 'Thrown where you aim')}
+      ${ctlItem(ctlTb('<span class="bombico"></span>'), 'Grenade', 'Hold to see where it lands, drag to steer, let go to throw')}
       ${ctlItem(ctlTb('Bark', 'bark'), 'Bark Wave', 'Tap the dial when it glows')}
       ${ctlItem(ctlTb('Use', 'use'), 'Use', 'Pops up near things: Take, Buy, Open')}
       ${ctlItem(ctlTb('Salvage', 'alt'), 'Salvage', 'Beside Use: loot into weapon XP')}
@@ -22046,7 +22211,18 @@ function buildTouchUI() {
   };
   press(TUI.jump, () => { keys.add('Space'); pressedSet.add('Space'); }, () => keys.delete('Space'));
   press(TUI.dash, () => pressedSet.add('ShiftLeft'));
-  press(TUI.bomb, () => { if (G.state === 'play') G.throwQueued = true; });
+  // Grenade: hold to aim (the landing ring shows), drag off the button to steer, let go to throw (35-weapons grenadeTick).
+  // Pointer capture keeps the drag on the button, so leaving it doesn't end the aim.
+  TUI.bomb.addEventListener('pointerdown', e => {
+    e.preventDefault(); e.stopPropagation();
+    if (G.state !== 'play' || TOUCH.nade) return;
+    TUI.bomb.classList.add('down'); TOUCH.nade = { id: e.pointerId, ox: e.clientX, oy: e.clientY, dx: 0, dy: 0 }; TOUCH.nadeTap = true;
+    try { TUI.bomb.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  TUI.bomb.addEventListener('pointermove', e => { const n = TOUCH.nade; if (n && n.id === e.pointerId) { n.dx = e.clientX - n.ox; n.dy = e.clientY - n.oy; } });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) TUI.bomb.addEventListener(ev, e => {
+    const n = TOUCH.nade; if (n && n.id === e.pointerId) { TOUCH.nade = null; TUI.bomb.classList.remove('down'); }
+  });
   press(TUI.use, () => pressedSet.add('KeyE'));
   press(TUI.alt, () => { const k = ($('#prompt').dataset.alt || '').split('|')[0]; if (k) pressedSet.add('Key' + k); });
   // Bark Wave: the HUD's ability dial becomes a button while touch is on
@@ -23808,7 +23984,7 @@ function coopHostMsg(m) {
     case 'act':
       if (G.state !== 'play' || mate.down) return;
       if (m.a === 'bark') asPlayer(mate, () => useAbility(mate));
-      else if (m.a === 'nade') asPlayer(mate, () => throwGrenade(mate));
+      else if (m.a === 'nade') asPlayer(mate, () => throwGrenade(mate, Number.isFinite(m.x) && Number.isFinite(m.z) ? [m.x, m.z] : null));
       return;
     case 'gpick':   // the guest picked one of its own level-up cards (or kept its build)
       if (!(COOP.mb.pendingCards > 0)) return;
@@ -24167,6 +24343,12 @@ function coopGuestDone(m) {
   }
   G.state = 'coopwait';
 }
+// a guest's grenade release (grenadeTick, 35-weapons): the host's game throws it at the spot aimed here. True = handled.
+function coopGuestNade(t) {
+  if (!(COOP.role === 'guest' && COOP.inRun)) return false;
+  coopSend({ t: 'act', a: 'nade', x: +t[0].toFixed(2), z: +t[1].toFixed(2) });
+  return true;
+}
 // the guest's own update while in the host's run: only its own Schiffy moves here; the rest of the world is puppets
 function coopGuestUpdate(dt) {
   G.transit -= dt;
@@ -24179,15 +24361,13 @@ function coopGuestUpdate(dt) {
   }
   else {
     coopUpPose(me);
-    // E (use), X (salvage), Q (bark) and G / right-click (grenade) are done by the host
-    const use = pressedSet.has('KeyE'), salv = pressedSet.has('KeyX'), bark = pressedSet.has('KeyQ'), nade = pressedSet.has('KeyG') || G.throwQueued;
-    for (const k of ['KeyE', 'KeyX', 'KeyQ', 'KeyG']) pressedSet.delete(k);
-    G.throwQueued = false;
+    // E (use), X (salvage) and Q (bark) are done by the host; grenades are aimed here and sent on release (coopGuestNade)
+    const use = pressedSet.has('KeyE'), salv = pressedSet.has('KeyX'), bark = pressedSet.has('KeyQ');
+    for (const k of ['KeyE', 'KeyX', 'KeyQ']) pressedSet.delete(k);
     guard(updatePlayer, dt);
     if (use) coopSend({ t: 'use' });
     if (salv) coopSend({ t: 'use', x: 1 });
     if (bark) coopSend({ t: 'act', a: 'bark' });
-    if (nade) coopSend({ t: 'act', a: 'nade' });
   }
   guard(coopCosTick, dt, 'coopShots');
   guard(coopGuestTraps, dt); guard(coopGuestHazards, dt);
