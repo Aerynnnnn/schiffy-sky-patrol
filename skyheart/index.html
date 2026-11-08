@@ -83,6 +83,8 @@ b { font-weight: 700; }
 .num.crit { font-size: 32px; color: #ffd84a; }
 .num.hurt { color: #ff6f8f; font-size: 26px; } .num.heal { color: #8ff0a8; font-size: 24px; }
 .num.zap { color: #9fe8ff; font-size: 18px; -webkit-text-stroke-width: 4px; } .num.shield { color: #ffe08a; font-size: 17px; -webkit-text-stroke-width: 4px; }
+.num.heavy { font-size: 29px; } .num.crit.heavy { font-size: 36px; }
+.num.kill { -webkit-text-stroke-width: 6px; filter: drop-shadow(0 3px 0 var(--ink)) drop-shadow(0 0 8px rgba(255,236,170,.85)); }
 .num.big { font-size: 40px; color: #ffe066; letter-spacing: .06em; filter: drop-shadow(0 4px 0 var(--ink)) drop-shadow(0 0 12px rgba(255,240,160,.9)); }
 
 /* toasts + banners */
@@ -1057,13 +1059,36 @@ function tone(f0, f1, dur, type = 'sine', vol = 0.15, delay = 0) {
   g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
   o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + dur + 0.02);
 }
-function noise(dur, vol = 0.12, hp = 800) {
+function noise(dur, vol = 0.12, hp = 800, delay = 0) {
   const ac = audio(); if (!ac || silent()) return;
   const n = Math.floor(ac.sampleRate * dur), b = ac.createBuffer(1, n, ac.sampleRate), d = b.getChannelData(0);
   for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
   const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
   s.buffer = b; f.type = 'highpass'; f.frequency.value = hp; g.gain.value = vol;
-  s.connect(f); f.connect(g); g.connect(ac.destination); s.start();
+  s.connect(f); f.connect(g); g.connect(ac.destination); s.start(ac.currentTime + delay);
+}
+// Layered hit sound (B3, 2026-11-08): a low sine thump (the body), a mid triangle knock and a short bright noise tick, each
+// pitched +-6% at random; crits add the old bright square ping; heavy / smash hits a deeper second thump + crunch. Several
+// hits inside HIT_SFX_GAP s (one swing striking a crowd) play the full sound once, then only up to two quiet ticks.
+const HIT_SFX_GAP = 0.04;
+let hitSfxAt = -1, hitSfxN = 0;
+function hitSfx(tier = 'light', crit = false, src = 'melee') {
+  const ac = audio(); if (!ac || silent()) return;
+  const now = ac.currentTime;
+  if (now - hitSfxAt < HIT_SFX_GAP) { if (++hitSfxN <= 2) noise(0.022, 0.035, 4200); return; }
+  hitSfxAt = now; hitSfxN = 0;
+  const pv = rand(0.94, 1.06), big = tier === 'heavy' || tier === 'smash', zap = src === 'zap';
+  if (zap) { tone(1500 * pv, 600, 0.07, 'square', 0.04); noise(0.03, 0.05, 3500); return; }
+  tone(150 * pv, 52, big ? 0.17 : 0.11, 'sine', big ? 0.2 : 0.14);
+  tone(470 * pv, 190 * pv, 0.075, 'triangle', 0.075);
+  noise(0.026, 0.075, 3800);
+  if (crit) tone(920 * pv, 320, 0.13, 'square', 0.055);
+  if (big) { tone(95 * pv, 38, 0.24, 'sine', 0.14, 0.012); noise(0.14, 0.07, 450, 0.005); }
+}
+// a kill on top of its hit: a deep drop, a bright rising pop (the "poof") and a puff of noise
+function killSfx() {
+  const pv = rand(0.95, 1.05);
+  tone(115 * pv, 36, 0.3, 'sine', 0.17); tone(680 * pv, 1500 * pv, 0.09, 'triangle', 0.06, 0.02); noise(0.2, 0.07, 900, 0.01);
 }
 const SFX = {
   swipe: () => noise(0.12, 0.08, 1800), spin: () => { noise(0.25, 0.1, 900); tone(300, 600, 0.25, 'triangle', 0.06); },
@@ -1239,16 +1264,26 @@ function updateSlashes(dt) {
 }
 
 // melee contact: flash + expanding ring + sparks at the point of impact (crits get stars and a bigger pop)
-function impactFx(x, y, z, crit, col = 0xfff2c8) {
-  spr(x, y, z, { tex: 'glow', col: 0xffffff, size: crit ? 1.5 : 1.0, life: 0.13, grow: 1.4, add: true });
+// tier (HIT_FEEL): heavy / smash hits get a bigger flash, a second white ring and more, faster sparks
+function impactFx(x, y, z, crit, col = 0xfff2c8, tier = 'light') {
+  const big = tier === 'heavy' || tier === 'smash' ? 1 : 0;
+  spr(x, y, z, { tex: 'glow', col: 0xffffff, size: (crit ? 1.5 : 1.0) * (big ? 1.45 : 1), life: big ? 0.16 : 0.13, grow: 1.4, add: true });
   spr(x, y, z, { tex: 'ring', col, size: 0.35, life: crit ? 0.28 : 0.2, grow: crit ? 6 : 4, add: true });
-  const n = crit ? 9 : 5;
+  if (big) spr(x, y, z, { tex: 'ring', col: 0xffffff, size: 0.5, life: 0.24, grow: 8, add: true });
+  const n = (crit ? 9 : 5) + big * 5;
   for (let i = 0; i < n; i++) {
-    const a = rand(TAU), sp = rand(5, 9) * (crit ? 1.25 : 1), e = rand(-0.4, 0.9);
+    const a = rand(TAU), sp = rand(5, 9) * (crit ? 1.25 : 1) * (big ? 1.3 : 1), e = rand(-0.4, 0.9);
     const vx = Math.cos(a) * sp * Math.cos(e), vy = Math.sin(e) * sp, vz = Math.sin(a) * sp * Math.cos(e);
     spr(x, y, z, { tex: 'spark', col: crit ? 0xffe08a : 0xffffff, size: rand(0.5, 0.9), aspect: 0.5, life: rand(0.18, 0.3), vx, vy, vz, drag: 4, add: true, rot: Math.atan2(vy, vx) });
   }
-  if (crit) burst(x, y, z, 6, { tex: 'star', col: 0xffe08a, size: 0.3, speed: 5, life: 0.4, add: true });
+  if (crit || big) burst(x, y, z, 6 + big * 4, { tex: 'star', col: crit ? 0xffe08a : col, size: 0.3, speed: 5 + big * 2, life: 0.4, add: true });
+}
+// the finishing blow on a (non-boss) enemy: white flash, a pastel shockwave on the floor, a star crown flung up and out
+function killPopFx(x, y, z, col = 0xffd3f0, gy = 0) {
+  spr(x, y, z, { tex: 'glow', col: 0xffffff, size: 2.4, life: 0.16, grow: 1.6, add: true });
+  spr(x, y, z, { tex: 'ring', col: 0xffffff, size: 0.6, life: 0.3, grow: 9, add: true });
+  groundRing(x, z, 0.3, 1.9, 0.3, col, { y: gy, thin: true, op: 0.8, add: true });
+  for (let i = 0; i < 8; i++) { const a = i / 8 * TAU + rand(-0.15, 0.15), sp = rand(5, 7.5); spr(x, y, z, { tex: 'star', col: i % 2 ? 0xffe08a : col, size: rand(0.3, 0.42), life: 0.6, vx: Math.cos(a) * sp, vy: rand(4, 7), vz: Math.sin(a) * sp, grav: 16, drag: 1, spin: 9, add: true }); }
 }
 // air slam landing: double shockwave, ink crack on the ground, dust column, debris stars
 function slamFx(x, y, z, r, col = 0xfff0c0) {
@@ -1265,11 +1300,20 @@ function slamFx(x, y, z, r, col = 0xfff0c0) {
 const NUMS = [];
 const tmpV = new THREE.Vector3();
 // follow: an object with x/y/z (enemy, player): the number keeps its offset from it, so it rides along with knockback
-function popText(x, y, z, text, cls = '', follow = null) {
+// punch: extra overshoot of the pop-in (HIT_FEEL), so finishers and kills slam their number in harder
+function popText(x, y, z, text, cls = '', follow = null, punch = 0) {
   const el = document.createElement('div'); el.className = 'num ' + cls; el.textContent = text; $('nums').appendChild(el);
-  const n = { el, x, y, z, t: 0, life: cls.includes('big') ? 1.1 : 0.8, dx: rand(-0.4, 0.4), text, cls, follow };
+  const n = { el, x, y, z, t: 0, life: cls.includes('big') ? 1.1 : 0.8, dx: rand(-0.4, 0.4), text, cls, follow, punch };
   if (follow) { n.ox = x - follow.x; n.oy = y - (follow.y || 0); n.oz = z - follow.z; }
   NUMS.push(n);
+}
+// pop-in: 0.6 -> 1 over 0.1 s as before; with a punch it shoots past 1 (to 1 + punch at 0.06 s) and settles by 0.2 s
+function numScale(n) {
+  const t = n.t, P = n.punch || 0;
+  if (!P) return t < 0.1 ? 0.6 + t * 6 : 1;
+  if (t < 0.06) return 0.6 + (0.4 + P) * (t / 0.06);
+  if (t < 0.2) { const u = (t - 0.06) / 0.14; return 1 + P * (1 - u) * (1 - u); }
+  return 1;
 }
 function updateNums(dt) {
   for (let i = NUMS.length - 1; i >= 0; i--) {
@@ -1279,13 +1323,47 @@ function updateNums(dt) {
     tmpV.set(n.x + n.dx * n.t, n.y + n.t * 1.4, n.z).project(camera);
     if (tmpV.z > 1) { n.el.style.display = 'none'; continue; }
     n.el.style.display = '';
-    n.el.style.transform = `translate(${(tmpV.x * 0.5 + 0.5) * innerWidth}px, ${(-tmpV.y * 0.5 + 0.5) * innerHeight}px) translate(-50%,-50%) scale(${n.t < 0.1 ? 0.6 + n.t * 6 : 1})`;
+    n.el.style.transform = `translate(${(tmpV.x * 0.5 + 0.5) * innerWidth}px, ${(-tmpV.y * 0.5 + 0.5) * innerHeight}px) translate(-50%,-50%) scale(${numScale(n).toFixed(3)})`;
     n.el.style.opacity = n.t > n.life * 0.6 ? 1 - (n.t - n.life * 0.6) / (n.life * 0.4) : 1;
   }
 }
 // screen shake (trauma model) and hitstop
 function addTrauma(t) { G.trauma = Math.min(1, G.trauma + t * (SAVE.shake ?? 1)); }
-function hitstop(s) { G.hitstop = Math.max(G.hitstop, s); }
+// Hit feel (B3, 2026-11-08): every melee contact has a tier. stop = hitstop (real seconds, game runs x0.08), trauma = shake
+// added per hit, kick = camera punch toward the hit (m), flinch = how far the victim is shoved back (m, / enemyWeight),
+// punch = extra pop on the damage number. light = paw swipes, air swipes, shots; heavy = the spin finisher, Meteor Pounce,
+// Comet Thrust, Dash Lunge, Zoomie Slash, 2nd air swipe; smash = Star Smash + Star Slam landing; spell = Heart Nova / Form;
+// kill = the blow that finishes a (non-boss) enemy, on top of its tier.
+const HIT_FEEL = {
+  light: { stop: 0.05, trauma: 0.16, kick: 0.07, flinch: 0.24, punch: 0.18 },
+  heavy: { stop: 0.085, trauma: 0.3, kick: 0.15, flinch: 0.42, punch: 0.4 },
+  smash: { stop: 0.11, trauma: 0.2, kick: 0.22, flinch: 0.55, punch: 0.5 },
+  spell: { stop: 0.06, trauma: 0.2, kick: 0.08, flinch: 0.32, punch: 0.25 },
+  kill: { stop: 0.075, trauma: 0.18, kick: 0.1, flinch: 0.5, punch: 0.6 },
+};
+const HEAVY_KINDS = new Set(['spin', 'pounce', 'thrust', 'lunge', 'zoomie', 'air2']);
+// the tier of the hit being dealt right now (meleeHit / lineHit set it for their loop; shots and splashes stay light)
+let HIT_TIER = 'light';
+function hitTierNow(area, spell) {
+  const p = G.player, k = p && p.atk && p.atk.kind;
+  if (spell) return 'spell';
+  if (k === 'smash' || (!k && area)) return 'smash';
+  return k && HEAVY_KINDS.has(k) ? 'heavy' : 'light';
+}
+// hitstops never add up (the longest wins) and one asked for within HS_GAP game-seconds of the last is cut to HS_CHAIN of
+// itself, so a flurry of hits stutters instead of stalling; HS_MAX caps any single stop (the boss-defeat 0.12 fits)
+const HS_GAP = 0.15, HS_CHAIN = 0.55, HS_MAX = 0.14;
+function hitstop(s) {
+  if (G.hsAt != null && G.time !== G.hsAt && G.time - G.hsAt < HS_GAP) s *= HS_CHAIN;
+  G.hsAt = G.time;
+  G.hitstop = Math.min(HS_MAX, Math.max(G.hitstop, s));
+}
+// camera punch toward a hit (20-input decays it); the Screen shake option scales it, 0 turns it off
+function camKick(x, y, z, amt) {
+  const k = amt * (SAVE.shake ?? 1); if (!(k > 0) || !camera) return;
+  const dx = x - camera.position.x, dy = y - camera.position.y, dz = z - camera.position.z, d = Math.hypot(dx, dy, dz) || 1;
+  CAM.kx = clamp((CAM.kx || 0) + dx / d * k, -0.35, 0.35); CAM.ky = clamp((CAM.ky || 0) + dy / d * k, -0.35, 0.35); CAM.kz = clamp((CAM.kz || 0) + dz / d * k, -0.35, 0.35);
+}
 function flash(col = '#fff', op = 0.35) { const f = $('flash'); f.style.background = col; f.style.transition = 'none'; f.style.opacity = op; requestAnimationFrame(() => { f.style.transition = 'opacity .35s'; f.style.opacity = 0; }); }
 function clearFx() {
   for (const p of PARTS) { scene.remove(p.s); p.s.material.dispose(); } PARTS.length = 0;
@@ -1357,6 +1435,33 @@ function endInputFrame() { pressed.clear(); mouse.pressed = [false, false, false
 const CAM = { yaw: 0, pitch: 0.32, dist: 6.5, x: 0, y: 2, z: 8, tx: 0, ty: 1, tz: 0 };
 const camFwd = () => [-Math.sin(CAM.yaw), -Math.cos(CAM.yaw)];
 const camRight = () => [Math.cos(CAM.yaw), -Math.sin(CAM.yaw)];
+// Chase follow (B4, 2026-11-08): the orbit centre (CAM.tx/ty/tz) is a critically damped spring (w rad/s; wy vertical) toward
+// a goal = Schiffy plus a small lead along his smoothed velocity (lead s, smoothed at vk), itself pre-smoothed at rate pre;
+// sub-stepped at 120 Hz. Its velocity and acceleration stay continuous, so dash starts/stops, knockback and hitstop no
+// longer jerk the view (the old exponential follow jumped its speed the instant Schiffy's did). Tuned with
+// review/feel/measure.js FM.cam(): run lag 0.46 -> 0.25 m, peak jerk -63%. Moves over `snap` m in one frame (respawn, room
+// change) snap. kick = decay rate of camKick (15-fx).
+const CAM_FOLLOW = { w: 20, wy: 11, lead: 0.1, vk: 6, pre: 18, snap: 6, kick: 13 };
+function followCam(p, dt) {
+  const F = CAM_FOLLOW;
+  if (CAM.vx == null || Math.hypot(p.x - CAM.tx, p.z - CAM.tz) > F.snap || Math.abs(p.y + 1.35 - CAM.ty) > F.snap) {
+    CAM.tx = p.x; CAM.tz = p.z; CAM.ty = p.y + 1.35; CAM.vx = CAM.vy = CAM.vz = 0; CAM.lvx = CAM.lvz = 0; CAM.px = CAM.gx = p.x; CAM.pz = CAM.gz = p.z;
+  }
+  // Schiffy's measured velocity (what he actually does on screen, so a hitstop freeze is a freeze), smoothed
+  const mvx = dt > 0 ? clamp((p.x - CAM.px) / dt, -30, 30) : 0, mvz = dt > 0 ? clamp((p.z - CAM.pz) / dt, -30, 30) : 0;
+  CAM.px = p.x; CAM.pz = p.z;
+  CAM.lvx = damp(CAM.lvx, mvx, F.vk, dt); CAM.lvz = damp(CAM.lvz, mvz, F.vk, dt);
+  const n = Math.max(1, Math.ceil(dt * 120)), h = dt / n, w = F.w, wy = F.wy;
+  // the goal itself is pre-smoothed (rate pre), so a sudden stop of Schiffy's reaches the spring as a curve, not a step
+  if (CAM.gx == null) { CAM.gx = p.x; CAM.gz = p.z; }
+  CAM.gx = damp(CAM.gx, p.x + CAM.lvx * F.lead, F.pre, dt); CAM.gz = damp(CAM.gz, p.z + CAM.lvz * F.lead, F.pre, dt);
+  const gx = CAM.gx, gz = CAM.gz, gy = p.y + 1.35;
+  for (let i = 0; i < n; i++) {
+    CAM.vx += (w * w * (gx - CAM.tx) - 2 * w * CAM.vx) * h; CAM.tx += CAM.vx * h;
+    CAM.vz += (w * w * (gz - CAM.tz) - 2 * w * CAM.vz) * h; CAM.tz += CAM.vz * h;
+    CAM.vy += (wy * wy * (gy - CAM.ty) - 2 * wy * CAM.vy) * h; CAM.ty += CAM.vy * h;
+  }
+}
 function updateCamera(dt) {
   const sens = 0.0024 * (SAVE.sens || 1);
   CAM.yaw -= mouse.dx * sens; CAM.pitch = clamp(CAM.pitch + mouse.dy * sens, -0.25, 1.1);
@@ -1364,7 +1469,7 @@ function updateCamera(dt) {
   const p = G.player; if (!p) return;
   // the boss fight pulls the camera back a little
   let d = CAM.dist * (G.boss ? 1.25 : 1) * (p.form > 0 ? 1.1 : 1);
-  CAM.tx = damp(CAM.tx, p.x, 14, dt); CAM.tz = damp(CAM.tz, p.z, 14, dt); CAM.ty = damp(CAM.ty, p.y + 1.35, 8, dt);
+  followCam(p, dt);
   // boss-defeat beat (G.deathCam from onBossDefeated, real time): turn to face the boss, pull in toward it, drain the
   // colour a little, then ease back to the normal chase camera as the slow-mo ends
   let foc = 0, fx = CAM.tx, fy = CAM.ty, fz = CAM.tz, lk = null;
@@ -1385,12 +1490,17 @@ function updateCamera(dt) {
   const [rx, rz] = camRight();
   let cx = fx + Math.sin(CAM.yaw) * cp * d + rx * 0.6, cy = fy + sp * d + 0.3, cz = fz + Math.cos(CAM.yaw) * cp * d + rz * 0.6;
   cy = Math.max(cy, 0.4);
-  // shake
-  const s = G.trauma * G.trauma * 0.35;
-  camera.position.set(cx + rand(-s, s), cy + rand(-s, s), cz + rand(-s, s));
+  // shake: trauma^2 drives smooth layered sines (was a fresh random offset every frame, i.e. jitter) plus a little roll;
+  // the hit kick (camKick, 15-fx) shoves the eye toward the blow and springs back
+  const s = G.trauma * G.trauma * 0.35, T = (CAM.st = (CAM.st || 0) + dt);
+  const nz = (a, b, c) => Math.sin(T * a + c) * 0.6 + Math.sin(T * b + c * 1.7) * 0.4;
+  const kx = CAM.kx || 0, ky = CAM.ky || 0, kz = CAM.kz || 0;
+  camera.position.set(cx + s * nz(43, 71, 0.3) + kx, cy + s * nz(51, 83, 1.9) + ky, cz + s * nz(47, 67, 4.1) + kz);
   if (lk) camera.lookAt(lk[0] + rx * 0.6, lk[1], lk[2] + rz * 0.6);
-  else camera.lookAt(fx + rx * 0.6, fy + (G.boss ? 1.3 : 0.2), fz + rz * 0.6);
+  else camera.lookAt(fx + rx * 0.6 + kx * 0.4, fy + (G.boss ? 1.3 : 0.2) + ky * 0.4, fz + rz * 0.6 + kz * 0.4);
+  if (s > 0) camera.rotateZ(G.trauma * G.trauma * 0.03 * nz(29, 53, 2.6));
   G.trauma = Math.max(0, G.trauma - dt * 1.6);
+  const kd = Math.exp(-CAM_FOLLOW.kick * dt); CAM.kx = kx * kd; CAM.ky = ky * kd; CAM.kz = kz * kd;
   updateOccluders(cx, cz, p);
   // keep the shadow camera on the player
   sun.position.set(p.x - 30, 50, p.z + 20); sun.target.position.set(p.x, 0, p.z);
@@ -2141,7 +2251,7 @@ function resetPlayerForRun() {
 }
 function placePlayer(x, z, face = Math.PI) {
   const p = G.player; p.x = x; p.z = z; p.y = 0; p.vx = p.vz = p.vy = 0; p.face = face; p.safe = [x, z]; p.atk = null; p.slam = false;
-  CAM.yaw = face + Math.PI; CAM.tx = x; CAM.tz = z; CAM.ty = 1.35; p.mesh.position.set(x, 0, z);
+  CAM.yaw = face + Math.PI; CAM.tx = x; CAM.tz = z; CAM.ty = 1.35; CAM.vx = CAM.vy = CAM.vz = 0; CAM.lvx = CAM.lvz = 0; CAM.px = CAM.gx = x; CAM.pz = CAM.gz = z; p.mesh.position.set(x, 0, z);
 }
 
 // nearest enemy within reach/arc of a direction (soft lock-on)
@@ -2165,12 +2275,32 @@ function inputDir() {
   const [fx, fz] = camFwd(), [rx, rz] = camRight();
   return [fx * iz + rx * ix, fz * iz + rz * ix, Math.min(1, l)];
 }
+// Controls feel (B4, 2026-11-08; before numbers in CLAUDE.md "Hit feel + controls"). Ground speed follows the stick with
+// exponential rates per second: accel (speeding up), decel (slowing / letting go), rev (target against the current motion);
+// air in the air. turn = facing rate when free, turnRec while an attack recovers. Attacks keep the old x0.25 speed and rate
+// 14 / 6 until their hit has landed (lunges, style slides and their reach are tuned to that), then the recovery eases the
+// speed cap from recSlow0 to recSlow1. Active frames = c.hit - activePre .. c.hit + active (attack time): a dash pressed
+// there waits for them to pass; wind-up and recovery dash-cancel at once. buf = input buffer for attack / dash / jump,
+// coyote = jump grace after walking off a ledge. dash = dash speed; at its end the speed is capped to dashExit x run speed.
+const MOVE_FEEL = { accel: 18, decel: 24, rev: 30, air: 8, turn: 24, turnRec: 12, recSlow0: 0.45, recSlow1: 0.85, active: 0.05, activePre: 0.03, buf: 0.15, coyote: 0.1, dash: 27, dashExit: 1.3 };
+// attack time inside the active frames (hit about to land / just landed)
+function atkActive(p) { const a = p.atk; if (!a || a.c.hit == null) return false; return a.t >= a.c.hit - MOVE_FEEL.activePre && a.t < a.c.hit + MOVE_FEEL.active; }
+// 0..1 through the recovery (after the active frames), -1 before it
+function atkRecovery(p) {
+  const a = p.atk; if (!a || !a.hitDone) return -1;
+  const r0 = a.c.hit + MOVE_FEEL.active; if (a.t < r0) return -1;
+  return clamp((a.t - r0) / Math.max(0.01, a.c.t - r0), 0, 1);
+}
 function updatePlayer(dt) {
-  const p = G.player, st = G.st;
+  const p = G.player, st = G.st, M = MOVE_FEEL;
   // KO'd: no control, just let the KO clip play out
   if (p.dead) { p.vx = damp(p.vx, 0, 6, dt); p.vz = damp(p.vz, 0, 6, dt); animatePlayer(p, dt, 0); return; }
   const [mx, mz, ml] = inputDir();
   const camA = Math.atan2(camFwd()[0], camFwd()[1]);
+  // input buffers: a press stays wanted for MOVE_FEEL.buf s until something can use it
+  const atkNow = mouse.pressed[0] || TOUCH.btn.has('attack');
+  p.atkBuf = atkNow ? M.buf : Math.max(0, (p.atkBuf || 0) - dt);
+  p.dashBuf = tapped('dash') ? M.buf : Math.max(0, (p.dashBuf || 0) - dt);
   p.inv = Math.max(0, p.inv - dt); p.dashCd = Math.max(0, p.dashCd - dt); p.boltCd = Math.max(0, p.boltCd - dt); p.novaCd = Math.max(0, p.novaCd - dt);
   p.hurtT = Math.max(0, p.hurtT - dt);
   // regen
@@ -2182,10 +2312,12 @@ function updatePlayer(dt) {
   if (tapped('treat')) useTreat();
 
   // --- dash ---
-  if (tapped('dash') && p.dashCd <= 0 && !p.slam) {
+  // a dash cancels a wind-up or a recovery at once; pressed during the active frames it waits (buffered) for them to pass
+  if (p.dashBuf > 0 && p.dashCd <= 0 && !p.slam && !atkActive(p)) {
     const dir = ml > 0.1 ? [mx / Math.hypot(mx, mz), mz / Math.hypot(mx, mz)] : [Math.sin(p.face), Math.cos(p.face)];
     // dashing against the way Schiffy faces = a backward barrel roll (no turn-around); roll towards the strafe side
     const back = ml > 0.1 && dir[0] * Math.sin(p.face) + dir[1] * Math.cos(p.face) < -0.4;
+    p.dashBuf = 0; if (!atkNow) p.atkBuf = 0;   // an attack pressed before the dash doesn't turn into a Dash Lunge
     p.dashDir = dir; p.dashT = back ? 0.24 : 0.2; p.dashCd = st.dashCd; p.inv = Math.max(p.inv, back ? 0.34 : 0.28); p.atk = null; p.dashHit = new Set(); p.sinceDash = 0;
     if (back) { p.rollT = ROLL_T; p.rollDir = dir[0] * Math.cos(p.face) - dir[1] * Math.sin(p.face) < 0 ? -1 : 1; }
     else p.face = Math.atan2(dir[0], dir[1]);
@@ -2195,27 +2327,35 @@ function updatePlayer(dt) {
   const sand = inSand(p);
   let speed = st.speed * (p.form > 0 ? 1.15 : 1) * (sand ? 0.55 : 1);
   // Dash Lunge (31-styles): attacking during a dash turns it into a lunging thrust (Zoomie Slash is attacking right after one)
-  if (p.dashT > 0 && p.rollT <= 0 && (mouse.pressed[0] || TOUCH.btn.has('attack'))) startLunge(p, camA);
+  if (p.dashT > 0 && p.rollT <= 0 && p.atkBuf > 0) { p.atkBuf = 0; startLunge(p, camA); }
   if (p.dashT > 0) {
     p.dashT -= dt;
-    const ds = 23 * (p.form > 0 ? 1.15 : 1);
+    const ds = M.dash * (p.form > 0 ? 1.15 : 1);
     p.vx = p.dashDir[0] * ds; p.vz = p.dashDir[1] * ds;
     if (Math.random() < 0.8) spr(p.x, p.y + 0.6, p.z, { tex: p.form > 0 ? 'star' : 'puff', col: p.form > 0 ? 0xffd3f0 : 0xffffff, size: 0.45, life: 0.35, add: p.form > 0 });
     dashTouches(p);
+    // the dash ends crisply: no long slide-out at dash speed
+    if (p.dashT <= 0) { const v = Math.hypot(p.vx, p.vz), cap = speed * M.dashExit; if (v > cap) { p.vx *= cap / v; p.vz *= cap / v; } }
   } else {
     // --- attacks ---
     updateAttack(p, dt, mx, mz, ml, camA);
-    const slow = p.atk ? 0.25 : p.slam ? 0 : (p.charge || 0) > 0.1 ? 0.4 : 1;
+    const rec = atkRecovery(p);
+    const slow = p.atk ? (rec >= 0 ? lerp(M.recSlow0, M.recSlow1, rec) : 0.25) : p.slam ? 0 : (p.charge || 0) > 0.1 ? 0.4 : 1;
     const tx = mx * speed * slow, tz = mz * speed * slow;
-    const acc = p.onGround ? 14 : 6;
+    let acc;
+    if (p.atk && rec < 0) acc = p.onGround ? 14 : 6;   // attack motion (lunges, slides) as tuned
+    else if (!p.onGround) acc = M.air;
+    else if (tx * p.vx + tz * p.vz < 0) acc = M.rev;
+    else acc = tx * tx + tz * tz < p.vx * p.vx + p.vz * p.vz ? M.decel : M.accel;
     p.vx = damp(p.vx, tx, acc, dt); p.vz = damp(p.vz, tz, acc, dt);
-    if (!p.atk && ml > 0.1) p.face += angDiff(p.face, Math.atan2(mx, mz)) * Math.min(1, dt * 14);
+    const tk = !p.atk ? M.turn : rec >= 0 ? M.turnRec : 0;
+    if (tk && ml > 0.1) p.face += angDiff(p.face, Math.atan2(mx, mz)) * Math.min(1, dt * tk);
   }
   // spells
   updateSpells(p, dt, camA);
 
   // --- jump / gravity ---
-  if (tapped('jump')) p.jumpBuf = 0.14; else p.jumpBuf = Math.max(0, p.jumpBuf - dt);
+  if (tapped('jump')) p.jumpBuf = M.buf; else p.jumpBuf = Math.max(0, p.jumpBuf - dt);
   if (p.jumpBuf > 0 && !p.slam) {
     if (p.onGround || p.coyote > 0) { p.vy = sand ? 7.5 : 10; p.onGround = false; p.coyote = 0; p.jumpBuf = 0; SFX.jump(); burst(p.x, p.y + 0.1, p.z, 5, { tex: 'puff', size: 0.4, speed: 2.5, life: 0.4 }); }
     else if (p.airJ > 0) { p.vy = 9; p.airJ--; p.jumpBuf = 0; SFX.jump(); burst(p.x, p.y + 0.3, p.z, 8, { tex: 'star', col: 0xfff0a0, size: 0.25, speed: 3, life: 0.5, add: true }); p.flip = 0.35; }
@@ -2229,10 +2369,10 @@ function updatePlayer(dt) {
   const gnd = groundAt(p.x, p.z, p.y);
   if (p.y <= gnd && p.vy <= 0) {
     if (!p.onGround) { if (p.slam) landSlam(p); else if (p.vy < -8) { burst(p.x, gnd + 0.1, p.z, 6, { tex: 'puff', size: 0.45, speed: 3, life: 0.4 }); if (Math.hypot(p.vx, p.vz) < 2 && !p.atk) heroShot('Land', 0.22); } p.squash = 0.18; }
-    p.y = gnd; p.vy = 0; p.onGround = true; p.airJ = st.airJumps; p.coyote = 0.1; p.airHits = 0;
+    p.y = gnd; p.vy = 0; p.onGround = true; p.airJ = st.airJumps; p.coyote = M.coyote; p.airHits = 0;
     if (gnd === 0 && Math.hypot(p.x, p.z) < W.R - 1.5) p.safe = [p.x, p.z];
   } else if (p.y > gnd + 0.05 || gnd === -Infinity) {
-    if (p.onGround) { p.onGround = false; p.coyote = 0.1; }
+    if (p.onGround) { p.onGround = false; p.coyote = M.coyote; }
     p.coyote = Math.max(0, p.coyote - dt);
   }
   // fell off the isle
@@ -2248,15 +2388,16 @@ function updateAttack(p, dt, mx, mz, ml, camA) {
   const st = G.st;
   p.comboT = Math.max(0, p.comboT - dt);
   if (p.comboT <= 0 && !p.atk) p.comboI = 0;
-  const want = mouse.pressed[0] || TOUCH.btn.has('attack'), dirA = ml > 0.1 ? Math.atan2(mx, mz) : camA;
+  // p.atkBuf (updatePlayer): a press is wanted for MOVE_FEEL.buf s, so one made during a backward roll or a slam isn't lost
+  const want = p.atkBuf > 0, dirA = ml > 0.1 ? Math.atan2(mx, mz) : camA;
   p.sinceDash = (p.sinceDash ?? 9) + dt;
   // Comet Thrust (isle 2+, 31-styles): holding attack with no swing running charges the wand; release lunges
-  if (updateCharge(p, dt, mouse.down[0] || TOUCH.btn.has('attack:held'), dirA)) return;
+  if (updateCharge(p, dt, mouse.down[0] || TOUCH.btn.has('attack:held'), dirA)) { p.atkBuf = 0; return; }
   if (want) {
-    if (!p.onGround && p.y - groundAt(p.x, p.z, p.y) > 1.3 && !p.slam && !p.atk) { airAttack(p, dirA); return; }   // two air swipes, then the slam (31-styles)
-    if (p.atk) { if (p.atk.t > 0) p.queued = true; }   // an attack that started this frame (Zoomie Slash) isn't a queue
-    else if (p.sinceDash < 0.2 && p.rollT <= 0 && styleOn('zoomie')) startZoomie(p, dirA);
-    else startSwing(p, dirA);
+    if (!p.onGround && p.y - groundAt(p.x, p.z, p.y) > 1.3 && !p.slam && !p.atk) { p.atkBuf = 0; airAttack(p, dirA); return; }   // two air swipes, then the slam (31-styles)
+    if (p.atk) { if (p.atk.t > 0) { p.queued = true; p.atkBuf = 0; } }   // an attack that started this frame (Zoomie Slash) isn't a queue
+    else if (p.sinceDash < 0.2 && p.rollT <= 0 && styleOn('zoomie')) { p.atkBuf = 0; startZoomie(p, dirA); }
+    else { p.atkBuf = 0; startSwing(p, dirA); }
   }
   if (!p.atk) return;
   const a = p.atk, c = a.c;
@@ -2699,6 +2840,7 @@ function startThrust(p, dirA) {
 // everything in a corridor ahead of (x,z): along [-r, len + r], across within halfW
 function lineHit(x, z, face, len, halfW, y, base, kb) {
   const fx = Math.sin(face), fz = Math.cos(face); let n = 0;
+  const F = HIT_FEEL[HIT_TIER = hitTierNow(false, false)];
   for (const e of G.enemies) {
     if (!targetable(e)) continue;
     const dx = e.x - x, dz = e.z - z, along = dx * fx + dz * fz, side = Math.abs(dx * fz - dz * fx);
@@ -2708,9 +2850,10 @@ function lineHit(x, z, face, len, halfW, y, base, kb) {
     damageEnemy(e, dmg, crit, kb, x - fx, z - fz, 'melee');   // knocked along the line
     n++;
   }
+  HIT_TIER = 'light';
   if (n) {
     const p = G.player;
-    hitstop(0.07); addTrauma(0.22); gainMeter(n * 4);
+    hitstop(F.stop); addTrauma(F.trauma); gainMeter(n * 4);
     p.sparkle = Math.min(p.maxSparkle, p.sparkle + n * 3);
   }
   return n;
@@ -3203,6 +3346,7 @@ function faceTick(dt) {
 // melee arc/area hit centred on (x,z). arc = TAU for a full circle. vertical reach ±1.6 m around y.
 function meleeHit(x, z, face, reach, arc, base, kb, y = 0, area = false, spell = false) {
   let n = 0;
+  const tier = HIT_TIER = hitTierNow(area, spell), F = HIT_FEEL[tier];
   for (const e of G.enemies) {
     if (!targetable(e)) continue;
     const dx = e.x - x, dz = e.z - z, d = Math.hypot(dx, dz);
@@ -3213,9 +3357,10 @@ function meleeHit(x, z, face, reach, arc, base, kb, y = 0, area = false, spell =
     damageEnemy(e, dmg, crit, kb, x, z, spell ? 'spell' : 'melee');
     n++;
   }
+  HIT_TIER = 'light';
   if (n) {
     const p = G.player;
-    hitstop(area ? 0.06 : 0.045); addTrauma(area ? 0.2 : 0.12);
+    hitstop(F.stop); addTrauma(F.trauma);
     gainMeter(n * (spell ? 2 : 4));
     p.sparkle = Math.min(p.maxSparkle, p.sparkle + n * 3);
     if (!p.onGround && G.st.bouncy) p.airJ = Math.max(p.airJ, G.st.airJumps);
@@ -3234,19 +3379,23 @@ function damageEnemy(e, dmg, crit, kb, sx, sz, src, hy) {
   e.hp -= dmg; e.flashT = 0.12; e.lastHit = G.time;
   const lost = Math.max(0, before - Math.max(0, e.hp));
   if (!e.boss && !(e.wind > 0) && !e.act) e.hurtT = 0.25;
-  popText(nx, ny, nz, (crit ? lost + '!' : lost) + '', crit ? 'crit' : src === 'zap' ? 'zap' : '', e);
-  (crit ? SFX.crit : SFX.hit)();
+  // hit feel (HIT_FEEL, 15-fx): the tier of the blow sets the number's punch, the victim's flinch, the camera kick and the sound
+  const tier = src === 'melee' || src === 'spell' ? HIT_TIER : 'light', F = HIT_FEEL[tier], kills = e.hp <= 0 && !e.boss;
+  popText(nx, ny, nz, (crit ? lost + '!' : lost) + '', (crit ? 'crit' : src === 'zap' ? 'zap' : '') + (tier === 'heavy' || tier === 'smash' ? ' heavy' : '') + (kills ? ' kill' : ''), e, Math.max(F.punch, kills ? HIT_FEEL.kill.punch : 0) + (crit ? 0.1 : 0));
+  hitSfx(tier, crit, src);
+  flinchHit(e, sx, sz, (kills ? HIT_FEEL.kill.flinch : F.flinch) * (src === 'zap' ? 0.4 : 1));
+  if (src === 'melee' || tier === 'spell') camKick(nx, ny, nz, F.kick);
   if (src === 'melee') {
     // impact at the contact point (enemy surface facing the hit), not the enemy's centre
     const dx = sx - e.x, dz = sz - e.z, d = Math.hypot(dx, dz) || 1, c = Math.min(e.r * 0.7, d * 0.5);
-    impactFx(e.x + dx / d * c, e.y + e.h * 0.55, e.z + dz / d * c, crit, G.player.form > 0 ? 0xffb0e0 : 0xfff2c8);
+    impactFx(e.x + dx / d * c, e.y + e.h * 0.55, e.z + dz / d * c, crit, G.player.form > 0 ? 0xffb0e0 : 0xfff2c8, tier);
   }
   else burst(e.x, e.y + e.h * 0.55, e.z, crit ? 7 : 4, { tex: crit ? 'star' : 'puff', col: crit ? 0xffe08a : 0xffffff, size: crit ? 0.32 : 0.28, speed: 4, life: 0.35, add: crit });
   // Whimsy splash: 40% to neighbours, through damageEnemy so shields/guards apply and the number shows (was a silent hp -=)
   if (crit && hasRelic('whims')) { groundRing(e.x, e.z, 0.4, 2.2, 0.25, 0xffd36e, { y: e.y }); for (const o of G.enemies.slice()) if (o !== e && targetable(o) && dist2(o.x, o.z, e.x, e.z) < 2.2 * 2.2) damageEnemy(o, Math.max(1, Math.round(dmg * 0.4)), false, 0, e.x, e.z, 'zap'); }
   // knockback + stagger (poise resists light hits)
   if (kb && !e.boss) {
-    const dx = e.x - sx, dz = e.z - sz, d = Math.hypot(dx, dz) || 1, k = kb * (e.poise ? 0.25 : 1) * (e.elite ? 0.5 : 1);
+    const dx = e.x - sx, dz = e.z - sz, d = Math.hypot(dx, dz) || 1, k = kb * (e.poise ? 0.25 : KB_LIGHT) * (e.elite ? 0.5 : 1);
     e.kx = dx / d * k; e.kz = dz / d * k;
     if (!e.poise || kb >= 7) { e.stun = Math.max(e.stun, kb >= 7 ? 0.45 : 0.22); e.wind = 0; }
   }
@@ -3256,8 +3405,12 @@ function killEnemy(e) {
   if (e.dead) return;
   e.dead = true; e.deathT = 0; killTells(e);
   const p = G.player;
+  if (e.mesh) e.mesh.scale.set(1, 1, 1);   // drop any flinch squash (dead enemies aren't flinch-ticked)
   if (e.boss) { onBossDefeated(e); return; }
-  SFX.die(); hitstop(0.05);
+  // the kill pop (HIT_FEEL.kill): a longer stop than the hit, a shake + kick, a heavier sound and a flash of stars
+  SFX.die(); killSfx(); hitstop(HIT_FEEL.kill.stop); addTrauma(HIT_FEEL.kill.trauma);
+  camKick(e.x, e.y + e.h * 0.55, e.z, HIT_FEEL.kill.kick);
+  killPopFx(e.x, e.y + e.h * 0.55, e.z, e.def.tint, Math.max(0, groundAt(e.x, e.z, e.y + 0.5)));
   burst(e.x, e.y + e.h * 0.5, e.z, 14, { tex: 'puff', col: 0xffffff, size: 0.55, speed: 5, life: 0.5 });
   burst(e.x, e.y + e.h * 0.5, e.z, 6, { tex: 'heart', col: e.def.tint, size: 0.3, speed: 4, up: 2, life: 0.7 });
   if (G.st.nom) healPlayer(G.st.nom * G.st.healMul);
@@ -3788,7 +3941,7 @@ function updateEnemies(dt) {
       if (k >= 1) { scene.remove(e.mesh); scene.remove(e.blob); if (e.ring) e.ring.kill = true; G.enemies.splice(i, 1); }
       continue;
     }
-    if (e.boss) { (e.tick || updateBoss)(e, dt); platBoss(e); continue; }
+    if (e.boss) { (e.tick || updateBoss)(e, dt); platBoss(e); flinchTick(e, dt); continue; }
     if (e.spawnT > 0) { e.spawnT -= dt; const k = 1 - Math.max(0, e.spawnT) / 0.8; e.rig.scale.setScalar((e.elite ? 1.3 : 1) * (k < 0.7 ? k / 0.7 * 1.15 : 1.15 - (k - 0.7) / 0.3 * 0.15)); placeEnemyMesh(e); continue; }
     const dx = p.x - e.x, dz = p.z - e.z, d = Math.hypot(dx, dz), toP = Math.atan2(dx, dz);
     e.flashT = Math.max(0, e.flashT - dt);
@@ -3812,7 +3965,33 @@ function updateEnemies(dt) {
     keepIn(e, 1.2);
     animEnemy(e, dt);
     placeEnemyMesh(e);
+    flinchTick(e, dt);
   }
+}
+// ---------- hit flinch (B3, 2026-11-08) ----------
+// Visual only: a hit shoves the mesh back along the blow by HIT_FEEL[tier].flinch / enemyWeight metres at once (so it reads
+// through the hitstop freeze), squashes it a little, then an underdamped spring (FLINCH k / c: one small bounce) brings it
+// back; while the hitstop holds, the victim shivers. Position, AI and hitboxes never see it. Knockback itself (damageEnemy)
+// is unchanged apart from KB_LIGHT for light (poise 0) mobs; poise types keep x0.25, elites x0.5, bosses none.
+const FLINCH = { k: 260, c: 16, shiver: 0.035 }, KB_LIGHT = 1.15;
+const enemyWeight = e => (e.boss ? 7 : (e.poise ? 2.2 : 1) * (e.elite ? 1.5 : 1) * clamp(e.r / 0.55, 1, 1.6));
+function flinchHit(e, sx, sz, amt) {
+  if (!e.mesh || !(amt > 0)) return;
+  const dx = e.x - sx, dz = e.z - sz, d = Math.hypot(dx, dz);
+  if (d > 0.01) { e.fdx = dx / d; e.fdz = dz / d; } else if (e.fdx == null) { e.fdx = -Math.sin(e.face); e.fdz = -Math.cos(e.face); }
+  e.fo = Math.min(0.6, Math.max(e.fo || 0, 0) + amt / enemyWeight(e)); e.fv = 0; e.fShiver = e.fo;
+}
+// after the mesh has been placed this frame (placeEnemyMesh / a boss's own anim), never on dead enemies
+function flinchTick(e, dt) {
+  if (!e.fo && !e.fv) return;
+  e.fv += (-FLINCH.k * e.fo - FLINCH.c * e.fv) * dt; e.fo += e.fv * dt;
+  if (Math.abs(e.fo) < 0.002 && Math.abs(e.fv) < 0.05) { e.fo = e.fv = 0; e.mesh.scale.set(1, 1, 1); return; }
+  let ox = e.fdx * e.fo, oz = e.fdz * e.fo;
+  if (G.hitstop > 0 && e.fShiver) { const s = Math.sin(performance.now() * 0.09) * FLINCH.shiver * Math.min(1, e.fShiver / 0.2); ox += -e.fdz * s; oz += e.fdx * s; }
+  else e.fShiver = 0;
+  e.mesh.position.x += ox; e.mesh.position.z += oz;
+  const q = clamp(e.fo * 0.45, -0.06, 0.16);
+  e.mesh.scale.set(1 + q * 0.6, 1 - q, 1 + q * 0.6);
 }
 function placeEnemyMesh(e) {
   e.mesh.position.set(e.x, e.y, e.z); e.mesh.rotation.y = e.face;
