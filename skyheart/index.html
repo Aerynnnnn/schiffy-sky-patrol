@@ -652,10 +652,11 @@ const COMBO = [
 const AIR_SLAM = { dmg: 26, r: 3.2, kb: 8 };
 // Combat styles that unlock as a run goes deeper (31-styles.js): announced on the isle that unlocks them, practisable
 // in the hub once a run has reached that depth (SAVE.best).
+// (isles 2 / 4 / 6 since the 15-isle run, 2026-11-08; were 3 / 5 / 9)
 const STYLES = [
-  { id: 'thrust', depth: 3, icon: '☄️', name: 'Comet Thrust', how: 'Hold attack to charge up, let go to lunge like a comet!' },
-  { id: 'pounce', depth: 5, icon: '🌠', name: 'Meteor Pounce', how: 'Your combo grows a 4th hit: leap up and smash down!' },
-  { id: 'zoomie', depth: 9, icon: '💫', name: 'Zoomie Slash', how: 'Attack just after a dash ends for a sliding sweep!' },
+  { id: 'thrust', depth: 2, icon: '☄️', name: 'Comet Thrust', how: 'Hold attack to charge up, let go to lunge like a comet!' },
+  { id: 'pounce', depth: 4, icon: '🌠', name: 'Meteor Pounce', how: 'Your combo grows a 4th hit: leap up and smash down!' },
+  { id: 'zoomie', depth: 6, icon: '💫', name: 'Zoomie Slash', how: 'Attack just after a dash ends for a sliding sweep!' },
 ];
 const COMBO_POUNCE = { dmg: 30, reach: 3.0, arc: 2.6, t: 0.62, hit: 0.42, lunge: 2.0, name: 'pounce', kb: 9 };
 const THRUST = { dmg: 40, reach: 5.2, width: 1.4, t: 0.42, hit: 0.18, kb: 10, charge: 0.4, name: 'thrust' };
@@ -778,32 +779,46 @@ const ENEMIES = {
 // Treat Jar drops (35-combat killEnemy): chance per run kill, never from bosses or practice plushies;
 // x1.75 while Schiffy has no jars left (normal 7%, elite 26%)
 const TREAT_DROP = 0.04, TREAT_DROP_ELITE = 0.15, TREAT_DROP_EMPTY = 1.75;
-const BIOME_LEN = 8; // isles per biome; the last one is its boss
+// isles per biome; the last one is its boss. 5 since 2026-11-08 (user: shorter run, 24 -> 15 isles; it was 8)
+const BIOME_LEN = 5;
 const biomeOf = depth => Math.min(3, Math.floor((depth - 1) / BIOME_LEN) + 1);
 const localDepth = depth => ((depth - 1) % BIOME_LEN) + 1;
 // ---------- depth curve ----------
-// One curve over the whole run (global depth 1-24), so monsters keep getting tougher instead of resetting each biome.
-// Intent: isle 1 stays gentle (x1 on everything), the isle-8 and isle-16 bosses are real fights, the Starlight Observatory
-// is clearly harder, and the curve stays a step behind the player's own growth (a level-up card about every isle, a chip
-// every other isle, keepsakes, the Kernel Tree: roughly +4.5% damage and +5 max HP per isle), so a good build pulls ahead.
-// Used by makeEnemy (HP, damage, speed, wind-ups via e.windMul), wavesFor (wave size, surprise elites), the bosses and the
-// biome hazards. Time-to-kill checks at isles 1/8/12/16/20/24 are in CLAUDE.md.
-const CURVE_HP = 0.12, CURVE_HP2 = 0.002;              // enemy HP x(1 + 0.12 k + 0.002 k^2), k = depth - 1: x1.9 at isle 8, x3.3 at 16, x4.8 at 24
-const CURVE_DMG = 0.06, CURVE_DMG2 = 0.0004;           // enemy damage: x1.4 at isle 8, x2.0 at 16, x2.6 at 24
-const CURVE_SPEED = 0.012, CURVE_SPEED_MAX = 0.25;     // move speed +1.2% per isle, at most +25%
-const CURVE_WIND = 0.012, CURVE_WIND_MIN = 0.75;       // wind-ups 1.2% shorter per isle (never under 75%, telegraphs stay readable); cooldowns recover 1/sqrt of that faster
-const CURVE_ELITE_FROM = 6, CURVE_ELITE = 0.03, CURVE_ELITE_MAX = 0.35;   // chance per wave of a surprise elite in a plain fight: 6% at isle 8, 30% at 16, 35% from 18
-const CURVE_EXTRA_EVERY = 8;                           // +1 enemy in every wave per biome cleared (isles 9-16: +1, 17-24: +2)
-const BOSS_HP_CURVE = 0.045, BOSS_TEMPO = 0.01;        // boss HP x(1 + 0.045 k) on top of its base (x1.3 / x1.7 / x2.0 for isles 8 / 16 / 24); attack tempo +1% per isle past 8
+// One curve over the whole run, so monsters keep getting tougher instead of resetting each biome. It is written in "curve
+// isles" (cd 1-24: the old 24-isle run's depth). curveDepth maps the 15-isle run onto it so every boss and the fight before it
+// are as tough as on the 24-isle run: isle 1 = cd 1 (x1 on everything), isles 2/3/4 of a biome = cd 3/5/7 of that biome's
+// old 8, the boss = cd 8 (isles 5 / 10 / 15 = cd 8 / 16 / 24, the old Nocturne / Sultana / Chronowl isles).
+// Intent: isle 1 stays gentle, the bosses are real fights, the Starlight Observatory is clearly harder, and the curve stays a
+// step behind the player's own growth (a level-up card about every curve isle, a chip every other, keepsakes, the Kernel
+// Tree: roughly +4.5% damage and +5 max HP per curve isle; RUN_PACE pays each real isle ~1.75 curve isles' worth), so a
+// good build pulls ahead. Used by makeEnemy (HP, damage, speed, wind-ups via e.windMul), wavesFor (wave size, surprise
+// elites), the bosses and the biome hazards. Time-to-kill checks are in CLAUDE.md.
+const CURVE_AT = [1, 3, 5, 7, 8], CURVE_BIOME = 8;   // curve isle of local isle 1-5, curve isles per biome
+const curveDepth = depth => (biomeOf(depth) - 1) * CURVE_BIOME + CURVE_AT[clamp(localDepth(depth), 1, BIOME_LEN) - 1];
+const CURVE_HP = 0.12, CURVE_HP2 = 0.002;              // enemy HP x(1 + 0.12 k + 0.002 k^2), k = cd - 1: x1.9 at cd 8, x3.3 at 16, x4.8 at 24
+const CURVE_DMG = 0.06, CURVE_DMG2 = 0.0004;           // enemy damage: x1.4 at cd 8, x2.0 at 16, x2.6 at 24
+const CURVE_SPEED = 0.012, CURVE_SPEED_MAX = 0.25;     // move speed +1.2% per curve isle, at most +25%
+const CURVE_WIND = 0.012, CURVE_WIND_MIN = 0.75;       // wind-ups 1.2% shorter per curve isle (never under 75%, telegraphs stay readable); cooldowns recover 1/sqrt of that faster
+const CURVE_ELITE_FROM = 6, CURVE_ELITE = 0.03, CURVE_ELITE_MAX = 0.35;   // chance per wave of a surprise elite in a plain fight: 3% at cd 7 (isle 4), 21% at cd 13 (isle 8), 35% from cd 18 (isle 12)
+const CURVE_EXTRA_EVERY = 8;                           // +1 enemy in every wave per biome cleared (isles 6-10: +1, 11-15: +2)
+const BOSS_HP_CURVE = 0.045, BOSS_TEMPO = 0.01;        // boss HP x(1 + 0.045 k) on top of its base (x1.3 / x1.7 / x2.0 for isles 5 / 10 / 15); attack tempo +1% per curve isle past cd 8
 function enemyScale(depth) {
-  const k = Math.max(0, depth - 1);
+  const cd = curveDepth(Math.max(1, depth)), k = cd - 1;
   return { hp: 1 + CURVE_HP * k + CURVE_HP2 * k * k, dmg: 1 + CURVE_DMG * k + CURVE_DMG2 * k * k, speed: 1 + Math.min(CURVE_SPEED_MAX, CURVE_SPEED * k),
-    wind: Math.max(CURVE_WIND_MIN, 1 - CURVE_WIND * k), elite: Math.min(CURVE_ELITE_MAX, Math.max(0, CURVE_ELITE * (depth - CURVE_ELITE_FROM))), extra: Math.floor(k / CURVE_EXTRA_EVERY) };
+    wind: Math.max(CURVE_WIND_MIN, 1 - CURVE_WIND * k), elite: Math.min(CURVE_ELITE_MAX, Math.max(0, CURVE_ELITE * (cd - CURVE_ELITE_FROM))), extra: Math.floor(k / CURVE_EXTRA_EVERY) };
 }
-function bossScale(depth) { const s = enemyScale(depth); return { hp: 1 + BOSS_HP_CURVE * Math.max(0, depth - 1), dmg: s.dmg, speed: 1 + BOSS_TEMPO * Math.max(0, depth - 8) }; }
+function bossScale(depth) { const s = enemyScale(depth), cd = curveDepth(Math.max(1, depth)); return { hp: 1 + BOSS_HP_CURVE * (cd - 1), dmg: s.dmg, speed: 1 + BOSS_TEMPO * Math.max(0, cd - 8) }; }
+// ---------- run pace (2026-11-08) ----------
+// The 15-isle run has ~10 fight isles where the 24-isle one had ~16, so each isle pays more and the player still reaches
+// each boss about as strong as before: Stardust and Kibble per kill (xp, coin), the chance of a second loot roll on a cleared
+// fight (loot: rolls its reward table again), the chance of a second Keepsake pick from an elite or a chest (relic), Treat
+// Jar drops per kill (treat), Heart Shards per cleared fight / elite (were 1 / 2) and per boss (unchanged).
+// Checked with review/balance/econ.mjs (old vs new, arriving at each boss); numbers in CLAUDE.md.
+const RUN_PACE = { xp: 1.85, coin: 1.8, loot: 0.75, relic: 1, treat: 1.75, shardFight: 2, shardElite: 3, boss: [5, 7, 10] };
 // wave tables by run depth (1-based room index): each entry = enemy ids for one wave
 function wavesFor(depth, elite) {
-  const L = localDepth(depth), b2 = biomeOf(depth) === 2, b3 = biomeOf(depth) === 3;
+  // L = the local isle on the curve's old 8-isle biome (1, 3, 5, 7), so wave sizes and pools match the old isle
+  const L = CURVE_AT[localDepth(depth) - 1], b2 = biomeOf(depth) === 2, b3 = biomeOf(depth) === 3;
   const pool = b3 ? (L <= 2 ? ['windup', 'windup', 'scope', 'cuckoo'] : L <= 4 ? ['windup', 'scope', 'cuckoo', 'cog', 'moth'] : ['windup', 'scope', 'cuckoo', 'cog', 'cog', 'sylph', 'cone'])
     : !b2 ? (L <= 2 ? ['puffling', 'puffling', 'moth'] : L <= 4 ? ['puffling', 'wisp', 'moth', 'thump'] : ['puffling', 'wisp', 'moth', 'thump', 'thump'])
     : (L <= 2 ? ['scarab', 'scarab', 'cone', 'sylph'] : L <= 4 ? ['scarab', 'lolly', 'cone', 'sylph', 'puffling'] : ['scarab', 'lolly', 'cone', 'cone', 'sylph', 'thump']);
@@ -845,7 +860,7 @@ const ROOM_KINDS = {
 const REWARDS = {
   chip: { name: 'Chip', icon: '🔷' }, coins: { name: 'Kibble', icon: '🦴' }, treat: { name: 'Treat Jar', icon: '🍯' }, relic: { name: 'Keepsake', icon: '🎀' }, card: { name: 'Level Up', icon: '🌟' },
 };
-const RUN_LEN = 24; // isles per run: Lullaby Meadows (1-8, Nocturne), Sundae Dunes (9-16, Sultana), Starlight Observatory (17-24, Chronowl)
+const RUN_LEN = 3 * BIOME_LEN; // 15 isles per run: Lullaby Meadows (1-5, Nocturne), Sundae Dunes (6-10, Sultana), Starlight Observatory (11-15, Chronowl)
 const BIOME_NAMES = { 1: 'Lullaby Meadows', 2: 'Sundae Dunes', 3: 'Starlight Observatory' };
 // ---------- renderer, sky, toon materials, model loading ----------
 const canvas = $('c');
@@ -856,6 +871,33 @@ renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadow
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 900);
 const PAL = { skyTop: 0x8d8ee6, skyMid: 0xc9a9e8, skyLow: 0xffc9b0, fog: 0xe8c3d6, ink: 0x3a2420, grass: 0x9fe08a, rock: 0xc7a7c9 };
+// ---------- dusk grade (2026-11-08, user: "brightness needs to be toned down ... contrast too high") ----------
+// One colour grade at the end of every built-in material's fragment shader (appended to the fog chunk, so fogged colour is
+// graded too) and in the sky dome: exposure down, saturation down, a soft shoulder that rolls bright values and additive
+// glows off before they blow out to white, a gentle contrast squeeze toward a dusk mid and a faint lavender cast.
+// Telegraphs opt out (material.defines.SH_NOGRADE, see noGrade in 15-fx) so danger rings keep their full punch on the
+// dimmer floor. Tune here, never per colour.
+const LOOK = { expo: 1.0, sat: 0.95, knee: 0.74, shoulder: 1.2, con: 0.97, pivot: 0.4, tint: [1.0, 0.985, 1.01], hemi: 0.6, sun: 0.6, tellSat: 1.35 };
+const f3 = v => v.toFixed(4);
+const GRADE_GLSL = `vec3 shGrade(vec3 c) {
+  c *= ${f3(LOOK.expo)};
+  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  c = mix(vec3(l), c, ${f3(LOOK.sat)});
+  vec3 o = max(c - ${f3(LOOK.knee)}, 0.0);
+  c = min(c, vec3(${f3(LOOK.knee)})) + o / (1.0 + o * ${f3(LOOK.shoulder)});
+  c = ${f3(LOOK.pivot)} + (c - ${f3(LOOK.pivot)}) * ${f3(LOOK.con)};
+  return max(c * vec3(${LOOK.tint.map(f3).join(', ')}), 0.0);
+}
+`;
+THREE.ShaderChunk.common += '\n' + GRADE_GLSL;
+// telegraphs get the opposite: a saturation boost (LOOK.tellSat), so a pink warning keeps its distance from pale sand
+THREE.ShaderChunk.fog_fragment += `
+#ifndef SH_NOGRADE
+gl_FragColor.rgb = shGrade(gl_FragColor.rgb);
+#else
+gl_FragColor.rgb = clamp(mix(vec3(dot(gl_FragColor.rgb, vec3(0.2126, 0.7152, 0.0722))), gl_FragColor.rgb, ${f3(LOOK.tellSat)}), 0.0, 1.0);
+#endif
+`;
 scene.fog = new THREE.Fog(PAL.fog, 60, 260);
 
 function resize() {
@@ -865,8 +907,10 @@ function resize() {
 addEventListener('resize', resize); resize();
 
 // lights: warm sunset key + lilac sky fill
-const hemi = new THREE.HemisphereLight(0xfff0f6, 0xa58ac8, 0.62); scene.add(hemi);
-const sun = new THREE.DirectionalLight(0xffe2c4, 0.78);
+// dusk grade: 0.62 + 0.78 lit a sunny face at ~1.37x its albedo (pastels clipped toward white); LOOK.hemi/sun bring that
+// to ~1.15x, with more of it from the even sky fill, so the light/shadow step is softer too
+const hemi = new THREE.HemisphereLight(0xfff0f6, 0xa58ac8, LOOK.hemi); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffe2c4, LOOK.sun);
 sun.position.set(-30, 50, 20); sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left: -26, right: 26, top: 26, bottom: -26, near: 1, far: 140 });
@@ -879,13 +923,15 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(600, 32, 16), new THREE.Shad
   uniforms: { top: { value: new THREE.Color(PAL.skyTop) }, mid: { value: new THREE.Color(PAL.skyMid) }, low: { value: new THREE.Color(PAL.skyLow) }, under: { value: new THREE.Color(0xf3b6c8) } },
   vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
   fragmentShader: `uniform vec3 top, mid, low, under; varying vec3 vP;
+    ${GRADE_GLSL}
     void main(){ float y = vP.y; vec3 c = y > 0.0 ? mix(low, mix(mid, top, smoothstep(0.25, 0.85, y)), smoothstep(0.0, 0.3, y)) : mix(low, under, smoothstep(0.0, -0.4, y));
-    gl_FragColor = vec4(c, 1.0); }`,
+    gl_FragColor = vec4(shGrade(c), 1.0); }`,
 }));
 sky.renderOrder = -10; scene.add(sky);
 
 // toon ramp + materials
-const toonGrad = new THREE.DataTexture(new Uint8Array([125, 195, 245]), 3, 1, THREE.LuminanceFormat);
+// softer step (2026-11-08 dusk grade): was 125 / 195 / 245, the shadow band sat 49% under the lit one
+const toonGrad = new THREE.DataTexture(new Uint8Array([146, 196, 236]), 3, 1, THREE.LuminanceFormat);
 toonGrad.minFilter = toonGrad.magFilter = THREE.NearestFilter; toonGrad.needsUpdate = true;
 const matCache = {};
 const toon = c => matCache[c] || (matCache[c] = new THREE.MeshToonMaterial({ color: c, gradientMap: toonGrad }));
@@ -1107,8 +1153,14 @@ function updateParts(dt) {
 // overlaps it (circle: dist < R + p.r; stripe/band: |offset| < half-width + p.r), and the warning's life ends on the
 // frame the hit is checked (use windSecs() for wind-ups, divide by the boss's attack tempo for boss attacks).
 const RINGS = [];
+// telegraph materials skip the dusk grade (10-renderer LOOK), so warnings stay at full strength on the dimmer floor
+const noGrade = m => { m.defines = Object.assign(m.defines || {}, { SH_NOGRADE: '' }); return m; };
+// and painted ground rings are a little more opaque than authored: on the darker floor the same opacity changed the floor
+// less (telegraph dE check, review/look/cap.js LK.tele)
+const TELL_OP = 1.2;
 function groundRing(x, z, r0, r1, life, col, o = {}) {
-  const m = new THREE.MeshBasicMaterial({ color: col, map: o.map || null, transparent: true, opacity: o.op ?? 0.85, depthWrite: false, side: THREE.DoubleSide, blending: o.add ? THREE.AdditiveBlending : THREE.NormalBlending });
+  o = Object.assign({}, o, { op: Math.min(1, (o.op ?? 0.85) * (o.add ? 1 : TELL_OP)) });
+  const m = noGrade(new THREE.MeshBasicMaterial({ color: col, map: o.map || null, transparent: true, opacity: o.op, depthWrite: false, side: THREE.DoubleSide, blending: o.add ? THREE.AdditiveBlending : THREE.NormalBlending }));
   const g = o.sector ? new THREE.CircleGeometry(1, 28, -Math.PI / 2 - o.sector, o.sector * 2) : o.fill ? new THREE.CircleGeometry(1, 40) : new THREE.RingGeometry(o.thin ? 0.94 : 0.86, 1, 48);
   const me = new THREE.Mesh(g, m); me.rotation.x = -Math.PI / 2; me.position.set(x, (o.y || 0) + 0.05, z); me.scale.setScalar(r0); scene.add(me);
   if (o.sector) me.rotation.z = o.face || 0;
@@ -1120,7 +1172,7 @@ function bandRing(x, z, w, col, o = {}) {
   const segs = 72, g = new THREE.BufferGeometry(), idx = [];
   g.setAttribute('position', new THREE.BufferAttribute(new Float32Array((segs + 1) * 6), 3));
   for (let i = 0; i < segs; i++) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); } g.setIndex(idx);
-  const m = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: o.op ?? 0.95, depthWrite: false, side: THREE.DoubleSide, blending: o.add ? THREE.AdditiveBlending : THREE.NormalBlending });
+  const m = noGrade(new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: o.op ?? 0.95, depthWrite: false, side: THREE.DoubleSide, blending: o.add ? THREE.AdditiveBlending : THREE.NormalBlending }));
   const me = new THREE.Mesh(g, m); me.position.set(x, 0.06, z); me.frustumCulled = false; scene.add(me);
   return { me, w, R: 0,
     set(R) { this.R = R; const a = g.attributes.position.array, ri = Math.max(0, R - w), ro = R + w; for (let i = 0; i <= segs; i++) { const t = i / segs * TAU, c = Math.cos(t), s = Math.sin(t); a[i * 6] = c * ri; a[i * 6 + 1] = 0; a[i * 6 + 2] = s * ri; a[i * 6 + 3] = c * ro; a[i * 6 + 4] = 0; a[i * 6 + 5] = s * ro; } g.attributes.position.needsUpdate = true; },
@@ -1482,8 +1534,10 @@ const BIOMES = {
   hub: { grass: 0x7cc463, grass2: 0x94d276, rock: 0xbc94c0, tree: [0xffa8c4, 0xffcf80, 0xa0e0b8], fog: 0xeccbda },
   moon: { grass: 0x9a8ee0, grass2: 0xb2a6f0, rock: 0x7e6aac, tree: [0xb39cff, 0xffbde6, 0x8eb4ff], fog: 0xc8b6e6 },
   // Sundae Dunes: apricot sand, strawberry sandstone, warmer sky
-  dunes: { grass: 0xf6c48e, grass2: 0xfad6a6, rock: 0xe39a9a, tree: [0x8fe0c0, 0xffa8c8, 0xffe08a], fog: 0xf4c6b0, isle: 'Dune_Isle', isleY: 0.3, sky: [0xa58ee0, 0xf0a8c8, 0xffd0a0] },
-  temple: { grass: 0xf2b88a, grass2: 0xf8cca0, rock: 0xd88a9a, tree: [0xffa8c8, 0x8fe0c0], fog: 0xeab0b0, isle: 'Dune_Isle', isleY: 0.3, sky: [0x9a7ad8, 0xe890b8, 0xffb890] },
+  // (dusk grade 2026-11-08: sand a step creamier, 0xf6c48e / 0xfad6a6 and 0xf2b88a / 0xf8cca0 before: once the lights stopped
+  // blowing it out to cream it read apricot-pink, too close to the pink telegraphs)
+  dunes: { grass: 0xf4cc92, grass2: 0xf9dcac, rock: 0xe39a9a, tree: [0x8fe0c0, 0xffa8c8, 0xffe08a], fog: 0xf4c6b0, isle: 'Dune_Isle', isleY: 0.3, sky: [0xa58ee0, 0xf0a8c8, 0xffd0a0] },
+  temple: { grass: 0xf1c290, grass2: 0xf7d2a4, rock: 0xd88a9a, tree: [0xffa8c8, 0x8fe0c0], fog: 0xeab0b0, isle: 'Dune_Isle', isleY: 0.3, sky: [0x9a7ad8, 0xe890b8, 0xffb890] },
 };
 const SKY_DEFAULT = [PAL.skyTop, PAL.skyMid, PAL.skyLow];
 function clearWorld() {
@@ -2196,7 +2250,7 @@ function updateAttack(p, dt, mx, mz, ml, camA) {
   if (p.comboT <= 0 && !p.atk) p.comboI = 0;
   const want = mouse.pressed[0] || TOUCH.btn.has('attack'), dirA = ml > 0.1 ? Math.atan2(mx, mz) : camA;
   p.sinceDash = (p.sinceDash ?? 9) + dt;
-  // Comet Thrust (isle 3+, 31-styles): holding attack with no swing running charges the wand; release lunges
+  // Comet Thrust (isle 2+, 31-styles): holding attack with no swing running charges the wand; release lunges
   if (updateCharge(p, dt, mouse.down[0] || TOUCH.btn.has('attack:held'), dirA)) return;
   if (want) {
     if (!p.onGround && p.y - groundAt(p.x, p.z, p.y) > 1.3 && !p.slam && !p.atk) { airAttack(p, dirA); return; }   // two air swipes, then the slam (31-styles)
@@ -2550,9 +2604,9 @@ function animatePlayer(p, dt, move) {
   animateWand(p, dt);   // after the mixer, so the trail samples this frame's paw
 }
 // ---------- combat styles unlocked by run depth (STYLES in 05-data) ----------
-// Comet Thrust (isle 3): hold attack after a swipe to charge the wand, release for a straight lunge that pierces a line.
-// Meteor Pounce (isle 5): the combo gains a fourth hit, a forward leap that smashes the wand down (the Atk4 clip carries the hop).
-// Zoomie Slash (isle 9, Sundae Dunes): attack during or just after a dash for a low sliding 250-degree sweep.
+// Comet Thrust (isle 2): hold attack after a swipe to charge the wand, release for a straight lunge that pierces a line.
+// Meteor Pounce (isle 4): the combo gains a fourth hit, a forward leap that smashes the wand down (the Atk4 clip carries the hop).
+// Zoomie Slash (isle 6, Sundae Dunes): attack during or just after a dash for a low sliding 250-degree sweep.
 // Every attack is p.atk = { kind, c, t, hitDone, face, ... }; kind is 'swipe' | 'spin' | 'pounce' | 'thrust' | 'zoomie'.
 // The base kinds keep their code in 30-player; this file owns the three styles, their wand arcs and their effects.
 const STYLE_COL = { thrust: 0x9fe0ff, pounce: 0xffd36e, zoomie: 0xd8a8ff, smash: 0xffb347, air1: 0x8fe8d0, air2: 0x8fe8d0, lunge: 0xff7fa8 };
@@ -3209,10 +3263,12 @@ function killEnemy(e) {
   if (G.st.nom) healPlayer(G.st.nom * G.st.healMul);
   gainMeter(e.elite ? 18 : 7);
   const xp = e.def.xp * (e.elite ? 4 : 1), coins = e.def.coin * (e.elite ? 4 : 1);
-  for (let i = 0; i < Math.ceil(xp / 3); i++) dropPickup(e.x, e.y + 0.6, e.z, 'xp', 3);
-  for (let i = 0; i < Math.ceil(coins / 3); i++) dropPickup(e.x, e.y + 0.6, e.z, 'coin', 3);
+  // the 15-isle run pays each kill RUN_PACE (05-data) more: same number of pickups, each worth more
+  const pace = G.run ? RUN_PACE : { xp: 1, coin: 1, treat: 1 };
+  for (let i = 0; i < Math.ceil(xp / 3); i++) dropPickup(e.x, e.y + 0.6, e.z, 'xp', 3 * pace.xp);
+  for (let i = 0; i < Math.ceil(coins / 3); i++) dropPickup(e.x, e.y + 0.6, e.z, 'coin', 3 * pace.coin);
   if (Math.random() < (e.elite ? 0.5 : 0.04)) dropPickup(e.x, e.y + 0.6, e.z, 'heart', 15);
-  if (G.run && !e.dummy && Math.random() < (e.elite ? TREAT_DROP_ELITE : TREAT_DROP) * (p.treats <= 0 ? TREAT_DROP_EMPTY : 1)) dropPickup(e.x, e.y + 0.6, e.z, 'treat', 1);
+  if (G.run && !e.dummy && Math.random() < (e.elite ? TREAT_DROP_ELITE : TREAT_DROP) * pace.treat * (p.treats <= 0 ? TREAT_DROP_EMPTY : 1)) dropPickup(e.x, e.y + 0.6, e.z, 'treat', 1);
   if (G.room) G.room.kills = (G.room.kills || 0) + 1;
   if (G.run) G.run.kills++;
 }
@@ -4085,7 +4141,7 @@ Object.assign(AI, {
 // charger's aim (`aimKey`: 'chA' Conehorn, 'zA' Tick Mouse); once the run starts (e.act === act) it stays put and lasts
 // until the run ends, or until the first bounce (the aim changes).
 function chargeTell(e, aimKey, halfW, len, act) {
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xff6f8f, transparent: true, opacity: 0.35, depthWrite: false }));
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), noGrade(new THREE.MeshBasicMaterial({ color: 0xff6f8f, transparent: true, opacity: 0.35, depthWrite: false })));
   m.rotation.x = -Math.PI / 2;
   const holder = new THREE.Group(); holder.add(m); scene.add(holder);
   const T = tell(e, { kill: false });
@@ -4510,13 +4566,13 @@ function fallbackBoss() {
   g.userData.rest = {}; g.traverse(n => { g.userData.rest[n.name] = { p: n.position.clone(), r: n.rotation.clone(), s: n.scale.clone() }; });
   return g;
 }
-const BOSS_HP = 2000, BOSS_DMG = 15;   // base values; bossScale(depth) (05-data) multiplies them (x1.3 HP / x1.5 damage on isle 8)
+const BOSS_HP = 2000, BOSS_DMG = 15;   // base values; bossScale(depth) (05-data) multiplies them (x1.3 HP / x1.4 damage on isle 5)
 function spawnBoss() {
   const body = cloneModel('creatures', 'Boss_Nocturne', { ink: 0.05 }) || fallbackBoss();
   const g = new THREE.Group(), rig = new THREE.Group(); g.add(rig); rig.add(body); scene.add(g);
   const blob = new THREE.Mesh(new THREE.CircleGeometry(2, 24), new THREE.MeshBasicMaterial({ color: 0x3a2420, transparent: true, opacity: 0.22, depthWrite: false }));
   blob.rotation.x = -Math.PI / 2; scene.add(blob);
-  const sc = bossScale(G.run ? G.run.depth : 8), hp = Math.round(BOSS_HP * sc.hp * (1 + curseHp()));
+  const sc = bossScale(G.run ? G.run.depth : BIOME_LEN), hp = Math.round(BOSS_HP * sc.hp * (1 + curseHp()));
   const e = { boss: true, type: 'boss', def: { name: 'Nocturne', tint: 0xc8b0ff, xp: 0, coin: 0 }, x: 0, z: -8, y: 0, hover: 1.2, r: 1.6, h: 4.5,
     hp, maxHp: hp, dmg: Math.round(BOSS_DMG * sc.dmg), speed: sc.speed, face: 0, kx: 0, kz: 0, stun: 0, spawnT: 0, flashT: 0, shield: 0,
     phase: 1, atk: null, atkT: 0, cd: 2.5, seq: 0, mesh: g, rig, body, blob, dead: false, cyc: 0, poise: 1 };
@@ -4733,7 +4789,7 @@ function fallbackSultana() {
   g.userData.rest = {}; g.traverse(n => { g.userData.rest[n.name] = { p: n.position.clone(), r: n.rotation.clone(), s: n.scale.clone() }; });
   return g;
 }
-const SULTANA_HP = 2750, SULTANA_DMG = 15;   // base values; bossScale(depth) multiplies them (x1.7 HP / x2.0 damage on isle 16)
+const SULTANA_HP = 2750, SULTANA_DMG = 15;   // base values; bossScale(depth) multiplies them (x1.7 HP / x2.0 damage on isle 10)
 const SUL1 = ['pounce', 'waves', 'cones', 'pounce', 'summon', 'waves', 'cones'];
 const SUL2 = ['pounce', 'vortex', 'waves', 'gem', 'pounce', 'cones', 'summon', 'waves', 'gem'];
 const WAVES = [], SPIKES = [];
@@ -4742,7 +4798,7 @@ function spawnSultana() {
   const g = new THREE.Group(), rig = new THREE.Group(); g.add(rig); rig.add(body); scene.add(g);
   const blob = new THREE.Mesh(new THREE.CircleGeometry(2.6, 24), new THREE.MeshBasicMaterial({ color: 0x3a2420, transparent: true, opacity: 0.22, depthWrite: false }));
   blob.rotation.x = -Math.PI / 2; scene.add(blob);
-  const sc = bossScale(G.run ? G.run.depth : 16), hp = Math.round(SULTANA_HP * sc.hp * (1 + curseHp()));
+  const sc = bossScale(G.run ? G.run.depth : 2 * BIOME_LEN), hp = Math.round(SULTANA_HP * sc.hp * (1 + curseHp()));
   const e = { boss: true, type: 'sultana', def: { name: 'Sultana', tint: 0xffc29a, xp: 0, coin: 0 }, x: 0, z: -9, y: 0, hover: 0, restHover: 0, r: 2.2, h: 4, hp, maxHp: hp, dmg: Math.round(SULTANA_DMG * sc.dmg), speed: sc.speed,
     face: 0, kx: 0, kz: 0, stun: 0, spawnT: 0, flashT: 0, shield: 0, phase: 1, atk: null, atkT: 0, cd: 2.2, seq: 0, cyc: 0, poise: 1,
     mesh: g, rig, body, blob, dead: false, tick: updateSultana, anim: animSultana, cleanup: clearSultanaFx };
@@ -4951,7 +5007,7 @@ function fallbackChronowl() {
   g.userData.rest = {}; g.traverse(n => { g.userData.rest[n.name] = { p: n.position.clone(), r: n.rotation.clone(), s: n.scale.clone() }; });
   return g;
 }
-const CHRONOWL_HP = 3350, CHRONOWL_DMG = 15;   // base values; bossScale(depth) multiplies them (x2.0 HP / x2.6 damage on isle 24)
+const CHRONOWL_HP = 3350, CHRONOWL_DMG = 15;   // base values; bossScale(depth) multiplies them (x2.0 HP / x2.6 damage on isle 15)
 const CHR1 = ['sweep', 'starfall', 'gears', 'hop', 'sweep', 'summon', 'starfall', 'gears'];
 const CHR2 = ['sweep2', 'rewind', 'starfall', 'hop', 'gears', 'sweep2', 'summon', 'rewind', 'hop', 'starfall'];
 const CHR_FX = { hands: [], gears: [], lines: [] };
@@ -4962,7 +5018,7 @@ function spawnChronowl() {
   const g = new THREE.Group(), rig = new THREE.Group(); g.add(rig); rig.add(body); scene.add(g);
   const blob = new THREE.Mesh(new THREE.CircleGeometry(2.4, 24), new THREE.MeshBasicMaterial({ color: 0x3a2420, transparent: true, opacity: 0.22, depthWrite: false }));
   blob.rotation.x = -Math.PI / 2; scene.add(blob);
-  const sc = bossScale(G.run ? G.run.depth : 24), hp = Math.round(CHRONOWL_HP * sc.hp * (1 + curseHp()));
+  const sc = bossScale(G.run ? G.run.depth : RUN_LEN), hp = Math.round(CHRONOWL_HP * sc.hp * (1 + curseHp()));
   const e = { boss: true, type: 'chronowl', def: { name: 'Chronowl', tint: 0x9fa8ff, xp: 0, coin: 0 }, x: 0, z: -8, y: 0, hover: 0, restHover: 0, r: 1.9, h: 4.6, hp, maxHp: hp, dmg: Math.round(CHRONOWL_DMG * sc.dmg),
     face: 0, kx: 0, kz: 0, stun: 0, spawnT: 0, flashT: 0, shield: 0, phase: 1, atk: null, atkT: 0, cd: 2.0, seq: 0, cyc: 0, poise: 1, speed: sc.speed,
     mesh: g, rig, body, blob, dead: false, tick: updateChronowl, anim: animChronowl, cleanup: clearChronowlFx };
@@ -5118,7 +5174,7 @@ function rollGear(e, a) {
 }
 // constellation line between two star points: faint while the stars fall, flashes when they land
 function addConstLine(x0, z0, x1, z1, delay, dmg) {
-  const len = Math.hypot(x1 - x0, z1 - z0), m = new THREE.Mesh(new THREE.PlaneGeometry(CONST_W * 2, len), new THREE.MeshBasicMaterial({ color: 0xfff1a0, transparent: true, opacity: 0.25, depthWrite: false, blending: THREE.AdditiveBlending }));
+  const len = Math.hypot(x1 - x0, z1 - z0), m = new THREE.Mesh(new THREE.PlaneGeometry(CONST_W * 2, len), noGrade(new THREE.MeshBasicMaterial({ color: 0xfff1a0, transparent: true, opacity: 0.25, depthWrite: false, blending: THREE.AdditiveBlending })));
   m.rotation.x = -Math.PI / 2; const h = new THREE.Group(); h.add(m); h.position.set((x0 + x1) / 2, 0.07, (z0 + z1) / 2); h.rotation.y = Math.atan2(x1 - x0, z1 - z0); scene.add(h);
   CHR_FX.lines.push({ m: h, mm: m, x0, z0, x1, z1, delay, t: 0, dmg, done: false });
 }
@@ -5191,7 +5247,8 @@ function gainXP(n) {
   r.xp += n * G.st.xpMul;
   while (r.xp >= xpNeed(r.level)) { r.xp -= xpNeed(r.level); r.level++; r.pendingCards++; SFX.level(); popText(G.player.x, G.player.y + 2.2, G.player.z, 'LEVEL UP!', 'big'); burst(G.player.x, G.player.y + 1, G.player.z, 16, { tex: 'star', col: 0xfff0a0, size: 0.35, speed: 5, up: 3, life: 0.8, add: true }); }
 }
-function gainCoins(n) { if (!G.run) return; G.run.coins += Math.max(1, Math.round(n * G.st.coinMul)); }
+// fractions carry over (RUN_PACE makes a Kibble pickup 5.4), so a run banks exactly what its pickups were worth
+function gainCoins(n) { const r = G.run; if (!r) return; const v = n * G.st.coinMul + (r.coinFrac || 0), w = Math.max(1, Math.round(v)); r.coinFrac = v - w; r.coins += w; }
 function randomChip(maxTier = 3) {
   const ids = Object.keys(CHIPS).filter(k => CHIPS[k].tier <= maxTier);
   // weight lower tiers early
@@ -5200,7 +5257,7 @@ function randomChip(maxTier = 3) {
   for (let i = 0; i < ids.length; i++) { t -= w[i]; if (t <= 0) return ids[i]; }
   return ids[0];
 }
-const chipTierFor = d => (d <= 2 ? 2 : 3);
+const chipTierFor = d => (curveDepth(d) <= 2 ? 2 : 3);
 function giveChip(id, why = 'New chip') {
   G.run.bag.push(id); SFX.pickup();
   toast(`🔷 ${why}: <b>${CHIPS[id].name}</b>! ${TOUCH.on ? 'Tap ☰' : 'Press Tab'} to slot it`);
@@ -5219,9 +5276,12 @@ function nextOptions(depth) {
   const L = localDepth(depth);
   if (L === BIOME_LEN) return [{ kind: ['boss', 'boss2', 'boss3'][biomeOf(depth) - 1] }];
   if (L === 1) return [{ kind: depth > 1 ? (biomeOf(depth) === 3 ? 'stars' : 'dunes') : 'fight', reward: 'chip' }];
+  // 5-isle biome: isle 2 fight / chest / shrine (+ elite after the first biome), isle 3 adds elites and a shop chance,
+  // isle 4 (before the boss) a likely shop
   const pool = ['fight', 'fight', 'fight', 'chest', 'shrine'];
   if (L >= 3 || depth > BIOME_LEN) pool.push('elite');
-  if (L === 4 || L === BIOME_LEN - 1) pool.push('shop', 'shop', 'shop');
+  if (L === BIOME_LEN - 1) pool.push('shop', 'shop', 'shop');
+  else if (L === BIOME_LEN - 2) pool.push('shop');
   const a = pick(pool); let b = pick(pool), tries = 0;
   while (b === a && a !== 'fight' && tries++ < 10) b = pick(pool);
   // every pair offers at least one fight, so a run can't skip all the combat
@@ -5307,7 +5367,7 @@ function spawnWave(list) {
 function roomCleared(quiet) {
   const R = G.room, r = G.run; R.cleared = true;
   if (!quiet) {
-    SFX.level(); banner('✨ Isle Cleared!', pick(['Good pup!', 'Too easy!', 'Wag-nificent!', 'Not a scratch... almost!'])); r.shards += R.kind === 'elite' ? 2 : 1;
+    SFX.level(); banner('✨ Isle Cleared!', pick(['Good pup!', 'Too easy!', 'Wag-nificent!', 'Not a scratch... almost!'])); r.shards += R.kind === 'elite' ? RUN_PACE.shardElite : RUN_PACE.shardFight;
     // Promises tested on this isle
     for (const v of r.vows) {
       if (!v.active || v.room !== r.depth) continue;
@@ -5317,6 +5377,12 @@ function roomCleared(quiet) {
       if (v.test === 'fast' && !v.failed) after(1, () => { giveChip(pick(Object.keys(CHIPS).filter(k => CHIPS[k].tier === 2)), 'Promise prize'); gainCoins(120); toast('💗 Speedy Promise kept! <b>+120 Kibble</b>'); });
     }
     after(0.9, () => grantReward(R.reward));
+    // RUN_PACE bonus loot: an elite offers a second Keepsake pick, a fight rolls its reward table once more
+    // (the second timer only runs once the first reward's window is closed: timers tick in play)
+    if (R.kind === 'elite' ? Math.random() < RUN_PACE.relic : Math.random() < RUN_PACE.loot) {
+      const bonus = R.kind === 'elite' ? 'relic' : pick(['chip', 'chip', 'coins', 'treat', 'card']);
+      after(1.5, () => { toast('🎁 <b>Bonus loot!</b>'); grantReward(bonus); });
+    }
   }
   // portals to the next isle (north side)
   const opts = nextOptions(r.depth + 1);
@@ -5329,7 +5395,7 @@ function roomCleared(quiet) {
 function grantReward(kind) {
   const r = G.run, p = G.player;
   if (kind === 'chip') giveChip(randomChip(chipTierFor(r.depth)), 'Loot');
-  if (kind === 'coins') { const n = 60 + r.depth * 12; gainCoins(n); SFX.coin(); toast(`🦴 <b>+${Math.round(n * G.st.coinMul)} Kibble!</b> Crunchy.`); }
+  if (kind === 'coins') { const n = 60 + curveDepth(r.depth) * 12; gainCoins(n); SFX.coin(); toast(`🦴 <b>+${Math.round(n * G.st.coinMul)} Kibble!</b> Crunchy.`); }
   if (kind === 'treat') { p.treats++; SFX.heal(); faceJoy(1); toast('🍯 <b>+1 Treat Jar!</b> Saving it for later. Probably.'); }
   if (kind === 'card') { r.pendingCards++; toast('🌟 <b>Bonus Level Up!</b>'); }
   if (kind === 'relic') openRelicChoice(2);
@@ -5360,17 +5426,20 @@ function openChest(c) {
   const rest = lid ? lid.rotation.x : 0;
   tween(dt => { t += dt; if (lid) lid.rotation.x = rest - Math.min(1.9, t * 6); return t >= 0.4; });
   burst(0, 1.2, -2, 24, { tex: 'star', col: 0xffe08a, size: 0.4, speed: 6, up: 4, life: 1, add: true });
-  for (let i = 0; i < 6; i++) dropPickup(0, 1.2, -2, 'coin', 5);
+  for (let i = 0; i < 6; i++) dropPickup(0, 1.2, -2, 'coin', 5 * RUN_PACE.coin);
   after(0.5, () => openRelicChoice(3));
+  // RUN_PACE: a second Keepsake pick once the first window is closed
+  if (Math.random() < RUN_PACE.relic) after(1.0, () => { toast('🎁 <b>Bonus Keepsake!</b> The chest had a false bottom.'); openRelicChoice(3); });
 }
 function shopStock() {
-  const d = G.run.depth, stock = [];
+  // prices follow the curve isle (05-data curveDepth), so they match the 24-isle run's at the same point; biome checks use the real isle
+  const d = curveDepth(G.run.depth), stock = [];
   for (let i = 0; i < 3; i++) { const id = randomChip(3); stock.push({ type: 'chip', id, price: CHIP_PRICE[CHIPS[id].tier] + d * 4 }); }
   const fr = shuffle(freeRelics());
   if (fr[0]) stock.push({ type: 'relic', id: fr[0], price: 160 + d * 6 });
   stock.push({ type: 'treat', price: 45 }, { type: 'heal', price: 35 });
   // Starlight Observatory: Bun stocks no tier-1 chips and sells a Star Chart (a level-up)
-  if (biomeOf(d) === 3) { for (const s of stock) if (s.type === 'chip' && CHIPS[s.id].tier === 1) { s.id = randomChip(3); while (CHIPS[s.id].tier === 1) s.id = randomChip(3); s.price = CHIP_PRICE[CHIPS[s.id].tier] + d * 4; } stock.splice(stock.length - 2, 0, { type: 'card', price: 150 }); }
+  if (biomeOf(G.run.depth) === 3) { for (const s of stock) if (s.type === 'chip' && CHIPS[s.id].tier === 1) { s.id = randomChip(3); while (CHIPS[s.id].tier === 1) s.id = randomChip(3); s.price = CHIP_PRICE[CHIPS[s.id].tier] + d * 4; } stock.splice(stock.length - 2, 0, { type: 'card', price: 150 }); }
   return stock;
 }
 // ---------- promises ----------
@@ -5403,20 +5472,20 @@ function playerDied() {
 function bossBeaten() {
   const r = G.run;
   if (biomeOf(r.depth) === 1) {
-    r.shards += 5; SFX.level();
+    r.shards += RUN_PACE.boss[0]; SFX.level();
     banner('🌙 Nocturne Snoozes!', 'Lullaby broken! The road to the Sundae Dunes is open.');
     G.room.cleared = true;
     const po = addPortal(0, -(W.R - 3.2), 'dunes', 'chip', () => fadeTo(() => enterRoom({ kind: 'dunes', reward: 'chip' })));
     after(1.5, () => { setPortalOpen(po, true); toast('🏜️ Hop through the portal: <b>Sundae Dunes</b> ahead!'); });
   } else if (biomeOf(r.depth) === 2) {   // Sultana opens the way up to the Starlight Observatory
-    r.shards += 7; SFX.level();
+    r.shards += RUN_PACE.boss[1]; SFX.level();
     banner('🍨 Sultana Is Sated!', 'Up past the clouds, the observatory clocks start ticking...');
     G.room.cleared = true;
     const po = addPortal(0, -(W.R - 3.2), 'stars', 'chip', () => fadeTo(() => enterRoom({ kind: 'stars', reward: 'chip' })));
     after(1.5, () => { setPortalOpen(po, true); toast('🔭 Hop through the portal: <b>Starlight Observatory</b> ahead!'); });
   } else runWon();   // Chronowl ends the run
 }
-function runWon() { const r = G.run; r.shards += 10; SAVE.wins++; bankShards(); showEnd(true); }
+function runWon() { const r = G.run; r.shards += RUN_PACE.boss[2]; SAVE.wins++; bankShards(); showEnd(true); }
 function bankShards() {
   const r = G.run; if (!r || r.banked) return;
   r.banked = true; SAVE.shards += r.shards; SAVE.best = Math.max(SAVE.best, r.depth); save();
@@ -5779,7 +5848,7 @@ function guideHTML(tab, quest) {
   // two columns of about the same height: Move + Powers | Fight + Isle
   const grp = ([name, rows], n) => `<section class="gGroup" style="order:${n}"><h3>${name}</h3>${rows.map(([k, what]) => `<div class="gRow"><span class="kc">${k}</span><span>${what}</span></div>`).join('')}</section>`;
   const [mv, ft, pw, il] = GUIDE[tab], groups = `<div class="gCol">${grp(mv, 1)}${grp(pw, 3)}</div><div class="gCol">${grp(ft, 2)}${grp(il, 4)}</div>`;
-  return `<h2>🎮 Controls</h2>${quest ? `<p class="gQuest">Wake the sky: beat <b>Nocturne</b>, <b>Sultana</b> and <b>Chronowl</b> across 24 isles.</p>` : ''}
+  return `<h2>🎮 Controls</h2>${quest ? `<p class="gQuest">Wake the sky: beat <b>Nocturne</b>, <b>Sultana</b> and <b>Chronowl</b> across ${RUN_LEN} isles.</p>` : ''}
     <div class="gTabs"><button class="gTab ${tab === 'mouse' ? 'on' : ''}" data-k="tMouse">⌨️ Keyboard</button><button class="gTab ${tab === 'touch' ? 'on' : ''}" data-k="tTouch">📱 Touch</button></div>
     <div class="gGrid">${groups}</div>
     <p class="gFoot">More moves unlock as you go deeper.</p>
@@ -5898,7 +5967,8 @@ window.SchiffyStarheart = { G, SAVE };
 //   as the run's Heart Shards, then Bridge.send (shared/bridge.js) moves it to the ledger Sky Patrol claims from.
 // - Way back: a Sky Patrol portal on Heartwood Isle, a title-screen button and an end-screen button.
 const SP_SAVE_KEY = 'vd3-save-v1', SP_BACK_URL = '../?from=skyheart';
-const SKY_GOLD_RATE = 0.1, SKY_GOLD_ISLE = 2;
+// SKY_GOLD_ISLE was 2 on the 24-isle run; 3.2 x 15 isles pays the same 48 for a full run (2026-11-08)
+const SKY_GOLD_RATE = 0.1, SKY_GOLD_ISLE = 3.2;
 const SP = { on: false, save: null, cos: null, glb: null, dressed: null };
 (() => {
   let q = null; try { q = new URLSearchParams(location.search); } catch (e) {}
@@ -6044,7 +6114,7 @@ function spDress(p) {
 // ---------- gold: leftover Kibble -> Sky Patrol savings ----------
 function spGoldFor(r, won) {
   const isles = Math.max(0, r.depth - (won ? 0 : 1));
-  return Math.max(0, Math.floor((r.coins || 0) * SKY_GOLD_RATE) + isles * SKY_GOLD_ISLE);
+  return Math.max(0, Math.floor((r.coins || 0) * SKY_GOLD_RATE + isles * SKY_GOLD_ISLE));
 }
 // the outbox (SAVE.spOut) -> the shared ledger; cleared only after the ledger write landed
 function spSend() {
