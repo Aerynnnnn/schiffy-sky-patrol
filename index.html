@@ -1420,7 +1420,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 <script src="https://cdn.jsdelivr.net/npm/meshoptimizer@0.20.0/meshopt_decoder.js"></script>
 <script>
 (() => {
-const BUILD_ID = '6a177cc19c';
+const BUILD_ID = 'bfdad3fdae';
 // ---------- Schiffy save bridge (shared by Sky Patrol and Skyheart; pasted into both builds, edit only here) ----------
 // Gold earned in Skyheart travels to Sky Patrol's playground savings through one ledger key. Rules (SKYHEART.md):
 // - Skyheart first puts each deposit in its OWN save (an outbox, written together with the run's Heart Shards), then
@@ -21404,7 +21404,7 @@ function ctlHintSync() {
 // ---------- Wallet: the currency behind the cosmetics boutique (84-shop) ----------
 // The shop only ever talks to `Wallet`. Where the money lives is a swappable *provider*:
 //   provider = { id, label, real, tag, balance() -> number, spend(sku, price) -> Promise<{ ok, error }>, restore?() }
-// Today: the local playtest provider below (free, clearly labelled "playtest" gems so friends can try the shop).
+// Today: NO provider (the free playtest gems were removed on 2026-11-12), so the shop shows prices with "Coming soon".
 // Later: call Wallet.setProvider(yourProvider) with the real currency, or let the platform wallet bridge (bottom of this file)
 // switch itself on. Nothing in the shop or the cosmetics needs to change. There is NO payment code here on purpose:
 // no provider SDK, no card details, no external payment calls.
@@ -21412,9 +21412,6 @@ function ctlHintSync() {
 // on-chain move). An item is only ever granted after the provider has said { ok: true }; a failed, cancelled or timed-out
 // spend grants nothing.
 const CURRENCY = { id: 'pawgems', name: 'Paw Gems', one: 'Paw Gem' };   // rename the currency here
-// Free playtest balance. 0 turns the playtest wallet off: with no other provider the shop shows prices and "Coming soon".
-const PLAYTEST_GEMS = 5000;
-const PLAYTEST_TAG = 'Playtest — not real money';
 GAME_MANIFEST.events.push('purchase');
 
 // cosmetics save block (owned items, what's equipped per slot, which hub decorations are shown)
@@ -21471,25 +21468,9 @@ const Wallet = (() => {
   return api;
 })();
 
-// ---- local playtest provider: free gems kept in the save, clearly not real money ----
-function playtestProvider() {
-  const W = () => SAVE.wallet || (SAVE.wallet = {});
-  if (typeof W().playtest !== 'number') { W().playtest = PLAYTEST_GEMS; W().playtestGrant = PLAYTEST_GEMS; writeSave(); }
-  // when PLAYTEST_GEMS is raised, players who already had a balance get the difference once (1000 -> 5000 on 2026-10-16)
-  const granted = typeof W().playtestGrant === 'number' ? W().playtestGrant : 1000;
-  if (granted < PLAYTEST_GEMS) { W().playtest += PLAYTEST_GEMS - granted; W().playtestGrant = PLAYTEST_GEMS; writeSave(); }
-  return {
-    id: 'playtest', label: 'Playtest', real: false, tag: PLAYTEST_TAG,
-    balance: () => W().playtest,
-    spend(sku, price) {
-      if (!(W().playtest >= price)) return Promise.resolve({ ok: false, error: `Not enough ${CURRENCY.name}` });
-      W().playtest -= price; writeSave();
-      return Promise.resolve({ ok: true });
-    },
-    restore() { W().playtest = PLAYTEST_GEMS; writeSave(); },
-  };
-}
-if (PLAYTEST_GEMS > 0) Wallet.setProvider(playtestProvider());
+// The free playtest provider (5000 gems in SAVE.wallet.playtest) was removed on 2026-11-12, ahead of a real currency.
+// Old saves may still hold SAVE.wallet.playtest / playtestGrant: nothing reads them any more (left in place, harmless).
+// Items bought with those gems stay owned (SAVE.cosmetics.owned is untouched).
 
 // ---- platform wallet bridge (off until PLATFORM_ORIGIN is set) ----
 // When the game runs inside the platform's page, the platform can take over the wallet over postMessage:
@@ -22871,7 +22852,7 @@ function shopBuild() {
   const v = document.createElement('div'); v.id = 'shopView'; v.className = 'screen mapscreen sh-screen'; v.hidden = true;
   v.innerHTML = `<div class="mapcard sh-card" role="dialog" aria-modal="true" aria-labelledby="shTitle">
     <div class="maphead"><div><span class="verb">Bijou's Boutique</span><h2 id="shTitle">Cosmetics</h2></div>
-      <div class="sh-wallet"><span class="pill sh-bal" title="Your ${CURRENCY.name}">${GEM_TAG}<b id="shBal">0</b><small>${CURRENCY.name}</small></span><span class="sh-tag" id="shTag"></span><button class="smallbtn" id="shRestore" type="button" title="Restore playtest balance"><span class="lg">Restore playtest balance</span><span class="sm">Refill</span></button></div>
+      <div class="sh-wallet"><span class="pill sh-bal" title="Your ${CURRENCY.name}">${GEM_TAG}<b id="shBal">0</b><small>${CURRENCY.name}</small></span><span class="sh-tag" id="shTag"></span></div>
       <button class="smallbtn" id="shClose" type="button">Close · Esc</button></div>
     <div class="sh-tabs" id="shTabs" role="tablist"></div>
     <div class="sh-body">
@@ -22886,7 +22867,6 @@ function shopBuild() {
   </div>`;
   ($('#app') || document.body).appendChild(v);
   v.querySelector('#shClose').addEventListener('click', () => { if (!Wallet.busy()) closeShop(); });
-  v.querySelector('#shRestore').addEventListener('click', () => { Wallet.restore(); sfx('pickup'); shopRender(); });
   v.querySelector('#shTabs').addEventListener('click', e => { const b = e.target.closest('[data-shtab]'); if (b) shopTab(b.dataset.shtab); });
   v.querySelector('#shFilters').addEventListener('click', e => { const b = e.target.closest('[data-shf]'); if (b) { SHOP.filter = b.dataset.shf; shopRender(); } });
   v.querySelector('#shGrid').addEventListener('click', e => {
@@ -22965,8 +22945,9 @@ function shopRender() {
   const el = SHOP.el; if (!el) return;
   const avail = Wallet.available(), tag = Wallet.tag();
   el.querySelector('#shBal').textContent = avail ? Wallet.balance() : '-';
+  // no wallet provider (no currency yet): no balance pill at all, only the "Coming soon" tag
+  el.querySelector('.sh-bal').hidden = !avail;
   const t = el.querySelector('#shTag'); t.textContent = avail ? tag : 'Coming soon'; t.hidden = !(tag || !avail); t.classList.toggle('soon', !avail);
-  el.querySelector('#shRestore').hidden = !(Wallet.provider && Wallet.provider.restore);
   el.querySelector('#shClose').textContent = TOUCH.on ? 'Close' : 'Close · Esc';
   el.querySelector('#shTabs').innerHTML = COS_CATS.map(([k, name], i) => {
     const all = COSMETICS.filter(c => cosInTab(c, k) && cosListed(c)), own = all.filter(c => Wallet.owned(c.sku)).length;
