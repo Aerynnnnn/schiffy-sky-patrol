@@ -1420,7 +1420,7 @@ kbd { font: 400 13px var(--display); background: var(--sun); color: var(--navy);
 <script src="https://cdn.jsdelivr.net/npm/meshoptimizer@0.20.0/meshopt_decoder.js"></script>
 <script>
 (() => {
-const BUILD_ID = 'bfdad3fdae';
+const BUILD_ID = '95b15b15fe';
 // ---------- Schiffy save bridge (shared by Sky Patrol and Skyheart; pasted into both builds, edit only here) ----------
 // Gold earned in Skyheart travels to Sky Patrol's playground savings through one ledger key. Rules (SKYHEART.md):
 // - Skyheart first puts each deposit in its OWN save (an outbox, written together with the run's Heart Shards), then
@@ -22743,7 +22743,6 @@ function shopStyle() {
 .sh-bal small, .sh-price small { font: 800 11px var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--navy-soft); }
 .gemico { width: 22px; height: 22px; flex: none; }
 .sh-tag { font: 800 11px var(--body); letter-spacing: .08em; text-transform: uppercase; color: #8a1f5a; background: #ffd9ec; border: 2px dashed #c2417a; border-radius: 999px; padding: 3px 10px; }
-#shRestore .sm { display: none; }
 .sh-tag.soon { color: var(--navy); background: #e8e2ef; border-color: var(--navy-soft); }
 .sh-tabs { display: flex; gap: 6px; overflow-x: auto; flex: none; padding: 2px 2px 6px; scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
 .sh-tabs .tab { flex: none; white-space: nowrap; }
@@ -22807,8 +22806,7 @@ function shopStyle() {
 @media (max-height: 520px) {
   .sh-card { padding: 8px 12px; gap: 6px; height: calc(100vh - 16px); height: calc(100dvh - 16px); }
   .sh-card .maphead { flex-wrap: nowrap; }
-  .sh-bal small, #shRestore .lg { display: none; }
-  #shRestore .sm { display: inline; }
+  .sh-bal small { display: none; }
   .sh-tag { font-size: 10px; padding: 2px 8px; }
   .sh-card .maphead h2 { font-size: 20px; margin: 0; }
   .sh-card .maphead .verb { display: none; }
@@ -22831,8 +22829,7 @@ function shopStyle() {
   .sh-card { padding: 10px; gap: 6px; }
   .sh-card .maphead { gap: 6px; }
   .sh-card .maphead h2 { font-size: 22px; margin: 0; }
-  .sh-bal small, #shRestore .lg { display: none; }
-  #shRestore .sm { display: inline; }
+  .sh-bal small { display: none; }
   .sh-tag { font-size: 9.5px; padding: 2px 7px; }
   .sh-note { display: none; }
   .sh-txt em { display: none; }
